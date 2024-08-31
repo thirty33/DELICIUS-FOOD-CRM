@@ -71,19 +71,19 @@ class CompanyResource extends Resource
                             ->required()
                             ->minLength(2)
                             ->maxLength(200)
-                            ->label(__('Email'))
+                            ->label(__('Número de teléfono'))
                             ->columns(1),
                         Forms\Components\TextInput::make('website')
                             ->required()
                             ->minLength(2)
                             ->maxLength(200)
-                            ->label(__('Email'))
+                            ->label(__('Website'))
                             ->columns(1),
                         Forms\Components\TextInput::make('registration_number')
                             ->required()
                             ->minLength(2)
                             ->maxLength(200)
-                            ->label(__('Email'))
+                            ->label(__('Número de registro'))
                             ->columns(1),
                         Checkbox::make('active')
                             ->label(__('Activo'))
