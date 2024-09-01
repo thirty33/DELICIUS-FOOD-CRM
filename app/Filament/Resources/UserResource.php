@@ -62,6 +62,11 @@ class UserResource extends Resource
                     ->relationship('permissions', 'name')
                     ->multiple()
                     ->label(__('Permisos')),
+                Forms\Components\Select::make('company_id')
+                    ->relationship('company', 'name')
+                    ->required()
+                    ->label(__('Compañia'))
+                    ->columns(1),
                 TextInput::make('password')
                     ->password()
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))
