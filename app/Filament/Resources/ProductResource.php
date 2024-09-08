@@ -13,6 +13,7 @@ use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
 
 class ProductResource extends Resource
 {
@@ -57,19 +58,52 @@ class ProductResource extends Resource
                             ->unique(static::getModel(), 'name', ignoreRecord: true)
                             ->label(__('Nombre'))
                             ->columns(1),
-                        Forms\Components\TextInput::make('price')
-                            ->required()
-                            ->minLength(2)
-                            ->maxLength(200)
+                        MoneyInput::make('price')
                             ->label(__('Precio'))
+                            ->currency('CLP')
+                            ->minValue(0)
+                            ->maxValue(1000000)
+                            ->decimals(2)
+                            ->columns(1),
+                        MoneyInput::make('price')
+                            ->label(__('Precio Lista'))
+                            ->currency('CLP')
+                            ->minValue(0)
+                            ->maxValue(1000000)
+                            ->decimals(2)
+                            ->columns(1),
+                        Forms\Components\TextInput::make('code')
+                            ->label(__('Código'))
+                            ->unique(static::getModel(), 'code', ignoreRecord: true)
+                            ->nullable()
                             ->columns(1),
                         Forms\Components\Select::make('category_id')
                             ->relationship('category', 'name')
                             ->required()
                             ->label(__('Categoría'))
                             ->searchable()
-                            ->columns(1)
+                            ->columns(1),
+                            Forms\Components\TextInput::make('measure_unit')
+                            ->label(__('Unidad de Medida'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('stock')
+                            ->label(__('Stock'))
+                            ->numeric()
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('weight')
+                            ->label(__('Peso'))
+                            ->numeric()
+                            ->nullable()
+                            ->columns(1),
                     ])->columns(3),
+                Forms\Components\Toggle::make('allow_sales_without_stock')
+                    ->label(__('Permitir Ventas sin Stock'))
+                    ->default(false),
+                Forms\Components\Toggle::make('active')
+                    ->label(__('Activo'))
+                    ->default(false),
                 Forms\Components\Textarea::make('description')
                     ->required()
                     ->minLength(2)

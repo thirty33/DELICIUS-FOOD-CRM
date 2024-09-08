@@ -55,11 +55,23 @@ class CompanyResource extends Resource
                             ->unique(static::getModel(), 'name', ignoreRecord: true)
                             ->label(__('Nombre'))
                             ->columns(1),
+                        Forms\Components\TextInput::make('fantasy_name')
+                            ->autofocus()
+                            ->required()
+                            ->minLength(2)
+                            ->maxLength(200)
+                            ->unique(static::getModel(), 'fantasy_name', ignoreRecord: true)
+                            ->label(__('Nombre de fantasía'))
+                            ->columns(1),
                         Forms\Components\TextInput::make('address')
                             ->required()
                             ->minLength(2)
                             ->maxLength(200)
                             ->label(__('Dirección'))
+                            ->columns(1),
+                        Forms\Components\TextInput::make('shipping_address')
+                            ->label(__('Dirección de Despacho'))
+                            ->nullable()
                             ->columns(1),
                         Forms\Components\TextInput::make('email')
                             ->required()
@@ -85,10 +97,69 @@ class CompanyResource extends Resource
                             ->maxLength(200)
                             ->label(__('Número de registro'))
                             ->columns(1),
-                        Checkbox::make('active')
-                            ->label(__('Activo'))
+                        Forms\Components\TextInput::make('tax_id')
+                            ->label(__('RUT'))
+                            ->unique(static::getModel(), 'tax_id', ignoreRecord: true)
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('business_activity')
+                            ->label(__('Giro'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('acronym')
+                            ->label(__('Sigla'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('district')
+                            ->label(__('Distrito/Comuna'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('state_region')
+                            ->label(__('Estado/Región'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('postal_box')
+                            ->label(__('Casilla Postal'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('city')
+                            ->label(__('Ciudad'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('country')
+                            ->label(__('País'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('zip_code')
+                            ->label(__('Código ZIP'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('fax')
+                            ->label(__('Fax'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('company_name')
+                            ->label(__('Razón social'))
+                            ->unique(static::getModel(), 'company_name', ignoreRecord: true)
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_name')
+                            ->label(__('Nombre contacto'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_last_name')
+                            ->label(__('Apellido de contacto'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_phone_number')
+                            ->label(__('Número de contacto'))
+                            ->nullable()
                             ->columns(1),
                     ])->columns(3),
+                Checkbox::make('active')
+                    ->label(__('Activo'))
+                // ->columns(2)
+                ,
                 Forms\Components\Textarea::make('description')
                     ->required()
                     ->minLength(2)
@@ -141,7 +212,7 @@ class CompanyResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\BranchesRelationManager::class,
         ];
     }
 

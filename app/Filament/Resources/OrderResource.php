@@ -14,6 +14,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
 
 class OrderResource extends Resource
 {
@@ -49,9 +50,12 @@ class OrderResource extends Resource
                             ->options(User::customers()->pluck('name', 'id'))
                             ->label(__('Cliente'))
                             ->searchable(),
-                        Forms\Components\TextInput::make('total')
+                        MoneyInput::make('total')
                             ->label(__('Total'))
-                            ->suffix('€'),
+                            ->currency('CLP')
+                            ->minValue(0)
+                            ->maxValue(1000000000)
+                            ->decimals(2),
                         Forms\Components\Select::make('status')
                             ->label(__('Estado'))
                             ->options([
@@ -59,7 +63,10 @@ class OrderResource extends Resource
                                 'processing' => 'En proceso',
                                 'completed' => 'Completado',
                                 'declined' => 'Rechazado',
-                            ])
+                            ]),
+                        Forms\Components\DateTimePicker::make('created_at')
+                            ->label(__('Fecha de creación'))
+                            ->readOnly()
                     ])
             ]);
     }

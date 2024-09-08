@@ -8,11 +8,12 @@
         "php": "^8.2",
         "codeat3/blade-eos-icons": "^1.14",
         "codeat3/blade-iconpark": "^1.6",
+        "fakerphp/faker": "^1.23",
         "filament/filament": "^3.2",
         "laravel/envoy": "^2.9",
         "laravel/framework": "^11.9",
         "laravel/tinker": "^2.9",
-        "fakerphp/faker": "^1.23"
+        "pelmered/filament-money-field": "^1.4"
     },
     "require-dev": {
         "laravel/pint": "^1.13",

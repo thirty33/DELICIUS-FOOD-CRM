@@ -13,6 +13,13 @@ class Product extends Model
         'price',
         'image',
         'category_id',
+        'code',
+        'active',
+        'measure_unit',
+        'price_list',
+        'stock',
+        'weight',
+        'allow_sales_without_stock',
     ];
 
     public function category(): BelongsTo
