@@ -22,6 +22,11 @@ class Product extends Model
         'allow_sales_without_stock',
     ];
 
+    protected $casts = [
+        'price' => 'decimal:2',
+        'price_list' => 'decimal:2',
+    ];
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);

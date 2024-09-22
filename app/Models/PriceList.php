@@ -16,8 +16,17 @@ class PriceList extends Model
         'min_price_order'
     ];
 
+    protected $casts = [
+        'min_price_order' => 'decimal:2',
+    ];
+
     public function priceListLines(): HasMany
     {
         return $this->hasMany(PriceListLine::class);
+    }
+
+    public function companies(): HasMany
+    {
+        return $this->hasMany(Company::class, 'price_list_id');
     }
 }

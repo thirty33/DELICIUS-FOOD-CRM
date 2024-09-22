@@ -3,12 +3,16 @@
 namespace App\Filament\Resources\OrderResource\RelationManagers;
 
 use App\Models\Product;
+use App\Models\PriceListLine;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
+use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
+use Livewire\Component as Livewire;
 
 class OrderLinesRelationManager extends RelationManager
 {
@@ -45,11 +49,32 @@ class OrderLinesRelationManager extends RelationManager
                             ->searchable()
                             ->reactive()
                             ->afterStateUpdated(function (Forms\Components\Select $component, Forms\Set $set) {
-                                $product = Product::query()
-                                    ->where('id', $component->getState())
-                                    ->first();
 
-                                $set('unit_price', $product?->price ?? 0);
+                                $productId = $component->getState();
+                                $product = Product::find($productId);
+
+                                if (!$product) {
+                                    $set('unit_price', 0);
+                                    return;
+                                }
+
+                                $order = $this->ownerRecord;
+                                $user = $order->user;
+                                $company = $user->company;
+
+                                $priceListLine = null;
+                                if ($company && $company->priceLists) {
+                                    $priceListLine = PriceListLine::where('price_list_id', $company->price_list_id)
+                                        ->where('product_id', $productId)
+                                        ->first();
+                                }
+
+                                if ($priceListLine) {
+                                    $set('unit_price', $priceListLine->unit_price / 100);
+                                } else {
+                                    $productPrice = $product->price ?? 0;
+                                    $set('unit_price', $productPrice > 0 ? $productPrice / 100 : 0);
+                                }
                             }),
                         Forms\Components\TextInput::make('quantity')
                             ->numeric()
@@ -57,12 +82,13 @@ class OrderLinesRelationManager extends RelationManager
                             ->required()
                             ->placeholder(__('Cantidad del producto'))
                             ->default(1),
-                        Forms\Components\TextInput::make('unit_price')
+                        MoneyInput::make('unit_price')
                             ->label(__('Precio unitario'))
-                            ->required()
                             ->placeholder(__('Precio unitario del producto'))
-                            ->default(0)
-                            ->suffix('€'),
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2),
                     ])
             ]);
     }
@@ -80,35 +106,50 @@ class OrderLinesRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('quantity')
                     ->label(__('Cantidad'))
                     ->sortable(),
-                Tables\Columns\TextColumn::make('unit_price')
+                MoneyColumn::make('unit_price')
                     ->label(__('Precio unitario'))
-                    ->sortable()
-                    ->money('eur'),
-                Tables\Columns\TextColumn::make('total_price')
+                    ->currency('USD')
+                    ->locale('en_US'),
+                MoneyColumn::make('total_price')
                     ->label(__('Precio total'))
-                    ->sortable()
-                    ->money('eur')
+                    ->currency('USD')
+                    ->locale('en_US')
                     ->state(function (Model $record): float {
                         return $record->quantity * $record->unit_price;
-                    })
+                    }),
             ])
             ->filters([
                 //
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\CreateAction::make()
+                    ->after(function ($record, Livewire $livewire) {
+                        $livewire->dispatch('refreshForm');
+                    }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->after(function ($record, Livewire $livewire) {
+                        $livewire->dispatch('refreshForm');
+                    }),
+                Tables\Actions\DeleteAction::make()
+                    ->after(function ($record, Livewire $livewire) {
+                        $livewire->dispatch('refreshForm');
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->after(function ($record, Livewire $livewire) {
+                            $livewire->dispatch('refreshForm');
+                        }),
                 ]),
             ])
             ->emptyStateActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\CreateAction::make()
+                    ->after(function ($record, Livewire $livewire) {
+                        $livewire->dispatch('refreshForm');
+                    }),
             ]);
     }
 }

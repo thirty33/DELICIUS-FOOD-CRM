@@ -16,6 +16,10 @@ class PriceListLine extends Model
         'product_id',
     ];
 
+    protected $casts = [
+        'unit_price' => 'decimal:2',
+    ];
+
     public function priceList(): BelongsTo
     {
         return $this->belongsTo(PriceList::class);

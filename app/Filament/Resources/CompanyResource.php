@@ -155,6 +155,11 @@ class CompanyResource extends Resource
                             ->label(__('Número de contacto'))
                             ->nullable()
                             ->columns(1),
+                        Forms\Components\Select::make('price_list_id')
+                            ->relationship('priceLists', 'name')
+                            ->label(__('Lista de precio'))
+                            ->searchable()
+                            ->columns(1),
                     ])->columns(3),
                 Checkbox::make('active')
                     ->label(__('Activo'))

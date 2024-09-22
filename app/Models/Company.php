@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Company extends Model
@@ -35,12 +36,18 @@ class Company extends Model
         'contact_name',
         'contact_last_name',
         'contact_phone_number',
-        'fantasy_name'
+        'fantasy_name',
+        'price_list_id'
     ];
 
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
+    }
+
+    public function priceLists(): BelongsTo
+    {
+        return $this->belongsTo(PriceList::class, 'price_list_id', 'id');
     }
 
 }

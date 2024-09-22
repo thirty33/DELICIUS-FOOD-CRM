@@ -13,6 +13,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
+use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 
 class PriceListResource extends Resource
 {
@@ -50,9 +51,9 @@ class PriceListResource extends Resource
                     ->label(__('Nombre')),
                 MoneyInput::make('min_price_order')
                     ->label(__('Precio pedido mínimo'))
-                    ->currency('CLP')
+                    ->currency('USD')
+                    ->locale('en_US')
                     ->minValue(0)
-                    ->maxValue(1000000)
                     ->decimals(2),
                 Forms\Components\Textarea::make('description')
                     ->nullable()
@@ -71,10 +72,10 @@ class PriceListResource extends Resource
                     ->label(__('Nombre'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('min_price_order')
+                MoneyColumn::make('min_price_order')
                     ->label(__('Precio pedido mínimo'))
-                    ->sortable()
-                    ->money('CLP'),
+                    ->currency('USD')
+                    ->locale('en_US'),
             ])
             ->filters([
                 //
@@ -98,7 +99,8 @@ class PriceListResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\PriceListLinesRelationManager::class
+            RelationManagers\PriceListLinesRelationManager::class,
+            RelationManagers\CompaniesRelationManager::class
         ];
     }
 

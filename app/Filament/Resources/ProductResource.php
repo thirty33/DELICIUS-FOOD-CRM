@@ -14,6 +14,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
+use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 
 class ProductResource extends Resource
 {
@@ -60,16 +61,16 @@ class ProductResource extends Resource
                             ->columns(1),
                         MoneyInput::make('price')
                             ->label(__('Precio'))
-                            ->currency('CLP')
+                            ->currency('USD')
+                            ->locale('en_US')
                             ->minValue(0)
-                            ->maxValue(1000000)
                             ->decimals(2)
                             ->columns(1),
-                        MoneyInput::make('price')
+                        MoneyInput::make('price_list')
                             ->label(__('Precio Lista'))
-                            ->currency('CLP')
+                            ->currency('USD')
+                            ->locale('en_US')
                             ->minValue(0)
-                            ->maxValue(1000000)
                             ->decimals(2)
                             ->columns(1),
                         Forms\Components\TextInput::make('code')
@@ -123,10 +124,10 @@ class ProductResource extends Resource
                     ->label(__('Nombre'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('price')
+                MoneyColumn::make('price')
                     ->label(__('Precio'))
-                    ->sortable()
-                    ->money('eur'),
+                    ->currency('USD')
+                    ->locale('en_US'),
                 Tables\Columns\TextColumn::make('category.name')
                     ->label(__('Categoría'))
                     ->searchable()

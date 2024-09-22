@@ -11,6 +11,8 @@ use App\Models\Product;
 use Illuminate\Database\Eloquent\Model;
 use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
 use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
+use App\Models\PriceListLine;
+use Illuminate\Validation\Rules\Unique;
 
 class PriceListLinesRelationManager extends RelationManager
 {
@@ -18,7 +20,7 @@ class PriceListLinesRelationManager extends RelationManager
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
-        return __('Precios de la lista #:id#', ['id' => $ownerRecord->id]);
+        return __('Precios de la lista :name', ['name' => $ownerRecord->name]);
     }
 
     protected static function getRecordLabel(): ?string
@@ -44,22 +46,24 @@ class PriceListLinesRelationManager extends RelationManager
                                     ->pluck('name', 'id')
                             )
                             ->required()
-                        // ->searchable()
-                        // ->reactive()
-                        // ->afterStateUpdated(function (Forms\Components\Select $component, Forms\Set $set) {
-                        //     $product = Product::query()
-                        //         ->where('id', $component->getState())
-                        //         ->first();
-
-                        //     $set('unit_price', $product?->price ?? 0);
-                        // }),
-                        ,
+                            ->unique(
+                                table: PriceListLine::class,
+                                column: 'product_id',
+                                ignoreRecord: true,
+                                modifyRuleUsing: function (Unique $rule) {
+                                    return $rule->where('price_list_id', $this->ownerRecord->id);
+                                }
+                            )
+                            ->validationMessages([
+                                'unique' => __('Este producto ya está en la lista de precios.'),
+                            ]),
                         MoneyInput::make('unit_price')
                             ->label(__('Precio unitario'))
                             ->placeholder(__('Precio unitario del producto'))
-                            ->currency('CLP')
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->required()
                             ->minValue(0)
-                            ->maxValue(1000000000)
                             ->decimals(2),
                     ])
             ]);
@@ -77,11 +81,9 @@ class PriceListLinesRelationManager extends RelationManager
                     ->searchable()
                     ->sortable(),
                 MoneyColumn::make('unit_price')
-                    ->currency('CLP'),
-                // Tables\Columns\TextColumn::make('unit_price')
-                //     ->label(__('Precio unitario'))
-                //     ->sortable()
-                //     ->money('$'),
+                    ->currency('USD')
+                    ->locale('en_US')
+                    ->decimals(2),
             ])
             ->filters([
                 //

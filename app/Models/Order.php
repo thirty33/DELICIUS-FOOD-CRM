@@ -23,4 +23,9 @@ class Order extends Model
     {
         return $this->hasMany(OrderLine::class);
     }
+
+    public function getTotalAttribute()
+    {
+        return $this->orderLines->sum('total_price');
+    }
 }

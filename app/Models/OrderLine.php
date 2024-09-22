@@ -23,4 +23,9 @@ class OrderLine extends Model
     {
         return $this->belongsTo(Product::class);
     }
+
+    public function getTotalPriceAttribute()
+    {
+        return $this->quantity * $this->unit_price;
+    }
 }

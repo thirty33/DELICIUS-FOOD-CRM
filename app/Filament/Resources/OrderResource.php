@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
+use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 
 class OrderResource extends Resource
 {
@@ -52,9 +53,9 @@ class OrderResource extends Resource
                             ->searchable(),
                         MoneyInput::make('total')
                             ->label(__('Total'))
-                            ->currency('CLP')
+                            ->currency('USD')
+                            ->locale('en_US')
                             ->minValue(0)
-                            ->maxValue(1000000000)
                             ->decimals(2),
                         Forms\Components\Select::make('status')
                             ->label(__('Estado'))
@@ -84,11 +85,10 @@ class OrderResource extends Resource
                     ->label(__('Cliente'))
                     ->sortable()
                     ->searchable(),
-                Tables\Columns\TextColumn::make('total')
+                MoneyColumn::make('total')
                     ->label(__('Total'))
-                    ->searchable()
-                    ->sortable()
-                    ->suffix('€'),
+                    ->currency('USD')
+                    ->locale('en_US'),
                 Tables\Columns\TextColumn::make('total_products')
                     ->label(__('Total productos'))
                     ->state(fn (Model $order) => $order->orderLines->sum('quantity')),
