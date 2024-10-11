@@ -8,9 +8,17 @@ use App\Models\Role;
 use App\Models\Permission;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+
+    /**
+     * The current password being used by the factory.
+     */
+    protected static ?string $password;
+
     /**
      * Seed the application's database.
      */
@@ -33,7 +41,8 @@ class DatabaseSeeder extends Seeder
             'website' => 'https://example.com',
             'registration_number' => 'REG7890',
             'description' => 'This is an example company.',
-            'active' => true
+            'active' => true,
+            'fantasy_name' => 'Delicius Food'
         ]);
 
 
@@ -42,6 +51,7 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Test User',
             'company_id' => $company->id,
+            'password' => static::$password ??= Hash::make('password'),
         ]);
 
         if (!$admin->roles()->where('role_id', Role::ADMIN)->exists()) {
@@ -53,6 +63,7 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Cafe User',
             'company_id' => $company->id,
+            'password' => static::$password ??= Hash::make('password'),
         ]);
 
         if (!$cafe->roles()->where('role_id', Role::CAFE)->exists()) {
@@ -64,6 +75,7 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Convenio Consolidado User',
             'company_id' => $company->id,
+            'password' => static::$password ??= Hash::make('password'),
         ]);
 
         if (!$agreement_consolidated->roles()->where('role_id', Role::AGREEMENT)->exists()) {
@@ -79,6 +91,7 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Convenio Individual User',
             'company_id' => $company->id,
+            'password' => static::$password ??= Hash::make('password'),
         ]);
 
         if (!$agreement_individual->roles()->where('role_id', Role::AGREEMENT)->exists()) {
