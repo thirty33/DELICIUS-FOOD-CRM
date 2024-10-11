@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Builder;
 
 class Order extends Model
 {
@@ -12,6 +14,15 @@ class Order extends Model
         'total',
         'status',
         'user_id',
+        'price_list_min',
+        'branch_id',
+        'dispatch_date',
+        'alternative_address'
+    ];
+
+    protected $appends = [
+        'price_list_min',
+        'total'
     ];
 
     public function user(): BelongsTo
@@ -24,8 +35,21 @@ class Order extends Model
         return $this->hasMany(OrderLine::class);
     }
 
-    public function getTotalAttribute()
+    protected function Total(): Attribute
     {
-        return $this->orderLines->sum('total_price');
+        return Attribute::make(
+            get: fn ($value) => $this->orderLines->sum('total_price'),
+            set: function ($value) {
+                $this->attributes['total'] = $value;
+                return $value;
+            }
+        );
+    }
+
+    protected function priceListMin(): Attribute
+    {
+        return Attribute::make(
+            get: fn ($value) => $this->user->company->priceLists->min_price_order,
+        );
     }
 }

@@ -14,11 +14,11 @@ return new class extends Migration
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained()->cascadeOnDelete();
-            $table->string('address')->nullable(); // Dirección de la empresa
-            $table->string('shipping_address')->nullable(); // Dirección de Despacho
-            $table->string('contact_name')->nullable(); // Nombre contacto
-            $table->string('contact_last_name')->nullable(); // Apellido contacto
-            $table->string('contact_phone_number')->nullable(); // numero de contacto
+            $table->string('address')->nullable();
+            $table->string('shipping_address')->nullable();
+            $table->string('contact_name')->nullable();
+            $table->string('contact_last_name')->nullable();
+            $table->string('contact_phone_number')->nullable();
             $table->timestamps();
         });
     }
