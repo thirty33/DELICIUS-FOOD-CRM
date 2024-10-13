@@ -6,14 +6,18 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "codeat3/blade-carbon-icons": "^2.29",
         "codeat3/blade-eos-icons": "^1.14",
         "codeat3/blade-iconpark": "^1.6",
+        "eduard9969/blade-polaris-icons": "^2.7",
         "fakerphp/faker": "^1.23",
         "filament/filament": "^3.2",
         "laravel/envoy": "^2.9",
         "laravel/framework": "^11.9",
         "laravel/tinker": "^2.9",
-        "pelmered/filament-money-field": "^1.4"
+        "mallardduck/blade-boxicons": "^2.4",
+        "pelmered/filament-money-field": "^1.4",
+        "saade/blade-iconsax": "^1.2"
     },
     "require-dev": {
         "laravel/pint": "^1.13",

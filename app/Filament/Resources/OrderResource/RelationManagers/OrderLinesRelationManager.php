@@ -42,6 +42,9 @@ class OrderLinesRelationManager extends RelationManager
                             ->placeholder(__('Selecciona un producto'))
                             ->options(
                                 Product::query()
+                                    ->whereHas('category', function ($query) {
+                                        $query->where('is_active', true);
+                                    })
                                     ->orderBy('name')
                                     ->pluck('name', 'id')
                             )

@@ -19,7 +19,7 @@ class PriceListResource extends Resource
 {
     protected static ?string $model = PriceList::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'polaris-price-list-icon';
 
     protected static ?int $navigationSort = 50;
 

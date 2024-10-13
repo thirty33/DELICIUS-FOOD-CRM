@@ -34,7 +34,7 @@ class CategoryResource extends Resource
         return __('Categorías');
     }
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'bx-category-alt';
 
     public static function form(Form $form): Form
     {
