@@ -28,7 +28,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'company_id'
+        'company_id',
+        'branch_id'
     ];
 
     /**
@@ -59,6 +60,11 @@ class User extends Authenticatable
         return $this->belongsTo(Company::class);
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id', 'id');
+    }
+
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class);
@@ -69,7 +75,7 @@ class User extends Authenticatable
         return $this->belongsToMany(Permission::class);
     }
 
-        /**
+    /**
      * Determine if the user has the given role.
      */
     public function hasRole(string $role): bool
@@ -93,6 +99,11 @@ class User extends Authenticatable
         return $this->roles->whereIn('name', $roles)->isNotEmpty();
     }
 
+    public function hasBranch(): bool
+    {
+        return $this->branch->isNotEmpty();
+    }
+
     /**
      * Determine if the user has any roles.
      */
@@ -110,5 +121,4 @@ class User extends Authenticatable
     {
         return $builder->where('active', true);
     }
-
 }

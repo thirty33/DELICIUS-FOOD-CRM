@@ -10,11 +10,17 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\Eloquent\Model;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Hidden;
+use App\Models\Category;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 
 class CategoriesRelationManager extends RelationManager
 {
-    protected static string $relationship = 'categories';
-    
+    protected static string $relationship = 'categoryMenus';
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Categorías del menú: :title', ['title' => $ownerRecord->title]);
@@ -29,9 +35,44 @@ class CategoriesRelationManager extends RelationManager
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
+                Hidden::make('menu_id')
+                    ->default(fn(RelationManager $livewire) => $livewire->getOwnerRecord()->id),
+                Forms\Components\Grid::make()
+                    ->columns(3)
+                    ->schema([
+                        Select::make('category_id')
+                            ->label(__('Categoría'))
+                            ->options(Category::query()->pluck('name', 'id'))
+                            ->unique(
+                                table: 'category_menu',
+                                column: 'category_id',
+                                modifyRuleUsing: function (Unique $rule) {
+                                    return $rule->where('menu_id', $this->getOwnerRecord()->id);
+                                },
+                                ignoreRecord: true
+                            )
+                            ->required()
+                            ->live() // Esto hace que el campo sea reactivo
+                            ->columns(1),
+                        Toggle::make('show_all_products')
+                            ->label(__('Mostrar todos los productos'))
+                            ->default(true)
+                            ->inline(false)
+                            ->columns(1),
+                        Forms\Components\Select::make('products')
+                            ->relationship(
+                                name: 'products',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn(Builder $query, $record) =>
+                                $query->where('category_id', $record->category_id)
+                            )
+                            ->multiple()
+                            ->label(__('Productos mostrados'))
+                            ->columnSpanFull()
+                            ->searchable()
+                            ->hidden(fn($get) => $get('show_all_products')) // Oculta el campo si show_all_products es true
+                            // ->preload()
+                    ])
             ]);
     }
 
@@ -40,24 +81,26 @@ class CategoriesRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('name')
             ->columns([
-                Tables\Columns\TextColumn::make('name'),
+                Tables\Columns\TextColumn::make('category.name'),
+                Tables\Columns\ToggleColumn::make('show_all_products')
+                    ->label(__('Mostrar todos productos')),
             ])
             ->filters([
                 //
             ])
             ->headerActions([
-                // Tables\Actions\CreateAction::make(),
-                Tables\Actions\AttachAction::make(),
+                Tables\Actions\CreateAction::make(),
+                // Tables\Actions\AttachAction::make(),
             ])
             ->actions([
-                // Tables\Actions\EditAction::make(),
-                Tables\Actions\DetachAction::make(),
-                // Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make(),
+                // Tables\Actions\DetachAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DetachBulkAction::make(),
-                    // Tables\Actions\DeleteBulkAction::make(),
+                    // Tables\Actions\DetachBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

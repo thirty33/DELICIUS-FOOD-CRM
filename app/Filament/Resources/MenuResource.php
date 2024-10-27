@@ -13,6 +13,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\DatePicker;
 
 class MenuResource extends Resource
 {
@@ -50,71 +51,84 @@ class MenuResource extends Resource
                             ->unique(static::getModel(), 'title', ignoreRecord: true)
                             ->required()
                             ->columns(1),
-                        Forms\Components\DateTimePicker::make('start_date')
-                            ->label(__('Fecha de inicio'))
+                        DatePicker::make('publication_date')
+                            ->label(__('Fecha de publicación'))
                             ->required()
-                            ->columns(1)
-                            ->rules([
-                                function ($get) {
-                                    return function (string $attribute, $value, \Closure $fail) use ($get) {
-                                        $endDate = $get('end_date');
-                                        $id = $get('id');
+                            ->columns(1),
+                        Forms\Components\Select::make('rol')
+                            ->relationship('rol', 'name')
+                            ->label(__('Tipo de usuario'))
+                            ->required(),
+                        Forms\Components\Select::make('permission')
+                            ->relationship('permission', 'name')
+                            ->label(__('Tipo de Convenio'))
+                        // ->required()
+                        ,
+                        // Forms\Components\DateTimePicker::make('start_date')
+                        //     ->label(__('Fecha de inicio'))
+                        //     ->required()
+                        //     ->columns(1)
+                        //     ->rules([
+                        //         function ($get) {
+                        //             return function (string $attribute, $value, \Closure $fail) use ($get) {
+                        //                 $endDate = $get('end_date');
+                        //                 $id = $get('id');
 
-                                        if ($value && $endDate) {
-                                            $overlappingMenu = Menu::where('active', true)
-                                                ->where(function (Builder $query) use ($value, $endDate) {
-                                                    $query->whereBetween('start_date', [$value, $endDate])
-                                                        ->orWhereBetween('end_date', [$value, $endDate])
-                                                        ->orWhere(function (Builder $query) use ($value, $endDate) {
-                                                            $query->where('start_date', '<=', $value)
-                                                                ->where('end_date', '>=', $endDate);
-                                                        });
-                                                })
-                                                ->when($id, function (Builder $query) use ($id) {
-                                                    $query->where('id', '!=', $id);
-                                                })
-                                                ->first();
+                        //                 if ($value && $endDate) {
+                        //                     $overlappingMenu = Menu::where('active', true)
+                        //                         ->where(function (Builder $query) use ($value, $endDate) {
+                        //                             $query->whereBetween('start_date', [$value, $endDate])
+                        //                                 ->orWhereBetween('end_date', [$value, $endDate])
+                        //                                 ->orWhere(function (Builder $query) use ($value, $endDate) {
+                        //                                     $query->where('start_date', '<=', $value)
+                        //                                         ->where('end_date', '>=', $endDate);
+                        //                                 });
+                        //                         })
+                        //                         ->when($id, function (Builder $query) use ($id) {
+                        //                             $query->where('id', '!=', $id);
+                        //                         })
+                        //                         ->first();
 
-                                            if ($overlappingMenu) {
-                                                $fail(__("El rango de fechas se solapa con otro menú activo."));
-                                            }
-                                        }
-                                    };
-                                },
-                            ]),
-                        Forms\Components\DateTimePicker::make('end_date')
-                            ->label(__('Fecha de finalización'))
-                            ->required()
-                            ->columns(1)
-                            ->rules([
-                                'after:start_date',
-                                function ($get) {
-                                    return function (string $attribute, $value, \Closure $fail) use ($get) {
-                                        $startDate = $get('start_date');
-                                        $id = $get('id');
+                        //                     if ($overlappingMenu) {
+                        //                         $fail(__("El rango de fechas se solapa con otro menú activo."));
+                        //                     }
+                        //                 }
+                        //             };
+                        //         },
+                        //     ]),
+                        // Forms\Components\DateTimePicker::make('end_date')
+                        //     ->label(__('Fecha de finalización'))
+                        //     ->required()
+                        //     ->columns(1)
+                        //     ->rules([
+                        //         'after:start_date',
+                        //         function ($get) {
+                        //             return function (string $attribute, $value, \Closure $fail) use ($get) {
+                        //                 $startDate = $get('start_date');
+                        //                 $id = $get('id');
 
-                                        if ($startDate && $value) {
-                                            $overlappingMenu = Menu::where('active', true)
-                                                ->where(function (Builder $query) use ($startDate, $value) {
-                                                    $query->whereBetween('start_date', [$startDate, $value])
-                                                        ->orWhereBetween('end_date', [$startDate, $value])
-                                                        ->orWhere(function (Builder $query) use ($startDate, $value) {
-                                                            $query->where('start_date', '<=', $startDate)
-                                                                ->where('end_date', '>=', $value);
-                                                        });
-                                                })
-                                                ->when($id, function (Builder $query) use ($id) {
-                                                    $query->where('id', '!=', $id);
-                                                })
-                                                ->first();
+                        //                 if ($startDate && $value) {
+                        //                     $overlappingMenu = Menu::where('active', true)
+                        //                         ->where(function (Builder $query) use ($startDate, $value) {
+                        //                             $query->whereBetween('start_date', [$startDate, $value])
+                        //                                 ->orWhereBetween('end_date', [$startDate, $value])
+                        //                                 ->orWhere(function (Builder $query) use ($startDate, $value) {
+                        //                                     $query->where('start_date', '<=', $startDate)
+                        //                                         ->where('end_date', '>=', $value);
+                        //                                 });
+                        //                         })
+                        //                         ->when($id, function (Builder $query) use ($id) {
+                        //                             $query->where('id', '!=', $id);
+                        //                         })
+                        //                         ->first();
 
-                                            if ($overlappingMenu) {
-                                                $fail(__("El rango de fechas se solapa con otro menú activo."));
-                                            }
-                                        }
-                                    };
-                                },
-                            ]),
+                        //                     if ($overlappingMenu) {
+                        //                         $fail(__("El rango de fechas se solapa con otro menú activo."));
+                        //                     }
+                        //                 }
+                        //             };
+                        //         },
+                        //     ]),
                         Toggle::make('active')
                             ->label(__('Activo'))
                             ->default(true)
@@ -138,14 +152,20 @@ class MenuResource extends Resource
                     ->label(__('Título'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('start_date')
-                    ->label(__('Fecha de inicio'))
+                Tables\Columns\TextColumn::make('publication_date')
+                    ->label(__('Fecha de publicación'))
                     ->sortable()
-                    ->date('d/m/Y H:i'),
-                Tables\Columns\TextColumn::make('end_date')
-                    ->label(__('Fecha de finalización'))
-                    ->sortable()
-                    ->date('d/m/Y H:i'),
+                    ->date('d/m/Y'),
+                Tables\Columns\TextColumn::make('rol.name')
+                    ->label(__('Tipo de usuario'))
+                    ->badge(),
+                Tables\Columns\TextColumn::make('permission.name')
+                    ->label(__('Tipo de Convenio'))
+                    ->badge(),
+                // Tables\Columns\TextColumn::make('end_date')
+                //     ->label(__('Fecha de finalización'))
+                //     ->sortable()
+                //     ->date('d/m/Y H:i'),
                 Tables\Columns\ToggleColumn::make('active')
                     ->label(__('Activo'))
                     ->sortable(),
@@ -155,6 +175,7 @@ class MenuResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

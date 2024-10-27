@@ -57,16 +57,20 @@ class UserResource extends Resource
                 Forms\Components\Select::make('roles')
                     ->relationship('roles', 'name')
                     ->multiple()
-                    ->label(__('Roles')),
+                    ->label(__('Tipo de usuario')),
                 Forms\Components\Select::make('permissions')
                     ->relationship('permissions', 'name')
                     ->multiple()
-                    ->label(__('Permisos')),
+                    ->label(__('Tipo de Convenio')),
                 Forms\Components\Select::make('company_id')
                     ->relationship('company', 'name')
                     ->required()
                     ->label(__('Compañia'))
                     ->columns(1),
+                Forms\Components\Select::make('branch_id')
+                    ->label(__('Sucursal'))
+                    ->relationship('company.branches', 'fantasy_name')
+                    ->required(),
                 TextInput::make('password')
                     ->password()
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))
@@ -92,15 +96,19 @@ class UserResource extends Resource
                     ->searchable()
                     ->description(fn(User $user) => $user->email),
                 Tables\Columns\TextColumn::make('roles.name')
-                    ->label(__('Roles'))
+                    ->label(__('Tipo de usuario'))
                     ->badge(),
                 Tables\Columns\TextColumn::make('permissions.name')
-                    ->label(__('Permisos'))
+                    ->label(__('Tipo de Convenio'))
                     ->badge(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Creado'))
                     ->sortable()
                     ->date('d/m/Y H:i'),
+                Tables\Columns\TextColumn::make('company.name')
+                    ->label(__('Empresa')),
+                Tables\Columns\TextColumn::make('branch.fantasy_name')
+                    ->label(__('Sucursal'))
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')

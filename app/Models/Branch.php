@@ -17,7 +17,10 @@ class Branch extends Model
         'shipping_address',
         'contact_name',
         'contact_last_name',
-        'contact_phone_number'
+        'contact_phone_number',
+        'branch_code',
+        'fantasy_name',
+        'min_price_order'
     ];
 
     public function company(): BelongsTo

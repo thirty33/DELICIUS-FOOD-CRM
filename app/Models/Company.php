@@ -37,7 +37,9 @@ class Company extends Model
         'contact_last_name',
         'contact_phone_number',
         'fantasy_name',
-        'price_list_id'
+        'price_list_id',
+        'company_code',
+        'payment_condition'
     ];
 
     public function branches(): HasMany

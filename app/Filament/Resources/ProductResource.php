@@ -51,6 +51,11 @@ class ProductResource extends Resource
                     ->columnSpanFull(),
                 Forms\Components\Grid::make()
                     ->schema([
+                        Forms\Components\TextInput::make('code')
+                            ->label(__('Código'))
+                            ->unique(static::getModel(), 'code', ignoreRecord: true)
+                            ->required()
+                            ->columns(1),
                         Forms\Components\TextInput::make('name')
                             ->autofocus()
                             ->required()
@@ -60,31 +65,26 @@ class ProductResource extends Resource
                             ->label(__('Nombre'))
                             ->columns(1),
                         MoneyInput::make('price')
-                            ->label(__('Precio'))
+                            ->label(__('Precio base'))
                             ->currency('USD')
                             ->locale('en_US')
                             ->minValue(0)
                             ->decimals(2)
                             ->columns(1),
-                        MoneyInput::make('price_list')
-                            ->label(__('Precio Lista'))
-                            ->currency('USD')
-                            ->locale('en_US')
-                            ->minValue(0)
-                            ->decimals(2)
-                            ->columns(1),
-                        Forms\Components\TextInput::make('code')
-                            ->label(__('Código'))
-                            ->unique(static::getModel(), 'code', ignoreRecord: true)
-                            ->nullable()
-                            ->columns(1),
+                        // MoneyInput::make('price_list')
+                        //     ->label(__('Precio Lista'))
+                        //     ->currency('USD')
+                        //     ->locale('en_US')
+                        //     ->minValue(0)
+                        //     ->decimals(2)
+                        //     ->columns(1),
                         Forms\Components\Select::make('category_id')
                             ->relationship('category', 'name')
                             ->required()
                             ->label(__('Categoría'))
                             ->searchable()
                             ->columns(1),
-                            Forms\Components\TextInput::make('measure_unit')
+                        Forms\Components\TextInput::make('measure_unit')
                             ->label(__('Unidad de Medida'))
                             ->nullable()
                             ->columns(1),

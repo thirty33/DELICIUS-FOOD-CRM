@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Category extends Model
 {
@@ -26,6 +27,8 @@ class Category extends Model
         'is_active_friday',
         'is_active_saturday',
         'is_active_sunday',
+        'role_id',
+        'permissions_id'
     ];
 
     public function products(): HasMany
@@ -37,4 +40,21 @@ class Category extends Model
     {
         return $this->belongsToMany(Menu::class);
     }
+
+    public function rol(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'role_id', 'id');
+    }
+
+    public function permission(): BelongsTo
+    {
+        return $this->belongsTo(Permission::class, 'permissions_id', 'id');
+    }
+
+    public function categoryLines(): HasMany
+    {
+        return $this->hasMany(CategoryLine::class);
+    }
+
+
 }

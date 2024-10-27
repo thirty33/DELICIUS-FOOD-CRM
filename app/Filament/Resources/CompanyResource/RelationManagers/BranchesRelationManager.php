@@ -10,6 +10,8 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\Eloquent\Model;
+use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
+use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 
 class BranchesRelationManager extends RelationManager
 {
@@ -30,30 +32,50 @@ class BranchesRelationManager extends RelationManager
         return $form
             ->schema([
                 Forms\Components\Grid::make()
-                ->schema([
-                    Forms\Components\TextInput::make('address')
-                        ->required()
-                        ->minLength(2)
-                        ->maxLength(200)
-                        ->label(__('Dirección'))
-                        ->columns(1),
-                    Forms\Components\TextInput::make('shipping_address')
-                        ->label(__('Dirección de Despacho'))
-                        ->nullable()
-                        ->columns(1),
-                    Forms\Components\TextInput::make('contact_name')
-                        ->label(__('Nombre contacto'))
-                        ->nullable()
-                        ->columns(1),
-                    Forms\Components\TextInput::make('contact_last_name')
-                        ->label(__('Apellido de contacto'))
-                        ->nullable()
-                        ->columns(1),
-                    Forms\Components\TextInput::make('contact_phone_number')
-                        ->label(__('Número de contacto'))
-                        ->nullable()
-                        ->columns(1),
-                ])->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('branch_code')
+                            ->required()
+                            ->minLength(2)
+                            ->maxLength(50)
+                            ->label(__('Código'))
+                            ->columns(1),
+                        Forms\Components\TextInput::make('fantasy_name')
+                            ->autofocus()
+                            ->required()
+                            ->minLength(2)
+                            ->maxLength(200)
+                            ->label(__('Nombre de fantasía'))
+                            ->columns(1),
+                        Forms\Components\TextInput::make('address')
+                            ->required()
+                            ->minLength(2)
+                            ->maxLength(200)
+                            ->label(__('Dirección'))
+                            ->columns(1),
+                        Forms\Components\TextInput::make('shipping_address')
+                            ->label(__('Dirección de Despacho'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_name')
+                            ->label(__('Nombre contacto'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_last_name')
+                            ->label(__('Apellido de contacto'))
+                            ->nullable()
+                            ->columns(1),
+                        Forms\Components\TextInput::make('contact_phone_number')
+                            ->label(__('Número de contacto'))
+                            ->nullable()
+                            ->columns(1),
+                        MoneyInput::make('min_price_order')
+                            ->label(__('Precio pedido mínimo'))
+                            ->required()
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2),
+                    ])->columns(2)
             ]);
     }
 
@@ -78,6 +100,10 @@ class BranchesRelationManager extends RelationManager
                     ->label(__('Número de teléfono'))
                     ->searchable()
                     ->sortable(),
+                MoneyColumn::make('min_price_order')
+                    ->label(__('Precio pedido mínimo'))
+                    ->currency('USD')
+                    ->locale('en_US'),
             ])
             ->filters([
                 //

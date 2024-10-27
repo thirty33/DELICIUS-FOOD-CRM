@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\CategoryResource\Pages;
+use App\Filament\Resources\CategoryResource\RelationManagers;
 use App\Models\Category;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -12,6 +13,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TimePicker;
+use Filament\Forms;
+
 
 class CategoryResource extends Resource
 {
@@ -48,48 +51,23 @@ class CategoryResource extends Resource
                     ->unique(static::getModel(), 'name', ignoreRecord: true)
                     ->label(__('Nombre'))
                     ->columnSpanFull(),
+                Forms\Components\Select::make('rol')
+                    ->relationship('rol', 'name')
+                    ->label(__('Tipo de usuario'))
+                    ->required(),
+                Forms\Components\Select::make('permission')
+                    ->relationship('permission', 'name')
+                    ->label(__('Tipo de Convenio'))
+                    // ->required()
+                ,
                 Textarea::make('description')
                     ->label(__('Descripción'))
                     ->rows(2)
                     ->columnSpanFull(),
-                TextInput::make('preparation_days')
-                    ->label(__('Días de Preparación'))
-                    ->numeric()
-                    ->default(0),
-                TextInput::make('preparation_hours')
-                    ->label(__('Horas de Preparación'))
-                    ->numeric()
-                    ->default(0)
-                    ->maxValue(24),
-                TextInput::make('preparation_minutes')
-                    ->label(__('Minutos de Preparación'))
-                    ->numeric()
-                    ->default(0)
-                    ->maxValue(60),
                 Toggle::make('is_active')
                     ->label(__('Activo'))
                     ->default(true)
                     ->inline(false),
-                TimePicker::make('order_start_time')
-                    ->label(__('Hora de Inicio de Pedidos'))
-                    ->seconds(false),
-                TimePicker::make('order_end_time')
-                    ->label(__('Hora Máxima de Pedidos'))
-                    ->seconds(false),
-                Toggle::make('is_active_monday')
-                    ->label(__('Activo Lunes')),
-                Toggle::make('is_active_tuesday')
-                    ->label(__('Activo Martes')),
-                Toggle::make('is_active_wednesday')
-                    ->label(__('Activo Miércoles')),
-                Toggle::make('is_active_thursday')
-                    ->label(__('Activo Jueves')),
-                Toggle::make('is_active_friday')
-                    ->label(__('Activo Viernes')),
-                Toggle::make('is_active_saturday')
-                    ->label(__('Activo Sábado')),
-                Toggle::make('is_active_sunday')
-                    ->label(__('Activo Domingo')),
             ]);
     }
 
@@ -102,12 +80,12 @@ class CategoryResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->description(fn(Category $category) => $category->description),
-                Tables\Columns\TextColumn::make('order_start_time')
-                    ->label(__('Hora de Inicio de Pedidos'))
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('order_end_time')
-                    ->label(__('Hora Máxima de Pedidos'))
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('rol.name')
+                    ->label(__('Tipo de usuario'))
+                    ->badge(),
+                Tables\Columns\TextColumn::make('permission.name')
+                    ->label(__('Tipo de Convenio'))
+                    ->badge(),
                 Tables\Columns\ToggleColumn::make('is_active')
                     ->label(__('Activo'))
                     ->sortable(),
@@ -131,7 +109,7 @@ class CategoryResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\CategoryLinesRelationManager::class
         ];
     }
 
