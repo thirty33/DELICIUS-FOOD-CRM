@@ -58,20 +58,29 @@ class CategoriesRelationManager extends RelationManager
                             ->label(__('Mostrar todos los productos'))
                             ->default(true)
                             ->inline(false)
+                            ->live() // Hacemos que el toggle sea reactivo
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                if ($state) {
+                                    $set('products', []); // Limpiamos la selección cuando show_all_products es true
+                                }
+                            })
                             ->columns(1),
                         Forms\Components\Select::make('products')
                             ->relationship(
                                 name: 'products',
                                 titleAttribute: 'name',
-                                modifyQueryUsing: fn(Builder $query, $record) =>
-                                $query->where('category_id', $record->category_id)
+                                modifyQueryUsing: fn(Builder $query, callable $get) =>
+                                    $query->when(
+                                        $get('category_id'),
+                                        fn($query, $categoryId) => $query->where('category_id', $categoryId)
+                                    )
                             )
                             ->multiple()
                             ->label(__('Productos mostrados'))
                             ->columnSpanFull()
                             ->searchable()
                             ->hidden(fn($get) => $get('show_all_products')) // Oculta el campo si show_all_products es true
-                            // ->preload()
+                        // ->preload()
                     ])
             ]);
     }
