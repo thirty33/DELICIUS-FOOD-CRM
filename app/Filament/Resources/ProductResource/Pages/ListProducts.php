@@ -20,7 +20,7 @@ class ListProducts extends ListRecords
     protected function getHeaderWidgets(): array
     {
         return [
-            ProductResource\Widgets\ProductOverview::class,
+            // ProductResource\Widgets\ProductOverview::class,
         ];
     }
 }

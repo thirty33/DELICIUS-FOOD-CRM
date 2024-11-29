@@ -13,10 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('menus', function (Blueprint $table) {
-
-            $table->dropColumn('start_date');
-            $table->dropColumn('end_date');
-
+            
             $table->date('publication_date');
 
             $table->unsignedBigInteger('role_id')->nullable();
@@ -45,14 +42,6 @@ return new class extends Migration
 
             $table->dropColumn('publication_date');
 
-            $randomStart = Carbon::now()->subDays(rand(0, 30))->startOfDay();
-
-            $randomEnd = (clone $randomStart)->addDays(rand(1, 30))->endOfDay();
-
-            $table->dateTime('start_date')->default($randomStart);
-            $table->dateTime('end_date')->default($randomEnd);
-
-            $table->unique(['start_date', 'end_date']);
         });
     }
 };

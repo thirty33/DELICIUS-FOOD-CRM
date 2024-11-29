@@ -13,15 +13,10 @@ return new class extends Migration
     {
         Schema::create('menus', function (Blueprint $table) {
             $table->id();
-            $table->dateTime('start_date');
-            $table->dateTime('end_date');
             $table->boolean('active')->default(true);
             $table->string('title');
             $table->text('description');
             $table->timestamps();
-
-            $table->unique(['start_date', 'end_date']);
-
         });
     }
 
