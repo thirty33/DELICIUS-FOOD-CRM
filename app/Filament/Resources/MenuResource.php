@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\MenuResource\Pages;
 use App\Filament\Resources\MenuResource\RelationManagers;
 use App\Models\Menu;
+use App\Models\Role;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
+use App\Enums\RoleName;
 
 class MenuResource extends Resource
 {
@@ -48,13 +51,23 @@ class MenuResource extends Resource
                     ->schema([
                         Forms\Components\TextInput::make('title')
                             ->label(__('Título'))
-                            ->unique(static::getModel(), 'title', ignoreRecord: true)
+                            // ->unique(static::getModel(), 'title', ignoreRecord: true)
                             ->required()
                             ->columns(1),
                         DatePicker::make('publication_date')
-                            ->label(__('Fecha de publicación'))
+                            ->label(__('Fecha de despacho'))
                             ->required()
-                            ->columns(1),
+                            ->columns(1)
+                            ->native(false)
+                            ->displayFormat('M d, Y'),
+                        DateTimePicker::make('max_order_date')
+                            ->label(__('Fecha y hora máxima de pedido'))
+                            ->required()
+                            ->columns(1)
+                            ->seconds(true)
+                            ->format('Y-m-d H:i:s')
+                            ->native(false)
+                        ,
                         Forms\Components\Select::make('rol')
                             ->relationship('rol', 'name')
                             ->label(__('Tipo de usuario'))
@@ -62,73 +75,11 @@ class MenuResource extends Resource
                         Forms\Components\Select::make('permission')
                             ->relationship('permission', 'name')
                             ->label(__('Tipo de Convenio'))
-                        // ->required()
+                            ->requiredIf('rol', Role::where('name', RoleName::AGREEMENT)->first()->id)
+                            ->validationMessages([
+                                'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.')
+                            ])
                         ,
-                        // Forms\Components\DateTimePicker::make('start_date')
-                        //     ->label(__('Fecha de inicio'))
-                        //     ->required()
-                        //     ->columns(1)
-                        //     ->rules([
-                        //         function ($get) {
-                        //             return function (string $attribute, $value, \Closure $fail) use ($get) {
-                        //                 $endDate = $get('end_date');
-                        //                 $id = $get('id');
-
-                        //                 if ($value && $endDate) {
-                        //                     $overlappingMenu = Menu::where('active', true)
-                        //                         ->where(function (Builder $query) use ($value, $endDate) {
-                        //                             $query->whereBetween('start_date', [$value, $endDate])
-                        //                                 ->orWhereBetween('end_date', [$value, $endDate])
-                        //                                 ->orWhere(function (Builder $query) use ($value, $endDate) {
-                        //                                     $query->where('start_date', '<=', $value)
-                        //                                         ->where('end_date', '>=', $endDate);
-                        //                                 });
-                        //                         })
-                        //                         ->when($id, function (Builder $query) use ($id) {
-                        //                             $query->where('id', '!=', $id);
-                        //                         })
-                        //                         ->first();
-
-                        //                     if ($overlappingMenu) {
-                        //                         $fail(__("El rango de fechas se solapa con otro menú activo."));
-                        //                     }
-                        //                 }
-                        //             };
-                        //         },
-                        //     ]),
-                        // Forms\Components\DateTimePicker::make('end_date')
-                        //     ->label(__('Fecha de finalización'))
-                        //     ->required()
-                        //     ->columns(1)
-                        //     ->rules([
-                        //         'after:start_date',
-                        //         function ($get) {
-                        //             return function (string $attribute, $value, \Closure $fail) use ($get) {
-                        //                 $startDate = $get('start_date');
-                        //                 $id = $get('id');
-
-                        //                 if ($startDate && $value) {
-                        //                     $overlappingMenu = Menu::where('active', true)
-                        //                         ->where(function (Builder $query) use ($startDate, $value) {
-                        //                             $query->whereBetween('start_date', [$startDate, $value])
-                        //                                 ->orWhereBetween('end_date', [$startDate, $value])
-                        //                                 ->orWhere(function (Builder $query) use ($startDate, $value) {
-                        //                                     $query->where('start_date', '<=', $startDate)
-                        //                                         ->where('end_date', '>=', $value);
-                        //                                 });
-                        //                         })
-                        //                         ->when($id, function (Builder $query) use ($id) {
-                        //                             $query->where('id', '!=', $id);
-                        //                         })
-                        //                         ->first();
-
-                        //                     if ($overlappingMenu) {
-                        //                         $fail(__("El rango de fechas se solapa con otro menú activo."));
-                        //                     }
-                        //                 }
-                        //             };
-                        //         },
-                        //     ]),
                         Toggle::make('active')
                             ->label(__('Activo'))
                             ->default(true)
@@ -153,7 +104,7 @@ class MenuResource extends Resource
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('publication_date')
-                    ->label(__('Fecha de publicación'))
+                    ->label(__('Fecha de despacho'))
                     ->sortable()
                     ->date('d/m/Y'),
                 Tables\Columns\TextColumn::make('rol.name')

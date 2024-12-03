@@ -17,6 +17,12 @@ class AppServiceProvider extends ServiceProvider
             AuthServiceInterface::class,
             AuthSanctumService::class,
         );
+
+        if ($this->app->environment('local')) {
+            $this->app->register(\Laravel\Telescope\TelescopeServiceProvider::class);
+            $this->app->register(TelescopeServiceProvider::class);
+        }
+        
     }
 
     /**

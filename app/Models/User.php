@@ -10,10 +10,17 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Laravel\Sanctum\HasApiTokens;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 
 class User extends Authenticatable
 {
     use HasFactory, Notifiable, HasApiTokens;
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return str_ends_with($this->email, '@deliciusfood.cl');
+    }
 
     protected $with = [
         'roles',
@@ -30,7 +37,8 @@ class User extends Authenticatable
         'email',
         'password',
         'company_id',
-        'branch_id'
+        'branch_id',
+        'allow_late_orders'
     ];
 
     /**

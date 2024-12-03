@@ -23,7 +23,8 @@ class Menu extends Model
         'description',
         'publication_date',
         'role_id',
-        'permissions_id'
+        'permissions_id',
+        'max_order_date',
     ];
 
     /**

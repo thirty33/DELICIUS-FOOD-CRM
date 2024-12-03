@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\RoleName;
 use App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\Role;
@@ -15,6 +16,9 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Hash;
+use Filament\Forms\Components\Toggle;
+use Closure;
+use Filament\Forms\Get;
 
 class UserResource extends Resource
 {
@@ -56,12 +60,22 @@ class UserResource extends Resource
                     ->label(__('Correo electrónico')),
                 Forms\Components\Select::make('roles')
                     ->relationship('roles', 'name')
-                    ->multiple()
-                    ->label(__('Tipo de usuario')),
+                    // ->multiple()
+                    ->label(__('Tipo de usuario'))
+                    ->required(),
                 Forms\Components\Select::make('permissions')
                     ->relationship('permissions', 'name')
-                    ->multiple()
-                    ->label(__('Tipo de Convenio')),
+                    // ->multiple()
+                    ->label(__('Tipo de Convenio'))
+                    ->rules([
+                        fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
+                            $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+
+                            if (in_array($agreementRoleId, (array)$get('roles')) && empty($value)) {
+                                $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
+                            }
+                        }
+                    ]),
                 Forms\Components\Select::make('company_id')
                     ->relationship('company', 'name')
                     ->required()
@@ -78,11 +92,38 @@ class UserResource extends Resource
                     ->required(fn(string $context): bool => $context === 'create')
                     ->confirmed()
                     ->minLength(8)
-                    ->maxLength(200)
+                    ->maxLength(25)
+                    ->rule(function () {
+                        return function (string $attribute, $value, Closure $fail) {
+                            // Check lowercase
+                            if (!preg_match('/[a-z]/', $value)) {
+                                $fail(__('La contraseña debe contener al menos una letra minúscula.'));
+                            }
+
+                            // Check uppercase
+                            if (!preg_match('/[A-Z]/', $value)) {
+                                $fail(__('La contraseña debe contener al menos una letra mayúscula.'));
+                            }
+
+                            // Check number
+                            if (!preg_match('/[0-9]/', $value)) {
+                                $fail(__('La contraseña debe contener al menos un número.'));
+                            }
+
+                            // Check special character
+                            if (!preg_match('/[@$!%*?&#]/', $value)) {
+                                $fail(__('La contraseña debe contener al menos un carácter especial (@$!%*?&#).'));
+                            }
+                        };
+                    })
                     ->label(__('Contraseña')),
                 TextInput::make('password_confirmation')
                     ->password()
                     ->label(__('Confirmar contraseña')),
+                Toggle::make('allow_late_orders')
+                    ->label(__('Permitir pedidos tardíos'))
+                    ->default(true)
+                    ->inline(false),
             ]);
     }
 

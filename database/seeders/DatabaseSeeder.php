@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Branch;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Role;
@@ -45,13 +46,25 @@ class DatabaseSeeder extends Seeder
             'fantasy_name' => 'Delicius Food'
         ]);
 
-
+        $branch = Branch::firstOrCreate([
+            'company_id' => $company->id,
+            'address' => 'chile',
+            'shipping_address' => 'chile',
+            'contact_name' => 'Yonathan',
+            'contact_last_name' => 'Martinez',
+            'contact_phone_number' => '+5713213213',
+            'branch_code' => 'CODE-0231',
+            'fantasy_name' => 'Delicius Food sucursal',
+            'min_price_order' => 2132100
+        ]);
+        
         $admin = User::firstOrCreate([
-            'email' => 'test@example.com',
+            'email' => 'yonathan.martinez@deliciusfood.cl',
         ], [
-            'name' => 'Test User',
+            'name' => 'Yonathan Martinez',
             'company_id' => $company->id,
             'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'branch_id' => $branch->id
         ]);
 
         if (!$admin->roles()->where('role_id', Role::ADMIN)->exists()) {
@@ -63,7 +76,8 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Cafe User',
             'company_id' => $company->id,
-            'password' => static::$password ??= Hash::make('password'),
+            'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'branch_id' => $branch->id
         ]);
 
         if (!$cafe->roles()->where('role_id', Role::CAFE)->exists()) {
@@ -75,7 +89,8 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Convenio Consolidado User',
             'company_id' => $company->id,
-            'password' => static::$password ??= Hash::make('password'),
+            'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'branch_id' => $branch->id
         ]);
 
         if (!$agreement_consolidated->roles()->where('role_id', Role::AGREEMENT)->exists()) {
@@ -91,7 +106,8 @@ class DatabaseSeeder extends Seeder
         ], [
             'name' => 'Convenio Individual User',
             'company_id' => $company->id,
-            'password' => static::$password ??= Hash::make('password'),
+            'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'branch_id' => $branch->id
         ]);
 
         if (!$agreement_individual->roles()->where('role_id', Role::AGREEMENT)->exists()) {

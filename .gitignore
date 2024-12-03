@@ -20,4 +20,5 @@ yarn-error.log
 /.vscode
 keys/
 Envoy.blade.php
+composer.lock
 
