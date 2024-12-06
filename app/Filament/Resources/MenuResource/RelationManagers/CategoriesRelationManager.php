@@ -14,8 +14,10 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Hidden;
 use App\Models\Category;
+use App\Models\Product;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
+use Closure;
 
 class CategoriesRelationManager extends RelationManager
 {
@@ -70,17 +72,25 @@ class CategoriesRelationManager extends RelationManager
                                 name: 'products',
                                 titleAttribute: 'name',
                                 modifyQueryUsing: fn(Builder $query, callable $get) =>
-                                    $query->when(
-                                        $get('category_id'),
-                                        fn($query, $categoryId) => $query->where('category_id', $categoryId)
-                                    )
+                                $query->when(
+                                    $get('category_id'),
+                                    fn($query, $categoryId) => $query->where('category_id', $categoryId)
+                                )
                             )
                             ->multiple()
                             ->label(__('Productos mostrados'))
                             ->columnSpanFull()
                             ->searchable()
-                            ->hidden(fn($get) => $get('show_all_products')) // Oculta el campo si show_all_products es true
-                        // ->preload()
+                            ->hidden(fn($get) => $get('show_all_products'))
+                            ->requiredIf('show_all_products', false)
+                            ->validationMessages([
+                                'required_if' => __('Debe agregar al menos un producto.')
+                            ])
+                            ->getOptionLabelFromRecordUsing(fn(Model $record) => $record->title_product),
+                        Forms\Components\TextInput::make('display_order')
+                            ->label(__('Orden de visualización'))
+                            ->numeric()
+                            ->required(),
                     ])
             ]);
     }
@@ -92,7 +102,11 @@ class CategoriesRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('category.name'),
                 Tables\Columns\ToggleColumn::make('show_all_products')
-                    ->label(__('Mostrar todos productos')),
+                    ->label(__('Mostrar todos productos'))
+                    ->disabled(true),
+                Tables\Columns\TextColumn::make('display_order')
+                    ->label(__('Orden de visualización'))
+                    ->sortable(),
             ])
             ->filters([
                 //

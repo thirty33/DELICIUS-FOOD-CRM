@@ -40,10 +40,14 @@ class PriceListLinesRelationManager extends RelationManager
                         Forms\Components\Select::make('product_id')
                             ->label(__('Producto'))
                             ->placeholder(__('Selecciona un producto'))
-                            ->options(
-                                Product::query()
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id')
+                            // ->options(
+                            //     Product::query()
+                            //         ->orderBy('name')
+                            //         ->pluck('name', 'id')
+                            // )
+                            ->relationship(
+                                name: 'product',
+                                titleAttribute: 'name'
                             )
                             ->required()
                             ->unique(
@@ -56,7 +60,9 @@ class PriceListLinesRelationManager extends RelationManager
                             )
                             ->validationMessages([
                                 'unique' => __('Este producto ya está en la lista de precios.'),
-                            ]),
+                            ])
+                            ->searchable()
+                            ->getOptionLabelFromRecordUsing(fn (Model $record) => $record->title_product),
                         MoneyInput::make('unit_price')
                             ->label(__('Precio unitario'))
                             ->placeholder(__('Precio unitario del producto'))
@@ -76,6 +82,10 @@ class PriceListLinesRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('id'),
                 Tables\Columns\TextColumn::make('id'),
+                Tables\Columns\TextColumn::make('product.code')
+                    ->label(__('Código'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('product.name')
                     ->label(__('Producto'))
                     ->searchable()

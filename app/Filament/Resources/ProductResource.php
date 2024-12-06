@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ProductResource\Pages;
 use App\Models\Product;
 use Filament\Forms;
+use Filament\Forms\Components\Tabs\Tab;
 use Filament\Forms\Form;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\Section;
@@ -120,6 +121,10 @@ class ProductResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
                     ->label(__('Imagen')),
+                Tables\Columns\TextColumn::make('code')
+                    ->label(__('Código'))	
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('name')
                     ->label(__('Nombre'))
                     ->searchable()
@@ -144,7 +149,7 @@ class ProductResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
                     ->relationship('category', 'name')
-                    ->label(__('Categoría')),
+                    ->label(__('Categoría'))
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

@@ -30,7 +30,7 @@ Route::prefix('menus')->middleware('auth:sanctum')->group(function () {
 ->middleware(ThrottleRequests::with(60, 1));
 
 Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
-    Route::get('/', [CategoryController::class, 'index']);
+    Route::get('/{menu}', [CategoryController::class, 'index']);
 })
 ->middleware(ThrottleRequests::with(60, 1));
 

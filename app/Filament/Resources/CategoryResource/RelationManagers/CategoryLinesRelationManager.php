@@ -56,8 +56,8 @@ class CategoryLinesRelationManager extends RelationManager
                 Forms\Components\TimePicker::make('maximum_order_time')
                     ->label('Hora máxima de pedido')
                     ->required()
-                    ->seconds(false),
-
+                    ->seconds(false)
+                    ->native(false),
                 Forms\Components\Toggle::make('active')
                     ->label('Activo')
                     ->required()

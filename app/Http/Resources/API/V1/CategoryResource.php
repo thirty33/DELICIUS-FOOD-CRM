@@ -7,6 +7,15 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class CategoryResource extends JsonResource
 {
+
+    protected $showAllProducts;
+
+    public function __construct($resource, $showAllProducts = false)
+    {
+        parent::__construct($resource);
+        $this->showAllProducts = $showAllProducts;
+    }
+
     /**
      * Transform the resource into an array.
      *
@@ -18,6 +27,7 @@ class CategoryResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'description' => $this->description,
+            'products' => $this->showAllProducts ? ProductResource::collection($this->whenLoaded('products')) : []
         ];
     }
 }

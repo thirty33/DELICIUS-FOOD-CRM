@@ -17,6 +17,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use App\Enums\RoleName;
+use App\Models\Permission;
 
 class MenuResource extends Resource
 {
@@ -66,8 +67,7 @@ class MenuResource extends Resource
                             ->columns(1)
                             ->seconds(true)
                             ->format('Y-m-d H:i:s')
-                            ->native(false)
-                        ,
+                            ->native(false),
                         Forms\Components\Select::make('rol')
                             ->relationship('rol', 'name')
                             ->label(__('Tipo de usuario'))
@@ -78,8 +78,7 @@ class MenuResource extends Resource
                             ->requiredIf('rol', Role::where('name', RoleName::AGREEMENT)->first()->id)
                             ->validationMessages([
                                 'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.')
-                            ])
-                        ,
+                            ]),
                         Toggle::make('active')
                             ->label(__('Activo'))
                             ->default(true)
@@ -122,7 +121,14 @@ class MenuResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('rol')
+                    ->relationship('rol', 'name')
+                    ->label(__('Tipo de usuario'))
+                    ->options(Role::pluck('name', 'id')->toArray()),
+                Tables\Filters\SelectFilter::make('permission')
+                    ->relationship('permission', 'name')
+                    ->label(__('Tipo de Convenioo'))
+                    ->options(Permission::pluck('name', 'id')->toArray()),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

@@ -51,15 +51,6 @@ class CategoryResource extends Resource
                     ->unique(static::getModel(), 'name', ignoreRecord: true)
                     ->label(__('Nombre'))
                     ->columnSpanFull(),
-                Forms\Components\Select::make('rol')
-                    ->relationship('rol', 'name')
-                    ->label(__('Tipo de usuario'))
-                    ->required(),
-                Forms\Components\Select::make('permission')
-                    ->relationship('permission', 'name')
-                    ->label(__('Tipo de Convenio'))
-                    // ->required()
-                ,
                 Textarea::make('description')
                     ->label(__('Descripción'))
                     ->rows(2)
@@ -80,15 +71,9 @@ class CategoryResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->description(fn(Category $category) => $category->description),
-                Tables\Columns\TextColumn::make('rol.name')
-                    ->label(__('Tipo de usuario'))
-                    ->badge(),
-                Tables\Columns\TextColumn::make('permission.name')
-                    ->label(__('Tipo de Convenio'))
-                    ->badge(),
                 Tables\Columns\ToggleColumn::make('is_active')
                     ->label(__('Activo'))
-                    ->sortable(),
+                    ->sortable()
             ])
             ->filters([])
             ->actions([

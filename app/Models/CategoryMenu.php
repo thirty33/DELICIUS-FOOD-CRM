@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -26,7 +27,8 @@ class CategoryMenu extends Pivot
     protected $fillable = [
         'show_all_products',
         'category_id',
-        'menu_id'
+        'menu_id',
+        'display_order'
     ];
 
     /**

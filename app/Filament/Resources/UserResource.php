@@ -80,11 +80,23 @@ class UserResource extends Resource
                     ->relationship('company', 'name')
                     ->required()
                     ->label(__('Compañia'))
-                    ->columns(1),
+                    ->columns(1)
+                    ->searchable()
+                    ->live(),
                 Forms\Components\Select::make('branch_id')
                     ->label(__('Sucursal'))
-                    ->relationship('company.branches', 'fantasy_name')
-                    ->required(),
+                    ->relationship(
+                        name: 'company.branches',
+                        titleAttribute: 'fantasy_name',
+                        modifyQueryUsing: fn(Builder $query, callable $get) =>
+                        $query->when(
+                            $get('company_id'),
+                            fn($query, $companyId) => $query->where('company_id', $companyId)
+                        )
+                    )
+                    ->required()
+                    ->searchable()
+                ,
                 TextInput::make('password')
                     ->password()
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))

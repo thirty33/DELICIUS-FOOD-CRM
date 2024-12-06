@@ -29,6 +29,7 @@ class ProductResource extends JsonResource
             'stock' => $this->stock,
             'weight' => $this->weight,
             'allow_sales_without_stock' => $this->allow_sales_without_stock,
+            'price_list_lines' => PriceListLineResource::collection($this->whenLoaded('priceListLines')),
         ];
     }
 }
