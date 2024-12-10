@@ -90,7 +90,8 @@ class CategoriesRelationManager extends RelationManager
                         Forms\Components\TextInput::make('display_order')
                             ->label(__('Orden de visualización'))
                             ->numeric()
-                            ->required(),
+                            ->required()
+                            ->default(100),
                     ])
             ]);
     }

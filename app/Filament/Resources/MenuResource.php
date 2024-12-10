@@ -105,7 +105,8 @@ class MenuResource extends Resource
                 Tables\Columns\TextColumn::make('publication_date')
                     ->label(__('Fecha de despacho'))
                     ->sortable()
-                    ->date('d/m/Y'),
+                    ->date('d/m/Y')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('rol.name')
                     ->label(__('Tipo de usuario'))
                     ->badge(),

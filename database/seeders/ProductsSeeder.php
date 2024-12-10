@@ -19,13 +19,13 @@ class ProductsSeeder extends Seeder
     {
         $categories = Category::all();
 
-        // $imageName = '01JB9F8KS2TATVDHB5TFPT9Q2V.jpg';
-        $imageName = '01JA08QEDZW7PS19X0CX60DTXS.jpg';
+        $imageName = config('app.TEST_IMAGE_PATH');
         
         foreach ($categories as $category) {
             for ($i = 1; $i <= 20; $i++) {
-                Product::create([
+                Product::firstOrCreate([
                     'name' => $category->name . ' Product ' . $i,
+                ], [
                     'description' => 'Description for ' . $category->name . ' Product ' . $i,
                     'price' => rand(1000, 10000), // Precio en centavos
                     'image' => $imageName, // Ruta de la imagen por defecto
