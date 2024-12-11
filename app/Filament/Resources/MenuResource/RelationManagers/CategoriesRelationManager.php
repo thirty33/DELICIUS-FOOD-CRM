@@ -126,6 +126,7 @@ class CategoriesRelationManager extends RelationManager
                     // Tables\Actions\DetachBulkAction::make(),
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->defaultSort('display_order', 'asc');
     }
 }

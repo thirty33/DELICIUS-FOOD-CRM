@@ -53,4 +53,9 @@ class Product extends Model
         return $this->hasMany(PriceListLine::class, 'product_id', 'id');
     }
 
+    public function ingredients(): HasMany
+    {
+        return $this->hasMany(Ingredient::class);
+    }
+
 }

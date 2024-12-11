@@ -40,7 +40,8 @@ class CategoryController extends Controller
                         $query->whereHas('priceList', function ($priceListQuery) use ($user) {
                             $priceListQuery->where('id', $user->company->price_list_id);
                         });
-                    }]);
+                    }])
+                    ->with(['ingredients']);
                 }]);
             },
             'menu',
@@ -53,7 +54,7 @@ class CategoryController extends Controller
                     $query->whereHas('priceList', function ($priceListQuery) use ($user) {
                         $priceListQuery->where('id', $user->company->price_list_id);
                     });
-                }]);
+                }])->with(['ingredients']);
             }
         ])
             ->whereIn(
