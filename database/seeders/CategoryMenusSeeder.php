@@ -63,311 +63,62 @@ class CategoryMenusSeeder extends Seeder
             ['name' => 'Mediterranean', 'description' => 'Healthy Mediterranean cuisine'],
         ];
 
+        $currentMonth = 1;
+        $currentYear = 2025;
+
         $adminRole = Role::where('name', 'Admin')->first()->id;
         $cafeRole = Role::where('name', 'Café')->first()->id;
         $convenioRole = Role::where('name', 'Convenio')->first()->id;
 
         $consolidadoPermission = Permission::where('name', 'Consolidado')->first()->id;
         $individualPermission = Permission::where('name', 'Individual')->first()->id;
-
-
-        // $menuConfigurations = [
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $adminRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 1),
-        //         'max_order_date' => Carbon::create(2024, 12, 1)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 2),
-        //         'max_order_date' => Carbon::create(2024, 12, 2)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Convenio Consolidado Menu 1',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 3),
-        //         'max_order_date' => Carbon::create(2024, 12, 3)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Convenio Individual Menu 1',
-        //         'role' => $convenioRole,
-        //         'permission' => $individualPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 4),
-        //         'max_order_date' => Carbon::create(2024, 12, 4)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 5),
-        //         'max_order_date' => Carbon::create(2024, 12, 5)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 6),
-        //         'max_order_date' => Carbon::create(2024, 12, 6)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 7),
-        //         'max_order_date' => Carbon::create(2024, 12, 7)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 8),
-        //         'max_order_date' => Carbon::create(2024, 12, 8)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 9),
-        //         'max_order_date' => Carbon::create(2024, 12, 9)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 10),
-        //         'max_order_date' => Carbon::create(2024, 12, 10)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $individualPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 11),
-        //         'max_order_date' => Carbon::create(2024, 12, 11)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 12),
-        //         'max_order_date' => Carbon::create(2024, 12, 12)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 13),
-        //         'max_order_date' => Carbon::create(2024, 12, 13)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 14),
-        //         'max_order_date' => Carbon::create(2024, 12, 14)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $adminRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 15),
-        //         'max_order_date' => Carbon::create(2024, 12, 15)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 16),
-        //         'max_order_date' => Carbon::create(2024, 12, 16)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 17),
-        //         'max_order_date' => Carbon::create(2024, 12, 17)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $individualPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 18),
-        //         'max_order_date' => Carbon::create(2024, 12, 18)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 19),
-        //         'max_order_date' => Carbon::create(2024, 12, 19)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 20),
-        //         'max_order_date' => Carbon::create(2024, 12, 20)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 21),
-        //         'max_order_date' => Carbon::create(2024, 12, 21)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 22),
-        //         'max_order_date' => Carbon::create(2024, 12, 22)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $individualPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 23),
-        //         'max_order_date' => Carbon::create(2024, 12, 23)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 24),
-        //         'max_order_date' => Carbon::create(2024, 12, 24)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 25),
-        //         'max_order_date' => Carbon::create(2024, 12, 25)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $individualPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 26),
-        //         'max_order_date' => Carbon::create(2024, 12, 26)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 27),
-        //         'max_order_date' => Carbon::create(2024, 12, 27)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 28),
-        //         'max_order_date' => Carbon::create(2024, 12, 28)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 29),
-        //         'max_order_date' => Carbon::create(2024, 12, 29)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $cafeRole,
-        //         'permission' => null,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 30),
-        //         'max_order_date' => Carbon::create(2024, 12, 30)->subDays(3),
-        //     ],
-        //     [
-        //         'title' => 'Daily Menu',
-        //         'role' => $convenioRole,
-        //         'permission' => $consolidadoPermission,
-        //         'categories' => $this->getRandomCategories($categories),
-        //         'publication_date' => Carbon::create(2024, 12, 31),
-        //         'max_order_date' => Carbon::create(2024, 12, 31)->subDays(3),
-        //     ],
-        // ];
-
+        
         $menuConfigurations = [
             // Admin Role Menus (31 days)
-            ...array_map(function($day) use ($adminRole, $categories) {
+            ...array_map(function($day) use ($adminRole, $categories, $currentMonth, $currentYear) {
                 return [
                     'title' => 'Daily Menu',
                     'role' => $adminRole,
                     'permission' => null,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create(2024, 12, $day),
-                    'max_order_date' => Carbon::create(2024, 12, $day)->subDays(3),
+                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
+                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
                 ];
             }, range(1, 31)),
         
             // Cafe Role Menus (31 days)
-            ...array_map(function($day) use ($cafeRole, $categories) {
+            ...array_map(function($day) use ($cafeRole, $categories, $currentMonth, $currentYear) {
                 return [
                     'title' => 'Daily Menu',
                     'role' => $cafeRole,
                     'permission' => null,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create(2024, 12, $day),
-                    'max_order_date' => Carbon::create(2024, 12, $day)->subDays(3),
+                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
+                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
                 ];
             }, range(1, 31)),
         
             // Convenio Consolidado Menus (31 days)
-            ...array_map(function($day) use ($convenioRole, $consolidadoPermission, $categories) {
+            ...array_map(function($day) use ($convenioRole, $consolidadoPermission, $categories, $currentMonth, $currentYear) {
                 return [
                     'title' => 'Convenio Consolidado Menu',
                     'role' => $convenioRole,
                     'permission' => $consolidadoPermission,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create(2024, 12, $day),
-                    'max_order_date' => Carbon::create(2024, 12, $day)->subDays(3),
+                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
+                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
                 ];
             }, range(1, 31)),
         
             // Convenio Individual Menus (31 days)
-            ...array_map(function($day) use ($convenioRole, $individualPermission, $categories) {
+            ...array_map(function($day) use ($convenioRole, $individualPermission, $categories, $currentMonth, $currentYear) {
                 return [
                     'title' => 'Convenio Individual Menu',
                     'role' => $convenioRole,
                     'permission' => $individualPermission,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create(2024, 12, $day),
-                    'max_order_date' => Carbon::create(2024, 12, $day)->subDays(3),
+                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
+                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
                 ];
             }, range(1, 31))
         ];

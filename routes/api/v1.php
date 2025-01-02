@@ -16,16 +16,19 @@ use App\Http\Controllers\API\V1\{
 
 Route::prefix('auth')->group(function () {
     // Route::post('register', RegisterController::class);
-    Route::post('login', LoginController::class);
+    Route::post('login', LoginController::class)
+    ->name('login');
 
     Route::group(['middleware' => 'auth:sanctum'], function () {
-        Route::post('logout', LogoutController::class);
+        Route::post('logout', LogoutController::class)
+        ->name('logout');
     });
 })
 ->middleware(ThrottleRequests::with(10, 1));
 
 Route::prefix('menus')->middleware('auth:sanctum')->group(function () {
-    Route::get('/', [MenuController::class, 'index']);
+    Route::get('/', [MenuController::class, 'index'])
+    ->name('menus.index');
 })
 ->middleware(ThrottleRequests::with(60, 1));
 
