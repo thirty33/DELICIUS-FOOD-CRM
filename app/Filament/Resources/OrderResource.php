@@ -93,9 +93,26 @@ class OrderResource extends Resource
                         Forms\Components\DateTimePicker::make('created_at')
                             ->label(__('Fecha de creación'))
                             ->readOnly(),
+                        // Forms\Components\Select::make('branch_id')
+                        //     ->label(__('Direccíon de despacho'))
+                        //     ->relationship(
+                        //         name: 'user.company.branches',
+                        //         titleAttribute: 'shipping_address',
+                        //     )
+                        //     ->disabledOn('create'),
                         Forms\Components\Select::make('branch_id')
-                            ->label(__('Direccíon de despacho'))
-                            ->relationship('user.company.branches', 'shipping_address')
+                            ->label(__('Dirección de despacho'))
+                            ->options(function (Get $get) {
+                                $userId = $get('user_id');
+                                if ($userId) {
+                                    $user = User::find($userId);
+                                    if ($user && $user->company) {
+                                        return $user->company->branches->pluck('shipping_address', 'id');
+                                    }
+                                }
+                                return [];
+                            })
+                            ->searchable()
                             ->disabledOn('create'),
                         Forms\Components\Textarea::make('alternative_address')
                             ->minLength(2)
@@ -138,7 +155,12 @@ class OrderResource extends Resource
                         'processing' => 'info',
                         'completed' => 'success',
                         'declined' => 'danger',
-                    })
+                    }),
+                Tables\Columns\TextColumn::make('dispatch_date')
+                    ->label(__('Fecha de despacho'))
+                    ->sortable()
+                    ->date('d/m/Y')
+                    ->searchable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('user_id')

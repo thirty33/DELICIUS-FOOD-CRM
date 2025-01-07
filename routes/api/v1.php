@@ -11,33 +11,36 @@ use App\Http\Controllers\API\V1\Auth\{
 use App\Http\Controllers\API\V1\{
     MenuController,
     CategoryController,
-    ProductController
+    ProductController,
+    OrderController
 };
 
 Route::prefix('auth')->group(function () {
     // Route::post('register', RegisterController::class);
     Route::post('login', LoginController::class)
-    ->name('login');
+        ->name('login');
 
     Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('logout', LogoutController::class)
-        ->name('logout');
+            ->name('logout');
     });
 })
-->middleware(ThrottleRequests::with(10, 1));
+    ->middleware(ThrottleRequests::with(10, 1));
 
 Route::prefix('menus')->middleware('auth:sanctum')->group(function () {
     Route::get('/', [MenuController::class, 'index'])
-    ->name('menus.index');
+        ->name('menus.index');
 })
-->middleware(ThrottleRequests::with(60, 1));
+    ->middleware(ThrottleRequests::with(60, 1));
 
 Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
-    Route::get('/{menu}', [CategoryController::class, 'index']);
+    Route::get('/{menu}', [CategoryController::class, 'index'])
+    ->name('categories.show');
 })
-->middleware(ThrottleRequests::with(60, 1));
+    ->middleware(ThrottleRequests::with(60, 1));
 
-Route::prefix('products')->middleware('auth:sanctum')->group(function () {
-    Route::get('/', [ProductController::class, 'index']);
+Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
+    Route::get('get-order/{date}', [OrderController::class, 'show'])
+    ->name('orders.show');
 })
-->middleware(ThrottleRequests::with(60, 1));
+    ->middleware(ThrottleRequests::with(60, 1));

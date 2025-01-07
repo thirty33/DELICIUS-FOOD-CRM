@@ -40,14 +40,30 @@ class OrderLinesRelationManager extends RelationManager
                         Forms\Components\Select::make('product_id')
                             ->label(__('Producto'))
                             ->placeholder(__('Selecciona un producto'))
-                            ->options(
-                                Product::query()
-                                    ->whereHas('category', function ($query) {
-                                        $query->where('is_active', true);
-                                    })
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id')
-                            )
+                            ->options(function () {
+                                $order = $this->ownerRecord;
+                    
+                                $user = $order->user;
+                    
+                                $company = $user->company;
+                
+                                if (!$company || !$company->priceLists) {
+                                    return [];
+                                }
+                    
+                                $priceListId = $company->price_list_id;
+                    
+                                $products = Product::whereHas('priceListLines', function ($query) use ($priceListId) {
+                                    $query->where('price_list_id', $priceListId);
+                                })
+                                ->whereHas('category', function ($query) {
+                                    $query->where('is_active', true);
+                                })
+                                ->orderBy('name')
+                                ->pluck('name', 'id');
+                        
+                                return $products;
+                            })
                             ->required()
                             ->searchable()
                             ->reactive()
