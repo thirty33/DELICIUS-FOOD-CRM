@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Database\QueryException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -37,4 +38,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (QueryException $exception) {
             return ApiResponseService::error('Cannot delete or update a parent row');
         });
+
+        $exceptions->render(function (AccessDeniedHttpException $exception) {
+            return ApiResponseService::forbidden($exception->getMessage());
+        });
+        
     })->create();

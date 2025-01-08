@@ -35,12 +35,16 @@ Route::prefix('menus')->middleware('auth:sanctum')->group(function () {
 
 Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
     Route::get('/{menu}', [CategoryController::class, 'index'])
-    ->name('categories.show');
+        ->name('categories.show');
 })
     ->middleware(ThrottleRequests::with(60, 1));
 
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::get('get-order/{date}', [OrderController::class, 'show'])
-    ->name('orders.show');
+        ->name('orders.show');
+    Route::post('create-or-update-order/{date}', [OrderController::class, 'update'])
+        ->name('orders.update');
+    Route::delete('delete-order-items/{date}', [OrderController::class, 'delete'])
+        ->name('orders.delete');
 })
     ->middleware(ThrottleRequests::with(60, 1));

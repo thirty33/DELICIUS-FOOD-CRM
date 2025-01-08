@@ -4,6 +4,7 @@ namespace App\Http\Resources\API\V1;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Classes\PriceFormatter;
 
 class OrderResource extends JsonResource
 {
@@ -16,7 +17,7 @@ class OrderResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'total' => $this->total,
+            'total' => PriceFormatter::format($this->total),
             'status' => $this->status,
             'user_id' => $this->user_id,
             'price_list_min' => $this->price_list_min,
