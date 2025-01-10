@@ -26,6 +26,8 @@ class AuthSanctumService implements AuthServiceInterface
         return ApiResponseService::success([
             'token' => $token,
             'token_type' => 'bearer',
+            'role' => optional(auth()->user()->roles->first())->name ?? null,
+            'permission' => optional(auth()->user()->permissions->first())->name ?? null,
         ]);
     }
 
