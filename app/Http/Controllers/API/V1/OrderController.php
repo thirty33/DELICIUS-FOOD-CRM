@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Classes\UserPermissions;
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -12,7 +13,9 @@ use App\Models\Order;
 use App\Models\PriceListLine;
 use App\Http\Requests\API\V1\Order\OrderRequest;
 use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
-
+use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
+use App\Models\Menu;
+use App\Models\User;
 
 class OrderController extends Controller
 {
@@ -64,7 +67,7 @@ class OrderController extends Controller
         $user = $request->user();
 
         $order = $this->getOrder($user->id, $carbonDate);
-
+        
         if (!$order) {
 
             $order = new Order();
@@ -110,40 +113,73 @@ class OrderController extends Controller
 
     public function delete(CreateOrUpdateOrderRequest $request, string $date): JsonResponse
     {
-        // Obtener la fecha validada del request
         $date = data_get($request->validated(), 'date', '');
 
-        // Parsear la fecha a un objeto Carbon
         $carbonDate = Carbon::parse($date);
 
-        // Obtener el usuario autenticado
         $user = $request->user();
 
-        // Buscar la orden existente para el usuario y la fecha especificada
         $order = $this->getOrder($user->id, $carbonDate);
 
-        // Si no existe la orden, retornar un error
         if (!$order) {
             return ApiResponseService::notFound('Order not found');
         }
 
-        // Recorrer el array de order_lines para eliminar las líneas de pedido
         foreach ($request->order_lines as $orderLineData) {
             $productId = $orderLineData['id'];
 
-            // Buscar la línea de pedido correspondiente al producto
             $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
 
-            // Si existe la línea de pedido, eliminarla
             if ($existingOrderLine) {
                 $existingOrderLine->delete();
             }
         }
 
-        // Retornar una respuesta exitosa con la orden actualizada
         return ApiResponseService::success(
             new OrderResource($this->getOrder($user->id, $carbonDate)),
             'Order lines deleted successfully',
+        );
+    }
+
+    private function getCurrentMenu($user, $date) {
+        $menuExists = Menu::where('publication_date', $date)
+        ->where('role_id', UserPermissions::getRole($user)->id)
+        ->where('permissions_id', UserPermissions::getPermission($user)->id)
+        ->exists();
+    }
+
+    public function updateOrderStatus(UpdateStatusRequest $request, string $date): JsonResponse
+    {
+        $date = data_get($request->all(), 'date', '');
+
+        $carbonDate = Carbon::parse($date);
+
+        $user = $request->user();
+
+        $order = $this->getOrder($user->id, $carbonDate);
+
+        if (
+            UserPermissions::IsAgreementConsolidated($user)
+            || UserPermissions::IsAgreementIndividual($user)
+        ) {
+
+            dd([
+                'order' => $order->id,
+                'status' => $request->status,
+                'date' => $date
+            ]);
+        }
+
+        if (!$order) {
+            return ApiResponseService::notFound('Order not found');
+        }
+
+        $order->status = $request->status;
+        $order->save();
+
+        return ApiResponseService::success(
+            new OrderResource($this->getOrder($user->id, $carbonDate)),
+            'Order status updated successfully',
         );
     }
 }

@@ -46,5 +46,7 @@ Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
         ->name('orders.update');
     Route::delete('delete-order-items/{date}', [OrderController::class, 'delete'])
         ->name('orders.delete');
+    Route::post('update-order-status/{date}', [OrderController::class, 'updateOrderStatus'])
+        ->name('orders.update_status');
 })
     ->middleware(ThrottleRequests::with(60, 1));

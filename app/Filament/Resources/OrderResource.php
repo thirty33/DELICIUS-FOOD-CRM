@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\OrderStatus;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Order;
@@ -82,24 +83,12 @@ class OrderResource extends Resource
                             ->disabled(),
                         Forms\Components\Select::make('status')
                             ->label(__('Estado'))
-                            ->options([
-                                'pending' => 'Pendiente',
-                                'processing' => 'En proceso',
-                                'completed' => 'Completado',
-                                'declined' => 'Rechazado',
-                            ])
-                            ->default('pending')
+                            ->options(OrderStatus::getSelectOptions())
+                            ->default(OrderStatus::PENDING->value)
                             ->disabledOn('create'),
                         Forms\Components\DateTimePicker::make('created_at')
                             ->label(__('Fecha de creación'))
                             ->readOnly(),
-                        // Forms\Components\Select::make('branch_id')
-                        //     ->label(__('Direccíon de despacho'))
-                        //     ->relationship(
-                        //         name: 'user.company.branches',
-                        //         titleAttribute: 'shipping_address',
-                        //     )
-                        //     ->disabledOn('create'),
                         Forms\Components\Select::make('branch_id')
                             ->label(__('Dirección de despacho'))
                             ->options(function (Get $get) {
