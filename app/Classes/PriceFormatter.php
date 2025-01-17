@@ -1,6 +1,6 @@
 <?php
 
-namespace App\CLasses;
+namespace App\Classes;
 
 class PriceFormatter
 {

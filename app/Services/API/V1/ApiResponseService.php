@@ -57,4 +57,12 @@ class ApiResponseService
             'max_attempts' => $maxAttempts,
         ], Response::HTTP_TOO_MANY_REQUESTS);
     }
+
+    public static function unprocessableEntity($message = 'Unprocessable Entity', Array $errors): JsonResponse
+    {
+        return response()->json([
+            'message' => $message,
+            "errors" => $errors
+        ], Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
 }

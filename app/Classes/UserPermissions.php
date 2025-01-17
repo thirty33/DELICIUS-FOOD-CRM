@@ -1,6 +1,6 @@
 <?php
 
-namespace App\CLasses;
+namespace App\Classes;
 
 use App\Models\User;
 use App\Enums\PermissionName;
@@ -16,6 +16,10 @@ class UserPermissions
     public static function IsAgreementIndividual(User $user)
     {
         return $user->hasPermission(PermissionName::INDIVIDUAL->value) && $user->hasRole(RoleName::AGREEMENT->value);
+    }
+
+    public static function IsAgreement(User $user) {
+        return $user->hasRole(RoleName::AGREEMENT->value);
     }
 
     public static function IsCafe(User $user)

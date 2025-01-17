@@ -36,16 +36,8 @@ class Menu extends Model
         'active' => 'boolean',
     ];
 
-    // public function categories(): BelongsToMany
     public function categoryMenus(): HasMany
     {
-        // return $this->belongsToMany(Category::class);
-        // return $this->belongsToMany(Category::class)
-        //     ->using(CategoryMenu::class)
-        //     ->withPivot([
-        //         'show_all_products',
-        //     ])
-        //     ->withTimestamps();
         return $this->hasMany(CategoryMenu::class);
     }
 
@@ -59,44 +51,7 @@ class Menu extends Model
     {
         return $query->where('active', true);
     }
-
-    // /**
-    //  * Scope a query to only include menus for a specific date.
-    //  *
-    //  * @param  \Illuminate\Database\Eloquent\Builder  $query
-    //  * @param  \DateTime  $date
-    //  * @return \Illuminate\Database\Eloquent\Builder
-    //  */
-    // public function scopeForDate($query, $date)
-    // {
-    //     return $query->where('start_date', '<=', $date)
-    //                  ->where('end_date', '>=', $date);
-    // }
-
-    /**
-     * Check if the menu's date range overlaps with existing active menus.
-     *
-     * @return bool
-     */
-    // public function hasOverlap()
-    // {
-    //     return static::where(function (Builder $query) {
-    //         $query->where(function (Builder $q) {
-    //             $q->where('start_date', '<=', $this->start_date)
-    //               ->where('end_date', '>=', $this->start_date);
-    //         })->orWhere(function (Builder $q) {
-    //             $q->where('start_date', '<=', $this->end_date)
-    //               ->where('end_date', '>=', $this->end_date);
-    //         })->orWhere(function (Builder $q) {
-    //             $q->where('start_date', '>=', $this->start_date)
-    //               ->where('end_date', '<=', $this->end_date);
-    //         });
-    //     })
-    //     ->where('id', '!=', $this->id)
-    //     ->where('active', true)
-    //     ->exists();
-    // }
-
+    
     public function rol(): BelongsTo
     {
         return $this->belongsTo(Role::class, 'role_id', 'id');

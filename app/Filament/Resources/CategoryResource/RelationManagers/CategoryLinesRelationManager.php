@@ -17,7 +17,7 @@ class CategoryLinesRelationManager extends RelationManager
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
-        return __('Líneas de la Categoría: :name', ['name' => $ownerRecord->name]);
+        return __('Reglas de despacho de la Categoría: :name', ['name' => $ownerRecord->name]);
     }
 
     protected static function getRecordLabel(): ?string

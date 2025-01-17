@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers\API\V1;
 
-use App\Classes\UserPermissions;
+use App\Classes\Orders\Validations\AtLeastOneProductByCategory;
+use App\Classes\Orders\Validations\DispatchRulesCategoriesValidation;
+use App\Classes\Orders\Validations\MenuExistsValidation;
+use App\Classes\Orders\Validations\OneProductPerCategory;
+use App\Classes\Orders\Validations\MaxOrderAmountValidation;
+use App\Enums\OrderStatus;
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -16,6 +21,7 @@ use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
 use App\Models\Menu;
 use App\Models\User;
+use Exception;
 
 class OrderController extends Controller
 {
@@ -67,13 +73,13 @@ class OrderController extends Controller
         $user = $request->user();
 
         $order = $this->getOrder($user->id, $carbonDate);
-        
+
         if (!$order) {
 
             $order = new Order();
             $order->user_id = $user->id;
             $order->dispatch_date = $carbonDate;
-            $order->status = 'pending';
+            $order->status = OrderStatus::PENDING->value;
             $order->save();
         }
 
@@ -141,45 +147,45 @@ class OrderController extends Controller
         );
     }
 
-    private function getCurrentMenu($user, $date) {
-        $menuExists = Menu::where('publication_date', $date)
-        ->where('role_id', UserPermissions::getRole($user)->id)
-        ->where('permissions_id', UserPermissions::getPermission($user)->id)
-        ->exists();
-    }
-
     public function updateOrderStatus(UpdateStatusRequest $request, string $date): JsonResponse
     {
-        $date = data_get($request->all(), 'date', '');
+        try {
 
-        $carbonDate = Carbon::parse($date);
+            $date = data_get($request->all(), 'date', '');
 
-        $user = $request->user();
+            $carbonDate = Carbon::parse($date);
 
-        $order = $this->getOrder($user->id, $carbonDate);
+            $user = $request->user();
 
-        if (
-            UserPermissions::IsAgreementConsolidated($user)
-            || UserPermissions::IsAgreementIndividual($user)
-        ) {
+            $order = $this->getOrder($user->id, $carbonDate);
 
-            dd([
-                'order' => $order->id,
-                'status' => $request->status,
-                'date' => $date
+            $validationChain = new MenuExistsValidation();
+
+            $validationChain
+                ->linkWith(new DispatchRulesCategoriesValidation())
+                ->linkWith(new AtLeastOneProductByCategory())
+                ->linkWith(new OneProductPerCategory())
+                ->linkWith(new MaxOrderAmountValidation());
+
+            $validationChain
+                ->validate($order, $user, $carbonDate);
+
+            if (!$order) {
+                return ApiResponseService::notFound('Order not found');
+            }
+
+            $order->status = $request->status;
+            $order->save();
+
+            return ApiResponseService::success(
+                new OrderResource($this->getOrder($user->id, $carbonDate)),
+                'Order status updated successfully',
+            );
+
+        } catch (Exception $e) {
+            return ApiResponseService::unprocessableEntity('error', [
+                'message' => [ $e->getMessage() ],
             ]);
         }
-
-        if (!$order) {
-            return ApiResponseService::notFound('Order not found');
-        }
-
-        $order->status = $request->status;
-        $order->save();
-
-        return ApiResponseService::success(
-            new OrderResource($this->getOrder($user->id, $carbonDate)),
-            'Order status updated successfully',
-        );
     }
 }
