@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Builder;
 
 class CategoryMenu extends Pivot
 {
@@ -53,5 +54,10 @@ class CategoryMenu extends Pivot
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'category_menu_product', 'category_menu_id', 'product_id');
+    }
+
+    public function scopeOrderedByDisplayOrder(Builder $query): Builder
+    {
+        return $query->orderBy('display_order', 'asc');
     }
 }

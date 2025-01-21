@@ -7,6 +7,7 @@ use App\Classes\Orders\Validations\DispatchRulesCategoriesValidation;
 use App\Classes\Orders\Validations\MenuExistsValidation;
 use App\Classes\Orders\Validations\OneProductPerCategory;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
+use App\Classes\Orders\Validations\OneProductBySubcategoryValidation;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
@@ -159,14 +160,18 @@ class OrderController extends Controller
 
             $order = $this->getOrder($user->id, $carbonDate);
 
-            $validationChain = new MenuExistsValidation();
+            if(!$order) {
+                throw new Exception("No existe un pedido para esta fecha");
+            }
 
+            $validationChain = new MenuExistsValidation();
             $validationChain
                 ->linkWith(new DispatchRulesCategoriesValidation())
                 ->linkWith(new AtLeastOneProductByCategory())
                 ->linkWith(new OneProductPerCategory())
-                ->linkWith(new MaxOrderAmountValidation());
-
+                ->linkWith(new MaxOrderAmountValidation())
+                ->linkWith(new OneProductBySubcategoryValidation());
+                
             $validationChain
                 ->validate($order, $user, $carbonDate);
 

@@ -14,7 +14,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms;
-
+use App\Enums\Subcategory;
 
 class CategoryResource extends Resource
 {
@@ -59,6 +59,11 @@ class CategoryResource extends Resource
                     ->label(__('Activo'))
                     ->default(true)
                     ->inline(false),
+                Forms\Components\Select::make('subcategory')
+                    ->label(__('Subcategoría'))
+                    ->options(Subcategory::getSelectOptions())
+                    ->nullable()
+                    ->default(null),
             ]);
     }
 
@@ -73,7 +78,12 @@ class CategoryResource extends Resource
                     ->description(fn(Category $category) => $category->description),
                 Tables\Columns\ToggleColumn::make('is_active')
                     ->label(__('Activo'))
-                    ->sortable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('subcategory')
+                    ->label(__('Subcategoría'))
+                    ->formatStateUsing(fn(string $state): string => Subcategory::from($state)->getLabel())
+                    ->searchable()
+                    ->sortable(),
             ])
             ->filters([])
             ->actions([

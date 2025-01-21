@@ -139,11 +139,12 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label(__('Estado'))
                     ->sortable()
+                    ->formatStateUsing(fn(string $state): string => OrderStatus::from($state)->getLabel())
                     ->color(fn(string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'processing' => 'info',
-                        'completed' => 'success',
-                        'declined' => 'danger',
+                        OrderStatus::PENDING->value => 'warning',
+                        OrderStatus::PARTIALLY_SCHEDULED->value => 'info',
+                        OrderStatus::PROCESSED->value => 'success',
+                        OrderStatus::CANCELED->value => 'danger',
                     }),
                 Tables\Columns\TextColumn::make('dispatch_date')
                     ->label(__('Fecha de despacho'))

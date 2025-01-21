@@ -28,7 +28,8 @@ class Category extends Model
         'is_active_saturday',
         'is_active_sunday',
         'role_id',
-        'permissions_id'
+        'permissions_id',
+        'subcategory'
     ];
 
     public function products(): HasMany
