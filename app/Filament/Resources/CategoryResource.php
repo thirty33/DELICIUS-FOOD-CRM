@@ -59,11 +59,19 @@ class CategoryResource extends Resource
                     ->label(__('Activo'))
                     ->default(true)
                     ->inline(false),
-                Forms\Components\Select::make('subcategory')
-                    ->label(__('Subcategoría'))
-                    ->options(Subcategory::getSelectOptions())
-                    ->nullable()
-                    ->default(null),
+                // Forms\Components\Select::make('subcategory')
+                //     ->label(__('Subcategoría'))
+                //     ->options(Subcategory::getSelectOptions())
+                //     ->nullable()
+                //     ->default(null),
+                Forms\Components\Select::make('subcategories')
+                    ->relationship(
+                        name: 'subcategories',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn($query) => $query->distinct()
+                    )
+                    ->multiple()
+                    ->label(__('Subcategorías'))
             ]);
     }
 
@@ -79,11 +87,14 @@ class CategoryResource extends Resource
                 Tables\Columns\ToggleColumn::make('is_active')
                     ->label(__('Activo'))
                     ->sortable(),
-                Tables\Columns\TextColumn::make('subcategory')
-                    ->label(__('Subcategoría'))
-                    ->formatStateUsing(fn(string $state): string => Subcategory::from($state)->getLabel())
-                    ->searchable()
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('subcategory')-
+                //     ->label(__('Subcategoría'))
+                //     ->formatStateUsing(fn(string $state): string => Subcategory::from($state)->getLabel())
+                //     ->searchable()
+                //     ->sortable(),
+                Tables\Columns\TextColumn::make('subcategories.name')
+                    ->label(__('Subcategorías'))
+                    ->badge(),
             ])
             ->filters([])
             ->actions([

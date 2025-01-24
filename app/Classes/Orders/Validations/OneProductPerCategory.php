@@ -13,10 +13,8 @@ class OneProductPerCategory extends OrderStatusValidation
 {
     protected function check(Order $order, User $user, Carbon $date): void
     {
-
         if (UserPermissions::IsAgreementIndividual($user)) {
-            
-            //test
+            // Obtener el menú actual
             $currentMenu = MenuHelper::getCurrentMenuQuery($date, $user)->first();
 
             if (!$currentMenu) {
@@ -28,58 +26,136 @@ class OneProductPerCategory extends OrderStatusValidation
 
             // Obtener las categorías de los productos en la orden
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
-                return $orderLine->product->category;
+                return [
+                    'category' => $orderLine->product->category,
+                    'product_name' => $orderLine->product->name,
+                ];
+            });
+
+            // Agrupar los productos por categoría
+            $groupedByCategory = $categoriesInOrder->groupBy(function ($item) {
+                return $item['category']->id;
             });
 
             // Verificar las categorías sin subcategoría
             foreach ($categoryMenus as $categoryMenu) {
                 $category = $categoryMenu->category;
 
-                // Si la categoría no tiene subcategoría, debe haber al menos un producto de esta categoría
-                if (is_null($category->subcategory)) {
-                    $hasProductInCategory = $categoriesInOrder->contains('id', $category->id);
+                // Si la categoría no tiene subcategorías, debe haber al menos un producto de esta categoría
+                if ($category->subcategories->isEmpty()) {
+                    $hasProductInCategory = $categoriesInOrder->contains(function ($item) use ($category) {
+                        return $item['category']->id === $category->id;
+                    });
 
                     if (!$hasProductInCategory) {
-                        throw new Exception("La orden debe incluir al menos un producto de la categoría: {$category->name}.");
+                        throw new Exception("La orden debe incluir al menos un producto de la categorías: {$category->name}.");
+                    }
+
+                    $productsInCategory = $groupedByCategory->get($category->id, []);
+                    if ($productsInCategory->count() > 1) {
+                        $productNames = $productsInCategory->pluck('product_name')->implode(', ');
+                        throw new Exception(
+                            "Solo se permite un producto por categoría sin subcategorías. Categoría: {$category->name}. " .
+                                "Productos: {$productNames}."
+                        );
                     }
                 }
             }
 
-            // Verificar las categorías con subcategoría
+            // Verificar las categorías con subcategorías
             $subcategoriesInOrder = $categoriesInOrder
-                ->filter(function ($category) {
-                    return !is_null($category->subcategory); // Filtrar solo categorías con subcategoría
+                ->filter(function ($item) {
+                    return !$item['category']->subcategories->isEmpty(); // Filtrar solo categorías con subcategorías
                 })
-                ->groupBy('subcategory'); // Agrupar por subcategoría
+                ->flatMap(function ($item) {
+                    return $item['category']->subcategories->map(function ($subcategory) use ($item) {
+                        return [
+                            'subcategory_name' => $subcategory->name,
+                            'product_name' => $item['product_name'],
+                            'category_name' => $item['category']->name,
+                        ];
+                    });
+                })
+                ->groupBy('subcategory_name'); // Agrupar por nombre de subcategoría
 
-            foreach ($subcategoriesInOrder as $subcategory => $categories) {
-                if ($categories->count() > 1) {
-                    throw new Exception("Solo puede haber un producto de la subcategoría: {$subcategory}.");
-                }
-            }
-            //
+            // Validar que haya al menos un producto en la orden para cada subcategoría
+            // $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
+            $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
 
-            // Get all the categories of the products in the order
-            $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
-                return [
-                    'category_id' => $orderLine->product->category->id,
-                    'category_name' => $orderLine->product->category->name,
-                    'product_name' => $orderLine->product->name,
-                ];
-            });
-            
-            // Group the products by category
-            $groupedByCategory = $categoriesInOrder->groupBy('category_id');
-
-            // Check that there is no more than one product per category
-            foreach ($groupedByCategory as $categoryId => $products) {
+            // Verificar que no haya más de un producto por subcategoría
+            foreach ($subcategoriesInOrder as $subcategoryName => $products) {
                 if ($products->count() > 1) {
-                    $categoryName = $products->first()['category_name'];
+                    $categoryNames = $products->pluck('category_name')->unique()->implode(', ');
                     $productNames = $products->pluck('product_name')->implode(', ');
-                    throw new Exception("Solo se permite un producto por categoría. Categoría: {$categoryName}. Productos: {$productNames}.");
+                    throw new Exception(
+                        "Solo se permite un producto por subcategoría. Subcategoría: {$subcategoryName}. " .
+                            "Categorías: {$categoryNames}. Productos: {$productNames}."
+                    );
                 }
             }
-            
+        }
+    }
+
+    /**
+     * Validar que haya al menos un producto en la orden para cada subcategoría.
+     *
+     * @param \Illuminate\Support\Collection $categoryMenus
+     * @param \Illuminate\Support\Collection $categoriesInOrder
+     * @throws Exception
+     */
+    protected function validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder): void
+    {
+        // Obtener todas las subcategorías presentes en el menú
+        $subcategoriesInMenu = $categoryMenus
+            ->flatMap(function ($categoryMenu) {
+                return $categoryMenu->category->subcategories->pluck('name')->toArray();
+            })
+            ->unique();
+
+        // Obtener todas las subcategorías presentes en la orden
+        $subcategoriesInOrder = $categoriesInOrder
+            ->flatMap(function ($item) {
+                return $item['category']->subcategories->pluck('name')->toArray();
+            })
+            ->unique();
+
+        // 1. Verificar que haya al menos un producto con 'PLATO DE FONDO', solo si está en el menú
+        if ($subcategoriesInMenu->contains('PLATO DE FONDO') && !$subcategoriesInOrder->contains('PLATO DE FONDO')) {
+            throw new Exception("La orden debe incluir al menos un producto de la subcategoría: PLATO DE FONDO.");
+        }
+
+        // 2. Verificar las reglas de exclusión entre 'SANDWICH' y 'PAN', solo si están en el menú
+        $hasSandwichInMenu = $subcategoriesInMenu->contains('SANDWICH');
+        $hasPanInMenu = $subcategoriesInMenu->contains('PAN');
+
+        if ($hasSandwichInMenu || $hasPanInMenu) {
+            $hasSandwichInOrder = $subcategoriesInOrder->contains('SANDWICH');
+            $hasPanInOrder = $subcategoriesInOrder->contains('PAN');
+
+            if ($hasSandwichInOrder && $hasPanInOrder) {
+                throw new Exception("No se permite combinar las subcategorías 'SANDWICH' y 'PAN' en la misma orden.");
+            }
+
+            if (!$hasSandwichInOrder && !$hasPanInOrder) {
+                throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'SANDWICH' o 'PAN'.");
+            }
+        }
+
+        // 3. Verificar las reglas de exclusión entre 'ENSALADA' y 'MINI-ENSALADA', solo si están en el menú
+        $hasEnsaladaInMenu = $subcategoriesInMenu->contains('ENSALADA');
+        $hasMiniEnsaladaInMenu = $subcategoriesInMenu->contains('MINI-ENSALADA');
+
+        if ($hasEnsaladaInMenu || $hasMiniEnsaladaInMenu) {
+            $hasEnsaladaInOrder = $subcategoriesInOrder->contains('ENSALADA');
+            $hasMiniEnsaladaInOrder = $subcategoriesInOrder->contains('MINI-ENSALADA');
+
+            if ($hasEnsaladaInOrder && $hasMiniEnsaladaInOrder) {
+                throw new Exception("No se permite combinar las subcategorías 'ENSALADA' y 'MINI-ENSALADA' en la misma orden.");
+            }
+
+            if (!$hasEnsaladaInOrder && !$hasMiniEnsaladaInOrder) {
+                throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'ENSALADA' o 'MINI-ENSALADA'.");
+            }
         }
     }
 }

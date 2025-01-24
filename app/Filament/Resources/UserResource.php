@@ -62,20 +62,44 @@ class UserResource extends Resource
                     ->relationship('roles', 'name')
                     // ->multiple()
                     ->label(__('Tipo de usuario'))
-                    ->required(),
+                    ->required()
+                    ->live(),
                 Forms\Components\Select::make('permissions')
                     ->relationship('permissions', 'name')
                     // ->multiple()
                     ->label(__('Tipo de Convenio'))
-                    ->rules([
-                        fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
-                            $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
-
-                            if (in_array($agreementRoleId, (array)$get('roles')) && empty($value)) {
-                                $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
-                            }
-                        }
-                    ]),
+                    // ->rules([
+                    //     fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
+                    //         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+                    //         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
+    
+                    //         $selectedRoles = (array)$get('roles');
+    
+                    //         if ((in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles)) && empty($value)) {
+                    //             $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
+                    //         }
+                    //     }
+                    // ])
+                    // ->requiredIf('roles', function (Get $get) {
+                    //     $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+                    //     $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
+                
+                    //     $selectedRoles = (array)$get('roles');
+                
+                    //     return in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles);
+                    // })
+                    // ->validationMessages([
+                    //     'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.'),
+                    // ])
+                    ->required(function (Get $get) {
+                        $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+                        $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
+                        $selectedRoles = (array)$get('roles');
+                        
+                        return in_array($agreementRoleId, $selectedRoles) || 
+                               in_array($cafeRoleId, $selectedRoles);
+                    })
+                    ->live(),
                 Forms\Components\Select::make('company_id')
                     ->relationship('company', 'name')
                     ->required()
@@ -95,8 +119,7 @@ class UserResource extends Resource
                         )
                     )
                     ->required()
-                    ->searchable()
-                ,
+                    ->searchable(),
                 TextInput::make('password')
                     ->password()
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))

@@ -57,5 +57,20 @@ class Category extends Model
         return $this->hasMany(CategoryLine::class);
     }
 
+    public function subcategories(): BelongsToMany
+    {
+        return $this->belongsToMany(Subcategory::class, 'category_subcategory')->using(CategorySubcategory::class);
+    }
+    
+    public function hasAnySubcategories(array $subcategories): bool
+    {
+        return $this->subcategories->whereIn('name', $subcategories)->isNotEmpty();
+    }
+
+    public function hasSubcategories(): bool
+    {
+        return $this->subcategories->isNotEmpty();
+    }
+
 
 }

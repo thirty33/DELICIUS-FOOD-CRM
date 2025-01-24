@@ -18,6 +18,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use App\Enums\RoleName;
 use App\Models\Permission;
+use Closure;
+use Filament\Forms\Get;
 
 class MenuResource extends Resource
 {
@@ -71,14 +73,36 @@ class MenuResource extends Resource
                         Forms\Components\Select::make('rol')
                             ->relationship('rol', 'name')
                             ->label(__('Tipo de usuario'))
-                            ->required(),
+                            ->required()
+                            ->live(),
                         Forms\Components\Select::make('permission')
                             ->relationship('permission', 'name')
                             ->label(__('Tipo de Convenio'))
-                            ->requiredIf('rol', Role::where('name', RoleName::AGREEMENT)->first()->id)
-                            ->validationMessages([
-                                'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.')
-                            ]),
+                            // ->requiredIf('rol', Role::where('name', RoleName::AGREEMENT)->first()->id)
+                            // ->validationMessages([
+                            //     'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.')
+                            // ])
+                            // ->rules([
+                            //     fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
+                            //         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+                            //         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
+
+                            //         $selectedRole = $get('rol');
+
+                            //         if ((in_array($selectedRole, [$agreementRoleId, $cafeRoleId])) && empty($value)) {
+                            //             $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
+                            //         }
+                            //     }
+                            // ])
+                            ->required(function (Get $get) {
+                                $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
+                                $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
+
+                                $selectedRole = $get('rol');
+
+                                return (in_array($selectedRole, [$agreementRoleId, $cafeRoleId])) && empty($value);
+                            })
+                        ,
                         Toggle::make('active')
                             ->label(__('Activo'))
                             ->default(true)
@@ -140,7 +164,7 @@ class MenuResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
-            ;
+        ;
     }
 
     public static function getRelations(): array

@@ -114,6 +114,10 @@ class CompaniesAndUsersSeeder extends Seeder
             $cafe->roles()->attach(Role::CAFE);
         }
 
+        if (!$cafe->permissions()->where('permission_id', Permission::CONSOLIDATED)->exists()) {
+            !$cafe->permissions()->attach(Permission::CONSOLIDATED);
+        }
+
         $agreement_consolidated = User::firstOrCreate([
             'email' => 'agreement_consolidated@example.com',
         ], [

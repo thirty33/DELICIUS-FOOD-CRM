@@ -27,6 +27,12 @@ return new class extends Migration
      */
     public function down(): void
     {
+
+        // Eliminar filas con valores no compatibles
+        \DB::table('orders')
+            ->whereNotIn('status', ['pending', 'processing', 'completed', 'declined'])
+            ->delete();
+
         Schema::table('orders', function (Blueprint $table) {
             $table->enum('status', ['pending', 'processing', 'completed', 'declined'])->default('pending')->change();
         });

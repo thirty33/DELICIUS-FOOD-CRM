@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
         $this->call(ProductsSeeder::class);
         $this->call(CategoryMenusSeeder::class);
         $this->call(PriceListLinesSeeder::class);
+        $this->call(CategorySubcategorySeeder::class);
 
     }
 }

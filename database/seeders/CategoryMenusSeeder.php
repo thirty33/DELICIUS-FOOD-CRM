@@ -87,11 +87,11 @@ class CategoryMenusSeeder extends Seeder
             }, range(1, 31)),
         
             // Cafe Role Menus (31 days)
-            ...array_map(function($day) use ($cafeRole, $categories, $currentMonth, $currentYear) {
+            ...array_map(function($day) use ($cafeRole, $categories, $currentMonth, $currentYear, $consolidadoPermission) {
                 return [
                     'title' => 'Daily Menu',
                     'role' => $cafeRole,
-                    'permission' => null,
+                    'permission' => $consolidadoPermission,
                     'categories' => $this->getRandomCategories($categories),
                     'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
                     'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
