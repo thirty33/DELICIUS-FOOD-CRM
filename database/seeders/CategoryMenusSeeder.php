@@ -63,9 +63,7 @@ class CategoryMenusSeeder extends Seeder
             ['name' => 'Mediterranean', 'description' => 'Healthy Mediterranean cuisine'],
         ];
 
-        $currentMonth = 1;
-        $currentYear = 2025;
-
+        $today = Carbon::today();
         $adminRole = Role::where('name', 'Admin')->first()->id;
         $cafeRole = Role::where('name', 'Café')->first()->id;
         $convenioRole = Role::where('name', 'Convenio')->first()->id;
@@ -74,72 +72,97 @@ class CategoryMenusSeeder extends Seeder
         $individualPermission = Permission::where('name', 'Individual')->first()->id;
         
         $menuConfigurations = [
-            // Admin Role Menus (31 days)
-            ...array_map(function($day) use ($adminRole, $categories, $currentMonth, $currentYear) {
+            // Admin Role Menus (30 days)
+            ...array_map(function($day) use ($adminRole, $categories, $today) {
+                $date = $today->copy()->addDays($day);
                 return [
-                    'title' => 'Daily Menu',
+                    'title' => 'Admin Menu',
                     'role' => $adminRole,
                     'permission' => null,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
-                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
+                    'publication_date' => $date,
+                    'max_order_date' => $date->copy()->subDays(3),
                 ];
-            }, range(1, 31)),
+            }, range(0, 29)),
         
-            // Cafe Role Menus (31 days)
-            ...array_map(function($day) use ($cafeRole, $categories, $currentMonth, $currentYear, $consolidadoPermission) {
+            // Cafe Consolidado Role Menus (30 days)
+            ...array_map(function($day) use ($cafeRole, $categories, $today, $consolidadoPermission) {
+                $date = $today->copy()->addDays($day);
                 return [
-                    'title' => 'Daily Menu',
+                    'title' => 'Café Consolidado Menu',
                     'role' => $cafeRole,
                     'permission' => $consolidadoPermission,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
-                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
+                    'publication_date' => $date,
+                    'max_order_date' => $date->copy()->subDays(3),
                 ];
-            }, range(1, 31)),
+            }, range(0, 29)),
+
+            // Cafe Individual Role Menus (30 days)
+            ...array_map(function($day) use ($cafeRole, $categories, $today, $individualPermission) {
+                $date = $today->copy()->addDays($day);
+                return [
+                    'title' => 'Café Individual Menu',
+                    'role' => $cafeRole,
+                    'permission' => $individualPermission,
+                    'categories' => $this->getRandomCategories($categories),
+                    'publication_date' => $date,
+                    'max_order_date' => $date->copy()->subDays(3),
+                ];
+            }, range(0, 29)),
         
-            // Convenio Consolidado Menus (31 days)
-            ...array_map(function($day) use ($convenioRole, $consolidadoPermission, $categories, $currentMonth, $currentYear) {
+            // Convenio Consolidado Menus (30 days)
+            ...array_map(function($day) use ($convenioRole, $consolidadoPermission, $categories, $today) {
+                $date = $today->copy()->addDays($day);
                 return [
                     'title' => 'Convenio Consolidado Menu',
                     'role' => $convenioRole,
                     'permission' => $consolidadoPermission,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
-                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
+                    'publication_date' => $date,
+                    'max_order_date' => $date->copy()->subDays(3),
                 ];
-            }, range(1, 31)),
+            }, range(0, 29)),
         
-            // Convenio Individual Menus (31 days)
-            ...array_map(function($day) use ($convenioRole, $individualPermission, $categories, $currentMonth, $currentYear) {
+            // Convenio Individual Menus (30 days)
+            ...array_map(function($day) use ($convenioRole, $individualPermission, $categories, $today) {
+                $date = $today->copy()->addDays($day);
                 return [
                     'title' => 'Convenio Individual Menu',
                     'role' => $convenioRole,
                     'permission' => $individualPermission,
                     'categories' => $this->getRandomCategories($categories),
-                    'publication_date' => Carbon::create($currentYear, $currentMonth, $day),
-                    'max_order_date' => Carbon::create($currentYear, $currentMonth, $day)->subDays(3),
+                    'publication_date' => $date,
+                    'max_order_date' => $date->copy()->subDays(3),
                 ];
-            }, range(1, 31))
+            }, range(0, 29))
         ];
 
         foreach ($menuConfigurations as $menuConfiguration) {
-            $menu = Menu::create([
+            $menu = Menu::firstOrCreate([
                 'title' => $menuConfiguration['title'],
-                'description' => 'Description for ' . $menuConfiguration['title'],
-                'active' => true,
-                'publication_date' => $menuConfiguration['publication_date'],
-                'max_order_date' => $menuConfiguration['max_order_date'],
                 'role_id' => $menuConfiguration['role'],
                 'permissions_id' => $menuConfiguration['permission'],
+                'publication_date' => $menuConfiguration['publication_date'],
+                'max_order_date' => $menuConfiguration['max_order_date'],
+            ], [
+                'description' => 'Description for ' . $menuConfiguration['title'],
+                'active' => true,
             ]);
 
             foreach ($menuConfiguration['categories'] as $categoryData) {
-                $category = Category::where('name', $categoryData['name'])->first();
+                $category = Category::firstOrCreate([
+                    'name' => $categoryData['name'],
+                ], [
+                    'description' => $categoryData['description'],
+                ]);
+
+                $isMandatoryCategory = $menuConfiguration['role'] === $cafeRole && $menuConfiguration['permission'] === $individualPermission;
 
                 $data = [
                     'display_order' => rand(1, 100),
                     'show_all_products' => rand(0, 1),
+                    'mandatory_category' => $isMandatoryCategory,
                 ];
 
                 $categoryMenu = CategoryMenu::firstOrCreate([

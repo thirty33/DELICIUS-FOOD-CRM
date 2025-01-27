@@ -5,12 +5,14 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Category;
+use App\Models\CategoryLine;
+use App\Enums\Weekday;
 
 class CategoriesSeeder extends Seeder
 {
     /**
      * Run the database seeds.
-    */
+     */
     public function run(): void
     {
 
@@ -48,9 +50,36 @@ class CategoriesSeeder extends Seeder
             ['name' => 'Mediterranean', 'description' => 'Healthy Mediterranean cuisine'],
         ];
 
+        $weekdays = [
+            Weekday::MONDAY->value,
+            Weekday::TUESDAY->value,
+            Weekday::WEDNESDAY->value,
+            Weekday::THURSDAY->value,
+            Weekday::FRIDAY->value,
+            Weekday::SATURDAY->value,
+            Weekday::SUNDAY->value,
+        ];
+
         foreach ($categories as $categoryData) {
             $category = Category::firstOrCreate(['name' => $categoryData['name']], $categoryData);
+
+            foreach ($weekdays as $weekday) {
+
+                $preparationDays = ($weekday === Weekday::MONDAY->value) ? 3 : 2;
+
+                $randomHour = rand(0, 23);
+                $randomMinute = rand(0, 59); 
+                $maximumOrderTime = sprintf("%02d:%02d", $randomHour, $randomMinute);
+
+                CategoryLine::firstOrCreate([
+                    'category_id' => $category->id,
+                    'weekday' => $weekday,
+                ], [
+                    'preparation_days' => $preparationDays,
+                    'maximum_order_time' => $maximumOrderTime,
+                    'active' => true,
+                ]);
+            }
         }
-        
     }
 }

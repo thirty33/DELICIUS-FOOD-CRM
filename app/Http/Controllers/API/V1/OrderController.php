@@ -8,6 +8,7 @@ use App\Classes\Orders\Validations\MenuExistsValidation;
 use App\Classes\Orders\Validations\OneProductPerCategory;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
 use App\Classes\Orders\Validations\OneProductBySubcategoryValidation;
+use App\Classes\Orders\Validations\MandatoryCategoryValidation;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
@@ -34,7 +35,9 @@ class OrderController extends Controller
         $month = $carbonDate->month;
         $year = $carbonDate->year;
 
-        $order = Order::with('orderLines.product')
+        $order = Order::with([
+            'orderLines.product.category.subcategories',
+        ])
             ->where('user_id', $request->user()->id)
             ->whereDay('dispatch_date', '=', $day)
             ->whereMonth('dispatch_date', '=', $month)
@@ -160,7 +163,7 @@ class OrderController extends Controller
 
             $order = $this->getOrder($user->id, $carbonDate);
 
-            if(!$order) {
+            if (!$order) {
                 throw new Exception("No existe un pedido para esta fecha");
             }
 
@@ -170,8 +173,9 @@ class OrderController extends Controller
                 ->linkWith(new AtLeastOneProductByCategory())
                 ->linkWith(new OneProductPerCategory())
                 ->linkWith(new MaxOrderAmountValidation())
-                ->linkWith(new OneProductBySubcategoryValidation());
-                
+                ->linkWith(new OneProductBySubcategoryValidation())
+                ->linkWith(new MandatoryCategoryValidation());
+
             $validationChain
                 ->validate($order, $user, $carbonDate);
 
@@ -186,10 +190,9 @@ class OrderController extends Controller
                 new OrderResource($this->getOrder($user->id, $carbonDate)),
                 'Order status updated successfully',
             );
-
         } catch (Exception $e) {
             return ApiResponseService::unprocessableEntity('error', [
-                'message' => [ $e->getMessage() ],
+                'message' => [$e->getMessage()],
             ]);
         }
     }

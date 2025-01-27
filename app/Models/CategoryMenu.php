@@ -29,7 +29,8 @@ class CategoryMenu extends Pivot
         'show_all_products',
         'category_id',
         'menu_id',
-        'display_order'
+        'display_order',
+        'mandatory_category'
     ];
 
     /**

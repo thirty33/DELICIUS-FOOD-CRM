@@ -22,7 +22,7 @@ class CategoryLinesRelationManager extends RelationManager
 
     protected static function getRecordLabel(): ?string
     {
-        return __('Línea de Categoría');
+        return __('Regla de despacho');
     }
 
     protected static array $daysInSpanish = [

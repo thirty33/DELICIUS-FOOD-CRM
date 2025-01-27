@@ -86,12 +86,17 @@ class CategoriesRelationManager extends RelationManager
                             ->validationMessages([
                                 'required_if' => __('Debe agregar al menos un producto.')
                             ])
-                            ->getOptionLabelFromRecordUsing(fn(Model $record) => $record->title_product),
+                            ->getOptionLabelFromRecordUsing(fn(Model $record) => $record->title_product)
+                            ->columns(3),
                         Forms\Components\TextInput::make('display_order')
                             ->label(__('Orden de visualización'))
                             ->numeric()
                             ->required()
                             ->default(100),
+                        Toggle::make('mandatory_category')
+                            ->label(__('Categoría obligatoria'))
+                            ->default(false)
+                            ->columns(1),
                     ])
             ]);
     }
@@ -105,6 +110,8 @@ class CategoriesRelationManager extends RelationManager
                 Tables\Columns\ToggleColumn::make('show_all_products')
                     ->label(__('Mostrar todos productos'))
                     ->disabled(true),
+                Tables\Columns\ToggleColumn::make('mandatory_category')
+                    ->label(__('Categoría obligatoria')),
                 Tables\Columns\TextColumn::make('display_order')
                     ->label(__('Orden de visualización'))
                     ->sortable(),

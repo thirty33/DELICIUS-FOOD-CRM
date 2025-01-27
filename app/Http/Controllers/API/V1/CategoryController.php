@@ -14,6 +14,8 @@ use App\Models\Menu;
 use App\Models\PriceListLine;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
+use App\Enums\Weekday;
 
 class CategoryController extends Controller
 {
@@ -21,9 +23,15 @@ class CategoryController extends Controller
     {
         $request = $request->validated();
         $user = auth()->user();
+
+        $publicationDate = Carbon::parse($menu->publication_date);
+        $weekday = ucfirst(strtolower($publicationDate->isoFormat('dddd')));
+
+        $weekdayInEnglish = Weekday::fromSpanish($weekday);
+
         
         $query = CategoryMenu::with([
-            'category' => function ($query) use ($user) {
+            'category' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->whereHas('products', function ($priceListQuery) use ($user) {
                     $priceListQuery->whereHas('priceListLines', function ($subQuery) use ($user) {
                         $subQuery->whereHas('priceList', function ($priceListQuery) use ($user) {
@@ -43,6 +51,10 @@ class CategoryController extends Controller
                     }])
                     ->with(['ingredients']);
                 }]);
+                $query->with(['categoryLines' => function ($query) use ($weekdayInEnglish) {
+                    $query->where('weekday', $weekdayInEnglish->value)->where('active', 1);
+                }]);
+                $query->with(['subcategories']);
             },
             'menu',
             'products' => function ($query) use ($user) {
@@ -69,9 +81,11 @@ class CategoryController extends Controller
             ->where('menu_id', $menu->id)
             ->orderBy('category_menu.display_order', 'asc')
             ->paginate(5);
-
+        
         return ApiResponseService::success(
-            CategoryMenuResource::collection($query)->resource,
+            CategoryMenuResource::collection($query)->additional([
+                'publication_date' => $publicationDate->toDateTimeString(),
+            ])->resource,
             'Categories retrieved successfully',
         );
     }

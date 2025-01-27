@@ -27,6 +27,11 @@ class UserPermissions
         return $user->hasRole(RoleName::CAFE->value);
     }
 
+    public static function IsCafeIndividual(User $user)
+    {
+        return $user->hasPermission(PermissionName::INDIVIDUAL->value) && $user->hasRole(RoleName::CAFE->value);
+    }
+
     public static function IsAdmin(User $user)
     {
         return $user->hasRole(RoleName::ADMIN->value);

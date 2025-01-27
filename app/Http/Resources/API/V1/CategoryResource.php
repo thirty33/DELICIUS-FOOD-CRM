@@ -9,11 +9,13 @@ class CategoryResource extends JsonResource
 {
 
     protected $showAllProducts;
+    protected $menuId;
 
-    public function __construct($resource, $showAllProducts = false)
+    public function __construct($resource, $showAllProducts = false, $menuId = null)
     {
         parent::__construct($resource);
         $this->showAllProducts = $showAllProducts;
+        $this->menuId = $menuId;
     }
 
     /**
@@ -23,11 +25,17 @@ class CategoryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        
+        $categoryLineCollection = (new CategoryLineResourceCollection($this->whenLoaded('categoryLines')))->menuId($this->menuId);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'description' => $this->description,
-            'products' => $this->showAllProducts ? ProductResource::collection($this->whenLoaded('products')) : []
+            'products' => $this->showAllProducts ? ProductResource::collection($this->whenLoaded('products')) : [],
+            // 'category_lines' => CategoryLineResource::collection($this->whenLoaded('categoryLines')),
+            'category_lines' => $categoryLineCollection,
+            'subcategories' => SubcategoriesResource::collection($this->whenLoaded('subcategories'))
         ];
     }
 }

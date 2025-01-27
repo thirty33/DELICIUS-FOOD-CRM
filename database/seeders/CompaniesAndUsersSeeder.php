@@ -101,6 +101,7 @@ class CompaniesAndUsersSeeder extends Seeder
             $admin->roles()->attach(Role::ADMIN);
         }
 
+        //cafe consolidado
         $cafe = User::firstOrCreate([
             'email' => 'cafe@example.com',
         ], [
@@ -116,6 +117,24 @@ class CompaniesAndUsersSeeder extends Seeder
 
         if (!$cafe->permissions()->where('permission_id', Permission::CONSOLIDATED)->exists()) {
             !$cafe->permissions()->attach(Permission::CONSOLIDATED);
+        }
+
+        //cafe individual
+        $cafeIndividual = User::firstOrCreate([
+            'email' => 'cafe_individual@example.com',
+        ], [
+            'name' => 'Cafe User',
+            'company_id' => $company->id,
+            'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'branch_id' => $branch->id
+        ]);
+
+        if (!$cafeIndividual->roles()->where('role_id', Role::CAFE)->exists()) {
+            $cafeIndividual->roles()->attach(Role::CAFE);
+        }
+
+        if (!$cafeIndividual->permissions()->where('permission_id', Permission::CONSOLIDATED)->exists()) {
+            !$cafeIndividual->permissions()->attach(Permission::INDIVIDUAL_AGREEMENT);
         }
 
         $agreement_consolidated = User::firstOrCreate([
