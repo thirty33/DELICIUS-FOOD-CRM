@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Classes\OrderHelper;
 use App\Classes\Orders\Validations\AtLeastOneProductByCategory;
 use App\Classes\Orders\Validations\DispatchRulesCategoriesValidation;
 use App\Classes\Orders\Validations\MenuExistsValidation;
@@ -123,32 +124,50 @@ class OrderController extends Controller
 
     public function delete(CreateOrUpdateOrderRequest $request, string $date): JsonResponse
     {
-        $date = data_get($request->validated(), 'date', '');
+        try {
 
-        $carbonDate = Carbon::parse($date);
+            $date = data_get($request->validated(), 'date', '');
 
-        $user = $request->user();
+            $carbonDate = Carbon::parse($date);
 
-        $order = $this->getOrder($user->id, $carbonDate);
+            $user = $request->user();
 
-        if (!$order) {
-            return ApiResponseService::notFound('Order not found');
-        }
+            $order = $this->getOrder($user->id, $carbonDate);
 
-        foreach ($request->order_lines as $orderLineData) {
-            $productId = $orderLineData['id'];
-
-            $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
-
-            if ($existingOrderLine) {
-                $existingOrderLine->delete();
+            if (!$order) {
+                return ApiResponseService::notFound('Order not found');
             }
-        }
+            
+            if ($order->status == OrderStatus::PROCESSED->value) {
+                throw new Exception("La orden ya ha sido procesada");
+            }
 
-        return ApiResponseService::success(
-            new OrderResource($this->getOrder($user->id, $carbonDate)),
-            'Order lines deleted successfully',
-        );
+            $validationChain = new MenuExistsValidation();
+
+            $validationChain
+                ->validate($order, $user, $carbonDate);
+
+            foreach ($request->order_lines as $orderLineData) {
+                $productId = $orderLineData['id'];
+
+                $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
+                
+                if ($existingOrderLine) {
+                    OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $user);
+
+                    $existingOrderLine->delete();
+                }
+            }
+
+            return ApiResponseService::success(
+                new OrderResource($this->getOrder($user->id, $carbonDate)),
+                'Order lines deleted successfully',
+            );
+        } catch (Exception $e) {
+            return ApiResponseService::unprocessableEntity('error', [
+                'message' => [$e->getMessage()],
+            ]);
+        }
     }
 
     public function updateOrderStatus(UpdateStatusRequest $request, string $date): JsonResponse
@@ -167,6 +186,15 @@ class OrderController extends Controller
                 throw new Exception("No existe un pedido para esta fecha");
             }
 
+            if ($request->status != OrderStatus::PROCESSED->value) {
+                throw new Exception("estado no válido");
+            }
+
+            if ($order->status == OrderStatus::PROCESSED->value) {
+                throw new Exception("La orden ya ha sido procesada");
+            }
+
+
             $validationChain = new MenuExistsValidation();
             $validationChain
                 ->linkWith(new DispatchRulesCategoriesValidation())
@@ -174,6 +202,57 @@ class OrderController extends Controller
                 ->linkWith(new OneProductPerCategory())
                 ->linkWith(new MaxOrderAmountValidation())
                 ->linkWith(new OneProductBySubcategoryValidation())
+                ->linkWith(new MandatoryCategoryValidation());
+
+            $validationChain
+                ->validate($order, $user, $carbonDate);
+
+            if (!$order) {
+                return ApiResponseService::notFound('Order not found');
+            }
+
+            $order->status = $request->status;
+            $order->save();
+
+            return ApiResponseService::success(
+                new OrderResource($this->getOrder($user->id, $carbonDate)),
+                'Order status updated successfully',
+            );
+        } catch (Exception $e) {
+            return ApiResponseService::unprocessableEntity('error', [
+                'message' => [$e->getMessage()],
+            ]);
+        }
+    }
+
+    public function partiallyScheduleOrder(UpdateStatusRequest $request, string $date): JsonResponse
+    {
+        try {
+
+            $date = data_get($request->all(), 'date', '');
+
+            $carbonDate = Carbon::parse($date);
+
+            $user = $request->user();
+
+            $order = $this->getOrder($user->id, $carbonDate);
+
+            if (!$order) {
+                throw new Exception("No existe un pedido para esta fecha");
+            }
+
+            if ($request->status != OrderStatus::PARTIALLY_SCHEDULED->value) {
+                throw new Exception("estado no válido");
+            }
+
+            if ($order->status == OrderStatus::PARTIALLY_SCHEDULED->value) {
+                throw new Exception("La orden ya ha sido procesada");
+            }
+
+
+            $validationChain = new MenuExistsValidation();
+            $validationChain
+                ->linkWith(new DispatchRulesCategoriesValidation())
                 ->linkWith(new MandatoryCategoryValidation());
 
             $validationChain
