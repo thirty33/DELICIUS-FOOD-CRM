@@ -10,6 +10,7 @@ use App\Classes\Orders\Validations\OneProductPerCategory;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
 use App\Classes\Orders\Validations\OneProductBySubcategoryValidation;
 use App\Classes\Orders\Validations\MandatoryCategoryValidation;
+use App\Classes\UserPermissions;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
 use App\Http\Controllers\Controller;
@@ -23,6 +24,7 @@ use App\Http\Requests\API\V1\Order\OrderRequest;
 use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
 use App\Models\Menu;
+use App\Models\Product;
 use App\Models\User;
 use Exception;
 
@@ -72,54 +74,92 @@ class OrderController extends Controller
     public function update(CreateOrUpdateOrderRequest $request, string $date): JsonResponse
     {
 
-        $date = data_get($request->validated(), 'date', '');
+        try {
 
-        $carbonDate = Carbon::parse($date);
-        $user = $request->user();
+            $date = data_get($request->validated(), 'date', '');
 
-        $order = $this->getOrder($user->id, $carbonDate);
+            $carbonDate = Carbon::parse($date);
+            $user = $request->user();
+            $orderIsPartiallyScheduled = false;
 
-        if (!$order) {
+            foreach ($request->order_lines as $orderLineData) {
+                if (isset($orderLineData['partially_scheduled']) && $orderLineData['partially_scheduled']) {
 
-            $order = new Order();
-            $order->user_id = $user->id;
-            $order->dispatch_date = $carbonDate;
-            $order->status = OrderStatus::PENDING->value;
+                    $orderIsPartiallyScheduled = true;
+
+                    if (!UserPermissions::IsCafe($user)) {
+                        throw new Exception('User does not have the required CAFE role.');
+                    }
+                }
+            }
+
+            $order = $this->getOrder($user->id, $carbonDate);
+
+            if ($order && $order->status === OrderStatus::PROCESSED->value) {
+                throw new Exception('La orden ya ha sido procesada');
+            }
+
+            if (!$order) {
+
+                $order = new Order();
+                $order->user_id = $user->id;
+                $order->dispatch_date = $carbonDate;
+            }
+
+            $validationChain = new MenuExistsValidation();
+
+            $validationChain
+                ->validate($order, $user, $carbonDate);
+
+            $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
+            $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
             $order->save();
-        }
 
-        $companyPriceListId = $user->company->price_list_id;
+            $companyPriceListId = $user->company->price_list_id;
 
-        foreach ($request->order_lines as $orderLineData) {
+            foreach ($request->order_lines as $orderLineData) {
 
-            $productId = $orderLineData['id'];
-            $quantity = $orderLineData['quantity'];
+                $productId = $orderLineData['id'];
+                $quantity = $orderLineData['quantity'];
+                $partiallyScheduled = $orderLineData['partially_scheduled'] ?? false;
 
-            $productInPriceList = PriceListLine::where('price_list_id', $companyPriceListId)
-                ->where('product_id', $productId);
+                $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
 
-            if (!$productInPriceList->exists()) {
-                continue;
+                // Validar reglas de categoría si partially_scheduled es true
+                if ($partiallyScheduled || ($existingOrderLine && $existingOrderLine->partially_scheduled)) {
+                    $product = Product::find($productId);
+                    if ($product) {
+                        OrderHelper::validateCategoryLineRulesForProduct($product, $carbonDate, $user);
+                    }
+                }
+
+                // Verificar si el producto está en la lista de precios
+                $productInPriceList = PriceListLine::where('price_list_id', $companyPriceListId)
+                    ->where('product_id', $productId);
+
+                if (!$productInPriceList->exists()) {
+                    continue;
+                }
+
+                $order->orderLines()->updateOrCreate(
+                    ['product_id' => $productId],
+                    [
+                        'quantity' => $quantity,
+                        'unit_price' => $productInPriceList->first()->unit_price,
+                        'partially_scheduled' => $partiallyScheduled
+                    ]
+                );
             }
 
-            $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
-
-            if ($existingOrderLine) {
-                $existingOrderLine->quantity = $quantity;
-                $existingOrderLine->save();
-            } else {
-                $order->orderLines()->create([
-                    'product_id' => $productId,
-                    'quantity' => $quantity,
-                    'unit_price' => $productInPriceList->first()->unit_price,
-                ]);
-            }
+            return ApiResponseService::success(
+                new OrderResource($this->getOrder($user->id, $carbonDate)),
+                'Order updated successfully',
+            );
+        } catch (Exception $e) {
+            return ApiResponseService::unprocessableEntity('error', [
+                'message' => [$e->getMessage()],
+            ]);
         }
-
-        return ApiResponseService::success(
-            new OrderResource($this->getOrder($user->id, $carbonDate)),
-            'Order updated successfully',
-        );
     }
 
     public function delete(CreateOrUpdateOrderRequest $request, string $date): JsonResponse
@@ -137,7 +177,7 @@ class OrderController extends Controller
             if (!$order) {
                 return ApiResponseService::notFound('Order not found');
             }
-            
+
             if ($order->status == OrderStatus::PROCESSED->value) {
                 throw new Exception("La orden ya ha sido procesada");
             }
@@ -151,7 +191,7 @@ class OrderController extends Controller
                 $productId = $orderLineData['id'];
 
                 $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
-                
+
                 if ($existingOrderLine) {
                     OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $user);
 

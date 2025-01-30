@@ -12,6 +12,7 @@ class OrderLine extends Model
         'unit_price',
         'order_id',
         'product_id',
+        'partially_scheduled'
     ];
 
     public function order(): BelongsTo

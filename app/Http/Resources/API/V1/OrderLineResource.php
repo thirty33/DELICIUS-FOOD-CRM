@@ -23,6 +23,7 @@ class OrderLineResource extends JsonResource
             'product_id' => $this->product_id,
             'total_price' => PriceFormatter::format($this->total_price),
             'product' => new ProductResource($this->whenLoaded('product')),
+            'partially_scheduled' => $this->partially_scheduled ? true : false,
         ];
     }
 }

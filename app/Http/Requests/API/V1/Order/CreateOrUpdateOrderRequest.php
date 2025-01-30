@@ -14,6 +14,7 @@ class CreateOrUpdateOrderRequest extends FormRequest
             'order_lines' => 'required|array',
             'order_lines.*.id' => 'required|integer|exists:products,id',
             'order_lines.*.quantity' => 'required|integer|min:1',
+            'order_lines.*.partially_scheduled' => 'sometimes|boolean',
         ];
     }
 
@@ -37,6 +38,7 @@ class CreateOrUpdateOrderRequest extends FormRequest
             'order_lines.*.quantity.required' => 'The quantity field is required for each order line.',
             'order_lines.*.quantity.integer' => 'The quantity field must be an integer.',
             'order_lines.*.quantity.min' => 'The quantity field must be at least 1.',
+            'order_lines.*.partially_scheduled.boolean' => 'The partially_scheduled field must be a boolean.'
         ];
     }
 

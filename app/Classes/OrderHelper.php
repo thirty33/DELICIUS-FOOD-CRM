@@ -47,10 +47,10 @@ class OrderHelper
                 $maximumOrderTime = Carbon::parse($categoryLine->maximum_order_time);
 
                 if ($todayWithHour->greaterThan($maximumOrderTime)) {
-                    throw new Exception("El producto '{$product->name}' no puede ser eliminado. El tiempo de preparación del producto ya ha comenzado.");
+                    throw new Exception("El producto '{$product->name}' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
                 }
             } else {
-                throw new Exception("El producto '{$product->name}' no puede ser eliminado. El tiempo de preparación del producto ya ha comenzado.");
+                throw new Exception("El producto '{$product->name}' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
             }
         }
     }

@@ -42,26 +42,26 @@ class OrderLinesRelationManager extends RelationManager
                             ->placeholder(__('Selecciona un producto'))
                             ->options(function () {
                                 $order = $this->ownerRecord;
-                    
+
                                 $user = $order->user;
-                    
+
                                 $company = $user->company;
-                
+
                                 if (!$company || !$company->priceLists) {
                                     return [];
                                 }
-                    
+
                                 $priceListId = $company->price_list_id;
-                    
+
                                 $products = Product::whereHas('priceListLines', function ($query) use ($priceListId) {
                                     $query->where('price_list_id', $priceListId);
                                 })
-                                ->whereHas('category', function ($query) {
-                                    $query->where('is_active', true);
-                                })
-                                ->orderBy('name')
-                                ->pluck('name', 'id');
-                        
+                                    ->whereHas('category', function ($query) {
+                                        $query->where('is_active', true);
+                                    })
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id');
+
                                 return $products;
                             })
                             ->required()
@@ -108,6 +108,12 @@ class OrderLinesRelationManager extends RelationManager
                             ->locale('en_US')
                             ->minValue(0)
                             ->decimals(2),
+                        Forms\Components\Toggle::make('partially_scheduled')
+                            ->label('Parcialmente agendado')
+                            ->disabled()
+                            ->default(false)
+                            ->onColor('success')
+                            ->offColor('danger'),
                     ])
             ]);
     }
@@ -136,6 +142,10 @@ class OrderLinesRelationManager extends RelationManager
                     ->state(function (Model $record): float {
                         return $record->quantity * $record->unit_price;
                     }),
+                Tables\Columns\ToggleColumn::make('partially_scheduled')
+                    ->label('Parcialmente agendado')
+                    ->sortable()
+                    ->disabled(),
             ])
             ->filters([
                 //
