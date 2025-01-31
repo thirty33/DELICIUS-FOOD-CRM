@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->boolean('allow_late_orders')->default(true);
+            $table->boolean('validate_min_price')->default(true);
+            $table->boolean('validate_subcategory_rules')->default(true);
         });
     }
 
@@ -22,7 +23,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn('allow_late_orders');
+            $table->dropColumn(['validate_min_price', 'validate_subcategory_rules']);
         });
     }
 };

@@ -28,6 +28,8 @@ class CategoryResource extends JsonResource
         
         $categoryLineCollection = (new CategoryLineResourceCollection($this->whenLoaded('categoryLines')))->menuId($this->menuId);
 
+        $categoryUserLineCollection = (new CategoryLineResourceCollection($this->whenLoaded('categoryUserLines')))->menuId($this->menuId);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -35,6 +37,7 @@ class CategoryResource extends JsonResource
             'products' => $this->showAllProducts ? ProductResource::collection($this->whenLoaded('products')) : [],
             // 'category_lines' => CategoryLineResource::collection($this->whenLoaded('categoryLines')),
             'category_lines' => $categoryLineCollection,
+            'category_user_lines' => $categoryUserLineCollection,
             'subcategories' => SubcategoriesResource::collection($this->whenLoaded('subcategories'))
         ];
     }

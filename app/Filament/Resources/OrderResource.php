@@ -68,7 +68,7 @@ class OrderResource extends Resource
                             ->rules([
                                 fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
                                     $order = Order::find($get('id'));
-                                    if ($order && $order->total < $order->price_list_min) {
+                                    if ($order && $order->user->validate_min_price && $order->total < $order->price_list_min) {
                                         $fail(__("El total del pedido debe ser igual o mayor al precio mínimo de la lista de precios."));
                                     }
                                 },

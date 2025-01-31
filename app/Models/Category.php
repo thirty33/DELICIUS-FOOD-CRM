@@ -72,5 +72,9 @@ class Category extends Model
         return $this->subcategories->isNotEmpty();
     }
 
-
+    public function categoryUserLines(): HasMany
+    {
+        return $this->hasMany(CategoryUserLine::class);
+    }
+    
 }

@@ -16,7 +16,7 @@ class MenuHelper
             ->where('publication_date', '>=', Carbon::now()->startOfDay())
             ->where('active', 1);
 
-        if (!$user->allow_late_orders) {
+        if ($user->allow_late_orders) {
             $query->where('max_order_date', '>', Carbon::now());
         }
 

@@ -13,7 +13,11 @@ use Exception;
 class MenuExistsValidation extends OrderStatusValidation
 {
     protected function check(Order $order, User $user, Carbon $date): void
-    {   
+    {
+        if (!$user->allow_late_orders) {
+            return;
+        }
+
         $menuExists = MenuHelper::getCurrentMenuQuery($date, $user)
             ->exists();
 

@@ -18,7 +18,12 @@ class OneProductBySubcategoryValidation extends OrderStatusValidation
     ];
 
     protected function check(Order $order, User $user, Carbon $date): void
-    {
+    {   
+
+        if(!$user->validate_subcategory_rules) {
+            return;
+        }
+
         if (UserPermissions::IsAgreementIndividual($user)) {
             // Filtrar los orderLines cuyas categorías tengan al menos una subcategoría
             $filteredOrderLines = $order->orderLines->filter(function ($orderLine) {

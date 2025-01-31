@@ -100,20 +100,16 @@ class OrderController extends Controller
             }
 
             if (!$order) {
-
                 $order = new Order();
                 $order->user_id = $user->id;
                 $order->dispatch_date = $carbonDate;
+                $order->save();
             }
 
             $validationChain = new MenuExistsValidation();
 
             $validationChain
                 ->validate($order, $user, $carbonDate);
-
-            $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
-            $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
-            $order->save();
 
             $companyPriceListId = $user->company->price_list_id;
 
@@ -122,7 +118,7 @@ class OrderController extends Controller
                 $productId = $orderLineData['id'];
                 $quantity = $orderLineData['quantity'];
                 $partiallyScheduled = $orderLineData['partially_scheduled'] ?? false;
-
+                
                 $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
 
                 // Validar reglas de categoría si partially_scheduled es true
@@ -151,13 +147,17 @@ class OrderController extends Controller
                 );
             }
 
+            $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
+            $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
+            $order->save();
+
             return ApiResponseService::success(
                 new OrderResource($this->getOrder($user->id, $carbonDate)),
                 'Order updated successfully',
             );
         } catch (Exception $e) {
             return ApiResponseService::unprocessableEntity('error', [
-                'message' => [$e->getMessage()],
+                'message' => [$e->getMessage() . ' ' . $e->getFile() . ' ' . $e->getLine()],
             ]);
         }
     }
@@ -193,10 +193,19 @@ class OrderController extends Controller
                 $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
 
                 if ($existingOrderLine) {
-                    OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $user);
+
+                    if ($existingOrderLine->partially_scheduled) {
+                        OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $user);
+                    }
 
                     $existingOrderLine->delete();
                 }
+            }
+
+            // Verificar si la orden no tiene orderLines después de eliminar
+            if ($order->orderLines()->count() === 0) {
+                $order->status = OrderStatus::PENDING->value;
+                $order->save();
             }
 
             return ApiResponseService::success(

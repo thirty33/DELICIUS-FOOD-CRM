@@ -32,7 +32,7 @@ class MenuController extends Controller
                 }
             });
         
-        if (!$user->allow_late_orders) {
+        if ($user->allow_late_orders) {
             $query->where('max_order_date', '>', Carbon::now());
         }
         

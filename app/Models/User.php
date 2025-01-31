@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -10,7 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Laravel\Sanctum\HasApiTokens;
-use Filament\Models\Contracts\FilamentUser;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Filament\Panel;
 
 class User extends Authenticatable
@@ -38,7 +37,9 @@ class User extends Authenticatable
         'password',
         'company_id',
         'branch_id',
-        'allow_late_orders'
+        'allow_late_orders',
+        'validate_min_price',
+        'validate_subcategory_rules'
     ];
 
     /**
@@ -129,5 +130,10 @@ class User extends Authenticatable
     public function scopeActive(Builder $builder): Builder
     {
         return $builder->where('active', true);
+    }
+
+    public function categoryUserLines(): HasMany
+    {
+        return $this->hasMany(CategoryUserLine::class);
     }
 }

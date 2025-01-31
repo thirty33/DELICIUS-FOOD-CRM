@@ -37,60 +37,86 @@ class OneProductPerCategory extends OrderStatusValidation
                 return $item['category']->id;
             });
 
-            // Verificar las categorías sin subcategoría
-            foreach ($categoryMenus as $categoryMenu) {
-                $category = $categoryMenu->category;
+            // Si validate_subcategory_rules es true, aplicar la lógica actual
+            if ($user->validate_subcategory_rules) {
+                // Verificar las categorías sin subcategoría
+                foreach ($categoryMenus as $categoryMenu) {
+                    $category = $categoryMenu->category;
 
-                // Si la categoría no tiene subcategorías, debe haber al menos un producto de esta categoría
-                if ($category->subcategories->isEmpty()) {
+                    // Si la categoría no tiene subcategorías, debe haber al menos un producto de esta categoría
+                    if ($category->subcategories->isEmpty()) {
+                        $hasProductInCategory = $categoriesInOrder->contains(function ($item) use ($category) {
+                            return $item['category']->id === $category->id;
+                        });
+
+                        if (!$hasProductInCategory) {
+                            throw new Exception("La orden debe incluir al menos un producto de la categoría: {$category->name}.");
+                        }
+
+                        $productsInCategory = $groupedByCategory->get($category->id, []);
+                        if ($productsInCategory->count() > 1) {
+                            $productNames = $productsInCategory->pluck('product_name')->implode(', ');
+                            throw new Exception(
+                                "Solo se permite un producto por categoría sin subcategorías. Categoría: {$category->name}. " .
+                                    "Productos: {$productNames}."
+                            );
+                        }
+                    }
+                }
+
+                // Verificar las categorías con subcategorías
+                $subcategoriesInOrder = $categoriesInOrder
+                    ->filter(function ($item) {
+                        return !$item['category']->subcategories->isEmpty(); // Filtrar solo categorías con subcategorías
+                    })
+                    ->flatMap(function ($item) {
+                        return $item['category']->subcategories->map(function ($subcategory) use ($item) {
+                            return [
+                                'subcategory_name' => $subcategory->name,
+                                'product_name' => $item['product_name'],
+                                'category_name' => $item['category']->name,
+                            ];
+                        });
+                    })
+                    ->groupBy('subcategory_name'); // Agrupar por nombre de subcategoría
+
+                // Validar que haya al menos un producto en la orden para cada subcategoría
+                $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
+
+                // Verificar que no haya más de un producto por subcategoría
+                foreach ($subcategoriesInOrder as $subcategoryName => $products) {
+                    if ($products->count() > 1) {
+                        $categoryNames = $products->pluck('category_name')->unique()->implode(', ');
+                        $productNames = $products->pluck('product_name')->implode(', ');
+                        throw new Exception(
+                            "Solo se permite un producto por subcategoría. Subcategoría: {$subcategoryName}. " .
+                                "Categorías: {$categoryNames}. Productos: {$productNames}."
+                        );
+                    }
+                }
+            } else {
+                // Si validate_subcategory_rules es false, aplicar la lógica simplificada
+                foreach ($categoryMenus as $categoryMenu) {
+                    $category = $categoryMenu->category;
+
+                    // Verificar que haya al menos un producto de la categoría
                     $hasProductInCategory = $categoriesInOrder->contains(function ($item) use ($category) {
                         return $item['category']->id === $category->id;
                     });
 
                     if (!$hasProductInCategory) {
-                        throw new Exception("La orden debe incluir al menos un producto de la categorías: {$category->name}.");
+                        throw new Exception("La orden debe incluir al menos un producto de la categoría: {$category->name}.");
                     }
 
+                    // Verificar que no haya más de un producto por categoría
                     $productsInCategory = $groupedByCategory->get($category->id, []);
                     if ($productsInCategory->count() > 1) {
                         $productNames = $productsInCategory->pluck('product_name')->implode(', ');
                         throw new Exception(
-                            "Solo se permite un producto por categoría sin subcategorías. Categoría: {$category->name}. " .
+                            "Solo se permite un producto por categoría. Categoría: {$category->name}. " .
                                 "Productos: {$productNames}."
                         );
                     }
-                }
-            }
-
-            // Verificar las categorías con subcategorías
-            $subcategoriesInOrder = $categoriesInOrder
-                ->filter(function ($item) {
-                    return !$item['category']->subcategories->isEmpty(); // Filtrar solo categorías con subcategorías
-                })
-                ->flatMap(function ($item) {
-                    return $item['category']->subcategories->map(function ($subcategory) use ($item) {
-                        return [
-                            'subcategory_name' => $subcategory->name,
-                            'product_name' => $item['product_name'],
-                            'category_name' => $item['category']->name,
-                        ];
-                    });
-                })
-                ->groupBy('subcategory_name'); // Agrupar por nombre de subcategoría
-
-            // Validar que haya al menos un producto en la orden para cada subcategoría
-            // $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
-            $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
-
-            // Verificar que no haya más de un producto por subcategoría
-            foreach ($subcategoriesInOrder as $subcategoryName => $products) {
-                if ($products->count() > 1) {
-                    $categoryNames = $products->pluck('category_name')->unique()->implode(', ');
-                    $productNames = $products->pluck('product_name')->implode(', ');
-                    throw new Exception(
-                        "Solo se permite un producto por subcategoría. Subcategoría: {$subcategoryName}. " .
-                            "Categorías: {$categoryNames}. Productos: {$productNames}."
-                    );
                 }
             }
         }

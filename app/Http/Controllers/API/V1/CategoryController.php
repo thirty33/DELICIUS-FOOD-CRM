@@ -29,7 +29,7 @@ class CategoryController extends Controller
 
         $weekdayInEnglish = Weekday::fromSpanish($weekday);
 
-        
+
         $query = CategoryMenu::with([
             'category' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->whereHas('products', function ($priceListQuery) use ($user) {
@@ -49,12 +49,18 @@ class CategoryController extends Controller
                             $priceListQuery->where('id', $user->company->price_list_id);
                         });
                     }])
-                    ->with(['ingredients']);
+                        ->with(['ingredients']);
                 }]);
                 $query->with(['categoryLines' => function ($query) use ($weekdayInEnglish) {
                     $query->where('weekday', $weekdayInEnglish->value)->where('active', 1);
                 }]);
                 $query->with(['subcategories']);
+
+                $query->with(['categoryUserLines' => function ($query) use ($weekdayInEnglish, $user) {
+                    $query->where('weekday', $weekdayInEnglish->value)
+                        ->where('active', 1)
+                        ->where('user_id', $user->id);
+                }]);
             },
             'menu',
             'products' => function ($query) use ($user) {
@@ -81,7 +87,7 @@ class CategoryController extends Controller
             ->where('menu_id', $menu->id)
             ->orderBy('category_menu.display_order', 'asc')
             ->paginate(5);
-        
+
         return ApiResponseService::success(
             CategoryMenuResource::collection($query)->additional([
                 'publication_date' => $publicationDate->toDateTimeString(),

@@ -72,9 +72,9 @@ class UserResource extends Resource
                     //     fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
                     //         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
                     //         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
-    
+
                     //         $selectedRoles = (array)$get('roles');
-    
+
                     //         if ((in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles)) && empty($value)) {
                     //             $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
                     //         }
@@ -83,9 +83,9 @@ class UserResource extends Resource
                     // ->requiredIf('roles', function (Get $get) {
                     //     $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
                     //     $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
-                
+
                     //     $selectedRoles = (array)$get('roles');
-                
+
                     //     return in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles);
                     // })
                     // ->validationMessages([
@@ -95,9 +95,9 @@ class UserResource extends Resource
                         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
                         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
                         $selectedRoles = (array)$get('roles');
-                        
-                        return in_array($agreementRoleId, $selectedRoles) || 
-                               in_array($cafeRoleId, $selectedRoles);
+
+                        return in_array($agreementRoleId, $selectedRoles) ||
+                            in_array($cafeRoleId, $selectedRoles);
                     })
                     ->live(),
                 Forms\Components\Select::make('company_id')
@@ -156,8 +156,14 @@ class UserResource extends Resource
                     ->password()
                     ->label(__('Confirmar contraseña')),
                 Toggle::make('allow_late_orders')
-                    ->label(__('Permitir pedidos tardíos'))
+                    ->label(__('Validar fecha y reglas de despacho'))
                     ->default(true)
+                    ->inline(false),
+                Toggle::make('validate_min_price')
+                    ->label(__('Validar precio mímimo'))
+                    ->inline(false),
+                Toggle::make('validate_subcategory_rules')
+                    ->label(__('Validar reglas de subcategoría'))
                     ->inline(false),
             ]);
     }
@@ -209,7 +215,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\CategoryUserLinesRelationManager::class
         ];
     }
 
