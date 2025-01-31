@@ -47,7 +47,7 @@ class OrderLinesRelationManager extends RelationManager
 
                                 $company = $user->company;
 
-                                if (!$company || !$company->priceLists) {
+                                if (!$company || !$company->priceList) {
                                     return [];
                                 }
 
@@ -82,7 +82,7 @@ class OrderLinesRelationManager extends RelationManager
                                 $company = $user->company;
 
                                 $priceListLine = null;
-                                if ($company && $company->priceLists) {
+                                if ($company && $company->priceList) {
                                     $priceListLine = PriceListLine::where('price_list_id', $company->price_list_id)
                                         ->where('product_id', $productId)
                                         ->first();

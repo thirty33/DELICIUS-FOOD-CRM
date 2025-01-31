@@ -52,7 +52,7 @@ class Order extends Model
         $branchMinPrice = $this->user->branch->min_price_order;
 
         return Attribute::make(
-            get: fn ($value) => $hasBranch && $branchMinPrice ? $branchMinPrice : $this->user->company->priceLists->min_price_order,
+            get: fn ($value) => $hasBranch && $branchMinPrice ? $branchMinPrice : $this->user->company->priceList->min_price_order,
         );
     }
 }

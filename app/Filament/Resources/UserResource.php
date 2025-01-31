@@ -157,7 +157,6 @@ class UserResource extends Resource
                     ->label(__('Confirmar contraseña')),
                 Toggle::make('allow_late_orders')
                     ->label(__('Validar fecha y reglas de despacho'))
-                    ->default(true)
                     ->inline(false),
                 Toggle::make('validate_min_price')
                     ->label(__('Validar precio mímimo'))
