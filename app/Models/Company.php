@@ -47,6 +47,11 @@ class Company extends Model
         return $this->hasMany(Branch::class);
     }
 
+    public function priceList(): BelongsTo
+    {
+        return $this->belongsTo(PriceList::class, 'price_list_id', 'id');
+    }
+
     public function priceLists(): BelongsTo
     {
         return $this->belongsTo(PriceList::class, 'price_list_id', 'id');

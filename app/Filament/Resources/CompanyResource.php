@@ -168,7 +168,7 @@ class CompanyResource extends Resource
                                         ->nullable()
                                         ->columns(1),
                                     Forms\Components\Select::make('price_list_id')
-                                        ->relationship('priceLists', 'name')
+                                        ->relationship('priceList', 'name')
                                         ->label(__('Lista de precio'))
                                         ->searchable()
                                         ->columns(1),
