@@ -149,6 +149,11 @@ class OrderController extends Controller
 
             $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
             $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
+
+            if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
+                $order->status = OrderStatus::PENDING->value;
+            }
+
             $order->save();
 
             return ApiResponseService::success(
@@ -157,7 +162,7 @@ class OrderController extends Controller
             );
         } catch (Exception $e) {
             return ApiResponseService::unprocessableEntity('error', [
-                'message' => [$e->getMessage() . ' ' . $e->getFile() . ' ' . $e->getLine()],
+                'message' => [$e->getMessage()],
             ]);
         }
     }
