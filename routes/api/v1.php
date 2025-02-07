@@ -42,6 +42,8 @@ Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::get('get-order/{date}', [OrderController::class, 'show'])
         ->name('orders.show');
+    Route::get('get-orders', [OrderController::class, 'index'])
+        ->name('orders.index');
     Route::post('create-or-update-order/{date}', [OrderController::class, 'update'])
         ->name('orders.update');
     Route::delete('delete-order-items/{date}', [OrderController::class, 'delete'])

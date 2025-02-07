@@ -28,4 +28,10 @@ enum OrderStatus: string
             self::CANCELED->value => self::CANCELED->getLabel(),
         ];
     }
+
+    public static function getValues(): array
+    {
+        return array_column(self::cases(), 'value');
+    }
+    
 }

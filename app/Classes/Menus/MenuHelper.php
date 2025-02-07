@@ -8,6 +8,14 @@ use Illuminate\Support\Carbon;
 
 class MenuHelper
 {
+
+    public static function getMenu($date, $user)
+    {
+        return Menu::where('publication_date', $date)
+            ->where('role_id', UserPermissions::getRole($user)->id)
+            ->where('permissions_id', UserPermissions::getPermission($user)->id);
+    }
+
     public static function getCurrentMenuQuery($date, $user)
     {
         $query = Menu::where('publication_date', $date)

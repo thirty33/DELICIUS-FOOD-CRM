@@ -29,5 +29,16 @@ class DateTimeHelper
         // Combinar todo en un texto legible
         return "Disponible hasta el {$formattedDate} a las {$formattedTime}";
     }
+
+    public static function formatDateReadable($date): string
+    {
+        // Convertir la fecha a un objeto Carbon si es una cadena
+        if (!($date instanceof Carbon)) {
+            $date = Carbon::parse($date);
+        }
+
+        // Formatear la fecha en el formato deseado
+        return $date->isoFormat('dddd D [de] MMMM [de] YYYY');
+    }
     
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Classes\Menus\MenuHelper;
 use App\Classes\OrderHelper;
 use App\Classes\Orders\Validations\AtLeastOneProductByCategory;
 use App\Classes\Orders\Validations\DispatchRulesCategoriesValidation;
@@ -23,6 +24,8 @@ use App\Models\PriceListLine;
 use App\Http\Requests\API\V1\Order\OrderRequest;
 use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
+use App\Http\Requests\API\V1\Order\OrderListRequest;
+use App\Http\Resources\API\V1\OrderResourceCollection;
 use App\Models\Menu;
 use App\Models\Product;
 use App\Models\User;
@@ -30,6 +33,49 @@ use Exception;
 
 class OrderController extends Controller
 {
+
+    public function index(OrderListRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $ordersQuery = Order::where('user_id', $user->id);
+
+        if ($request->has('time_period')) {
+
+            $timePeriod = $request->input('time_period');
+            $now = Carbon::now();
+
+            switch ($timePeriod) {
+                case 'this_week':
+                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfWeek(), $now->endOfWeek()]);
+                    break;
+                case 'this_month':
+                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfMonth(), $now->endOfMonth()]);
+                    break;
+                case 'last_3_months':
+                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->subMonths(3)->startOfMonth(), $now->endOfMonth()]);
+                    break;
+                case 'last_6_months':
+                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->subMonths(6)->startOfMonth(), $now->endOfMonth()]);
+                    break;
+                case 'this_year':
+                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfYear(), $now->endOfYear()]);
+                    break;
+            }
+        }
+
+        if ($request->has('order_status')) {
+            $ordersQuery->where('status', $request->input('order_status'));
+        }
+
+        $orders = $ordersQuery->orderBy('dispatch_date', 'desc')->paginate(10);
+        
+        return ApiResponseService::success(
+            (new OrderResourceCollection($orders))->withMenu(),
+            'Orders retrieved successfully',
+        );
+    }
+
     public function show(OrderRequest $request, string $date): JsonResponse
     {
         $date = data_get($request->validated(), 'date', '');
@@ -118,7 +164,7 @@ class OrderController extends Controller
                 $productId = $orderLineData['id'];
                 $quantity = $orderLineData['quantity'];
                 $partiallyScheduled = $orderLineData['partially_scheduled'] ?? false;
-                
+
                 $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
 
                 // Validar reglas de categoría si partially_scheduled es true

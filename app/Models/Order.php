@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Classes\Menus\MenuHelper;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -55,4 +57,14 @@ class Order extends Model
             get: fn ($value) => $hasBranch && $branchMinPrice ? $branchMinPrice : $this->user->company->priceList->min_price_order,
         );
     }
+
+    // public function currentMenu(User $user): Attribute
+    // {
+    //     return Attribute::make(
+    //         get: function () use ($user) {
+    //             $carbonDate = Carbon::parse($this->dispatch_date)->format('Y-m-d');
+    //             return MenuHelper::getCurrentMenuQuery($carbonDate, $user)->first();
+    //         }
+    //     );
+    // }
 }
