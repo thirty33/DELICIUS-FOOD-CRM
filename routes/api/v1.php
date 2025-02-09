@@ -39,6 +39,7 @@ Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
 })
     ->middleware(ThrottleRequests::with(60, 1));
 
+    
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::get('get-order/{date}', [OrderController::class, 'show'])
         ->name('orders.show');
