@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CompanyResource\Pages;
 use App\Filament\Resources\CompanyResource\RelationManagers;
+use App\Imports\CompaniesImport;
 use App\Models\Company;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -11,8 +12,11 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Forms\Components\Checkbox;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\CompanyTemplateExport;
 
 class CompanyResource extends Resource
 {
@@ -55,6 +59,7 @@ class CompanyResource extends Resource
                                         ->minLength(2)
                                         ->maxLength(50)
                                         ->label(__('Código'))
+                                        ->unique(static::getModel(), 'tax_id', ignoreRecord: true)
                                         ->columns(1),
                                     Forms\Components\TextInput::make('tax_id')
                                         ->required()
@@ -218,6 +223,52 @@ class CompanyResource extends Resource
             ->filters([
                 //
             ])
+            ->headerActions([
+                Tables\Actions\Action::make('Importar compañias')
+                    ->color('info')
+                    ->icon('tabler-file-upload')
+                    ->form([
+                        Forms\Components\FileUpload::make('file')
+                            ->disk('s3')
+                            ->maxSize(10240)
+                            ->maxFiles(1)
+                            ->directory('companies-imports')
+                            ->visibility('public')
+                            ->label('Archivo')
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        try {
+
+                            $importProcess = \App\Models\ImportProcess::create([
+                                'type' => 'empresas',
+                                'status' => 'en cola',
+                                'file_url' => $data['file'],
+                            ]);
+
+                            Excel::import(new CompaniesImport($importProcess->id), $data['file'], 's3', \Maatwebsite\Excel\Excel::XLSX);
+                            CompanyResource::makeNotification(
+                                'Usuarios importados',
+                                'El proceso de importación finalizará en breve',
+                            )->send();
+                        } catch (\Exception) {
+                            CompanyResource::makeNotification(
+                                'Error',
+                                'El proceso ha falladado',
+                            )->send();
+                        }
+                    }),
+                Tables\Actions\Action::make('download_template')
+                    ->label('Bajar Template')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('info')
+                    ->action(function () {
+                        return Excel::download(
+                            new CompanyTemplateExport(),
+                            'template_importacion_empresas.xlsx'
+                        );
+                    }),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
@@ -247,5 +298,13 @@ class CompanyResource extends Resource
             'create' => Pages\CreateCompany::route('/create'),
             'edit' => Pages\EditCompany::route('/{record}/edit'),
         ];
+    }
+
+    private static function makeNotification(string $title, string $body, string $color = 'success'): Notification
+    {
+        return Notification::make()
+            ->color($color)
+            ->title($title)
+            ->body($body);
     }
 }

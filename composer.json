@@ -6,6 +6,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "aws/aws-sdk-php": "^3.339",
         "codeat3/blade-carbon-icons": "^2.29",
         "codeat3/blade-eos-icons": "^1.14",
         "codeat3/blade-iconpark": "^1.6",
@@ -16,8 +17,11 @@
         "laravel/framework": "^11.9",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "maatwebsite/excel": "^3.1",
         "mallardduck/blade-boxicons": "^2.4",
         "pelmered/filament-money-field": "^1.4",
+        "ryangjchandler/blade-tabler-icons": "^2.3",
         "saade/blade-iconsax": "^1.2"
     },
     "require-dev": {
