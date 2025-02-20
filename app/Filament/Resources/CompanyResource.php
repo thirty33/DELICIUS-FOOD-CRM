@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Exports\CompanyBranchesExport;
 use App\Filament\Resources\CompanyResource\Pages;
 use App\Filament\Resources\CompanyResource\RelationManagers;
 use App\Imports\CompaniesImport;
@@ -17,6 +18,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\CompanyTemplateExport;
+use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\Log;
 
 class CompanyResource extends Resource
 {
@@ -59,7 +62,7 @@ class CompanyResource extends Resource
                                         ->minLength(2)
                                         ->maxLength(50)
                                         ->label(__('Código'))
-                                        ->unique(static::getModel(), 'tax_id', ignoreRecord: true)
+                                        ->unique(static::getModel(), 'company_code', ignoreRecord: true)
                                         ->columns(1),
                                     Forms\Components\TextInput::make('tax_id')
                                         ->required()
@@ -208,6 +211,10 @@ class CompanyResource extends Resource
                     ->label(__('Nombre'))
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('registration_number')
+                    ->label(__('Número de registro'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Creado'))
                     ->sortable()
@@ -224,50 +231,110 @@ class CompanyResource extends Resource
                 //
             ])
             ->headerActions([
-                Tables\Actions\Action::make('Importar compañias')
-                    ->color('info')
-                    ->icon('tabler-file-upload')
-                    ->form([
-                        Forms\Components\FileUpload::make('file')
-                            ->disk('s3')
-                            ->maxSize(10240)
-                            ->maxFiles(1)
-                            ->directory('companies-imports')
-                            ->visibility('public')
-                            ->label('Archivo')
-                            ->required(),
-                    ])
-                    ->action(function (array $data) {
-                        try {
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('Importar empresas')
+                        ->color('info')
+                        ->icon('tabler-file-upload')
+                        ->form([
+                            Forms\Components\FileUpload::make('file')
+                                ->disk('s3')
+                                ->maxSize(10240)
+                                ->maxFiles(1)
+                                ->directory('companies-imports')
+                                ->visibility('public')
+                                ->label('Archivo')
+                                ->required(),
+                        ])
+                        ->action(function (array $data) {
+                            try {
 
-                            $importProcess = \App\Models\ImportProcess::create([
-                                'type' => 'empresas',
-                                'status' => 'en cola',
-                                'file_url' => $data['file'],
-                            ]);
+                                $importProcess = \App\Models\ImportProcess::create([
+                                    'type' => 'empresas',
+                                    'status' => 'en cola',
+                                    'file_url' => $data['file'],
+                                ]);
 
-                            Excel::import(new CompaniesImport($importProcess->id), $data['file'], 's3', \Maatwebsite\Excel\Excel::XLSX);
-                            CompanyResource::makeNotification(
-                                'Usuarios importados',
-                                'El proceso de importación finalizará en breve',
-                            )->send();
-                        } catch (\Exception) {
-                            CompanyResource::makeNotification(
-                                'Error',
-                                'El proceso ha falladado',
-                            )->send();
-                        }
-                    }),
-                Tables\Actions\Action::make('download_template')
-                    ->label('Bajar Template')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->color('info')
-                    ->action(function () {
-                        return Excel::download(
-                            new CompanyTemplateExport(),
-                            'template_importacion_empresas.xlsx'
-                        );
-                    }),
+                                Excel::import(new CompaniesImport($importProcess->id), $data['file'], 's3', \Maatwebsite\Excel\Excel::XLSX);
+                                CompanyResource::makeNotification(
+                                    'Usuarios importados',
+                                    'El proceso de importación finalizará en breve',
+                                )->send();
+                            } catch (\Exception $e) {
+
+                                Log::error('error on import', [
+                                    'message' => $e->getMessage() . ' ' . $e->getLine(),
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Error',
+                                    'El proceso ha falladado',
+                                )->send();
+                            }
+                        }),
+                    Tables\Actions\Action::make('download_template')
+                        ->label('Bajar plantilla de empresas')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('info')
+                        ->action(function () {
+                            return Excel::download(
+                                new CompanyTemplateExport(),
+                                'template_importacion_empresas.xlsx'
+                            );
+                        }),
+                    Tables\Actions\Action::make('Importar sucursales')
+                        ->color('info')
+                        ->icon('tabler-file-upload')
+                        ->form([
+                            Forms\Components\FileUpload::make('file')
+                                ->disk('s3')
+                                ->maxSize(10240)
+                                ->maxFiles(1)
+                                ->directory('branches-imports')
+                                ->visibility('public')
+                                ->label('Archivo')
+                                ->required(),
+                        ])
+                        ->action(function (array $data) {
+                            try {
+                                $importProcess = \App\Models\ImportProcess::create([
+                                    'type' => \App\Models\ImportProcess::TYPE_BRANCHES,
+                                    'status' => \App\Models\ImportProcess::STATUS_QUEUED,
+                                    'file_url' => $data['file'],
+                                ]);
+
+                                Excel::import(
+                                    new \App\Imports\CompanyBranchesImport($importProcess->id),
+                                    $data['file'],
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                CompanyResource::makeNotification(
+                                    'Sucursales importadas',
+                                    'El proceso de importación finalizará en breve',
+                                )->send();
+                            } catch (\Exception $e) {
+                                Log::error('error on import', [
+                                    'message' => $e->getMessage() . ' ' . $e->getLine(),
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Error',
+                                    'El proceso ha fallado',
+                                )->send();
+                            }
+                        }),
+                    Tables\Actions\Action::make('download_template_branches')
+                        ->label('Bajar plantilla de sucursales')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('info')
+                        ->action(function () {
+                            return Excel::download(
+                                new CompanyBranchesExport(),
+                                'template_importacion_empresas.xlsx'
+                            );
+                        }),
+                ])->dropdownWidth(MaxWidth::ExtraSmall)
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
