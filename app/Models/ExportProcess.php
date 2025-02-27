@@ -5,10 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ImportProcess extends Model
+class ExportProcess extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'type',
         'status',
@@ -27,7 +25,6 @@ class ImportProcess extends Model
     const TYPE_CATEGORIES = 'categorias';
     const TYPE_DISPATCH_LINES = 'lineas de despacho';
     const TYPE_PRODUCTS = 'productos';
-    const TYPE_PRODUCTS_IMAGES = 'imágenes de productos';
     const TYPE_PRICE_LISTS = 'lista de precios';
     const TYPE_PRICE_LIST_LINES = 'líneas de lista de precio';
     const TYPE_MENUS = 'menús';
@@ -56,7 +53,6 @@ class ImportProcess extends Model
             self::TYPE_MENUS,
             self::TYPE_MENU_CATEGORIES,
             self::TYPE_USERS,
-            self::TYPE_PRODUCTS_IMAGES,
         ];
     }
 

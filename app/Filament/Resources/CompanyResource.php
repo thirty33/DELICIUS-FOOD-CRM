@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Exports\CompanyBranchesExport;
 use App\Filament\Resources\CompanyResource\Pages;
 use App\Filament\Resources\CompanyResource\RelationManagers;
@@ -18,8 +19,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\CompanyTemplateExport;
+use App\Models\ExportProcess;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class CompanyResource extends Resource
 {
@@ -343,6 +347,100 @@ class CompanyResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('Exportar empresas')
+                        ->icon('tabler-file-download')
+                        ->color('info')
+                        ->action(function (Collection $records) {
+                            try {
+
+                                $exportProcess = ExportProcess::create([
+                                    'type' => ExportProcess::TYPE_COMPANIES,
+                                    'status' => ExportProcess::STATUS_QUEUED,
+                                    'file_url' => '-'
+                                ]);
+
+                                $fileName = "exports/companies/empresas_export_{$exportProcess->id}_" . time() . '.xlsx';
+
+                                Excel::store(
+                                    new \App\Exports\CompaniesDataExport($records, $exportProcess->id),
+                                    $fileName,
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                $fileUrl = Storage::disk('s3')->url($fileName);
+
+                                $exportProcess->update([
+                                    'file_url' => $fileUrl
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Exportación iniciada',
+                                    'El proceso de exportación finalizará en breve',
+                                )->send();
+                            } catch (\Exception $e) {
+
+                                Log::error('Error en exportación de empresas', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Error',
+                                    'Error al iniciar la exportación',
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('export_branches')
+                        ->label('Exportar sucursales')
+                        ->icon('heroicon-o-arrow-up-tray')
+                        ->color('success')
+                        ->action(function (Collection $records) {
+                            try {
+                                // Crear el proceso de exportación
+                                $exportProcess = ExportProcess::create([
+                                    'type' => ExportProcess::TYPE_BRANCHES,
+                                    'status' => ExportProcess::STATUS_QUEUED,
+                                    'file_url' => '-'
+                                ]);
+
+                                // Generar el nombre del archivo
+                                $fileName = "exports/branches/sucursales_export_{$exportProcess->id}_" . time() . '.xlsx';
+
+                                // Realizar la exportación
+                                Excel::store(
+                                    new \App\Exports\CompanyBranchesDataExport($records, $exportProcess->id),
+                                    $fileName,
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                // Actualizar la URL del archivo
+                                $fileUrl = Storage::disk('s3')->url($fileName);
+                                $exportProcess->update([
+                                    'file_url' => $fileUrl
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Exportación iniciada',
+                                    'El proceso de exportación de sucursales finalizará en breve',
+                                )->send();
+                            } catch (\Exception $e) {
+
+                                ExportErrorHandler::handle($e, $exportProcess->id ?? 0, 'bulk_action');
+
+                                Log::error('Error en exportación de sucursales', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Error',
+                                    'Error al iniciar la exportación de sucursales',
+                                )->send();
+                            }
+                        })
                 ]),
             ])
             ->emptyStateActions([

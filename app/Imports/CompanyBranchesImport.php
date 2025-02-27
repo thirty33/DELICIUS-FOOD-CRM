@@ -122,7 +122,9 @@ class CompanyBranchesImport implements
         return [
             BeforeImport::class => function (BeforeImport $event) {
                 ImportProcess::where('id', $this->importProcessId)
-                    ->update(['status' => ImportProcess::STATUS_QUEUED]);
+                    ->update([
+                        'status' => ImportProcess::STATUS_PROCESSING
+                    ]);
             },
             AfterImport::class => function (AfterImport $event) {
                 $importProcess = ImportProcess::find($this->importProcessId);
