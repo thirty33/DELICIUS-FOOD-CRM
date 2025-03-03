@@ -23,7 +23,8 @@ class Product extends Model
         'stock',
         'weight',
         'allow_sales_without_stock',
-        'title_product'
+        'title_product',
+        'original_filename'
     ];
 
     protected $casts = [
