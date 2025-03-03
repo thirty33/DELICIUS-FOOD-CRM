@@ -28,39 +28,39 @@ class CategorySubcategorySeeder extends Seeder
             Subcategory::firstOrCreate(['name' => $subcategoryName]);
         }
 
-        // Buscar las categorías existentes
-        $categories = [
-            ['name' => 'Appetizers', 'description' => 'Start your meal with our delicious appetizers'],
-            ['name' => 'Salads', 'description' => 'Fresh and healthy salads'],
-            ['name' => 'Soups', 'description' => 'Warm and comforting soups'],
-            ['name' => 'Sandwiches', 'description' => 'Tasty and filling sandwiches'],
-            ['name' => 'Burgers', 'description' => 'Juicy and flavorful burgers'],
-        ];
+        // // Buscar las categorías existentes
+        // $categories = [
+        //     ['name' => 'Appetizers', 'description' => 'Start your meal with our delicious appetizers'],
+        //     ['name' => 'Salads', 'description' => 'Fresh and healthy salads'],
+        //     ['name' => 'Soups', 'description' => 'Warm and comforting soups'],
+        //     ['name' => 'Sandwiches', 'description' => 'Tasty and filling sandwiches'],
+        //     ['name' => 'Burgers', 'description' => 'Juicy and flavorful burgers'],
+        // ];
 
-        foreach ($categories as $categoryData) {
-            $category = Category::where('name', $categoryData['name'])->first();
+        // foreach ($categories as $categoryData) {
+        //     $category = Category::where('name', $categoryData['name'])->first();
 
-            if ($category) {
-                // Asociar subcategorías con categorías
-                switch ($categoryData['name']) {
-                    case 'Appetizers':
-                        $this->associateSubcategories($category, ['PLATO DE FONDO', 'PAN']);
-                        break;
-                    case 'Salads':
-                        $this->associateSubcategories($category, ['ENSALADA', 'MINI-ENSALADA']);
-                        break;
-                    case 'Soups':
-                        $this->associateSubcategories($category, ['PLATO DE FONDO']);
-                        break;
-                    case 'Sandwiches':
-                        $this->associateSubcategories($category, ['SANDWICH']);
-                        break;
-                    case 'Burgers':
-                        $this->associateSubcategories($category, ['SANDWICH']);
-                        break;
-                }
-            }
-        }
+        //     if ($category) {
+        //         // Asociar subcategorías con categorías
+        //         switch ($categoryData['name']) {
+        //             case 'Appetizers':
+        //                 $this->associateSubcategories($category, ['PLATO DE FONDO', 'PAN']);
+        //                 break;
+        //             case 'Salads':
+        //                 $this->associateSubcategories($category, ['ENSALADA', 'MINI-ENSALADA']);
+        //                 break;
+        //             case 'Soups':
+        //                 $this->associateSubcategories($category, ['PLATO DE FONDO']);
+        //                 break;
+        //             case 'Sandwiches':
+        //                 $this->associateSubcategories($category, ['SANDWICH']);
+        //                 break;
+        //             case 'Burgers':
+        //                 $this->associateSubcategories($category, ['SANDWICH']);
+        //                 break;
+        //         }
+        //     }
+        // }
     }
 
     /**
