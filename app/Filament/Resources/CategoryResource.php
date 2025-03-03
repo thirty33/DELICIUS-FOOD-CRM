@@ -20,6 +20,7 @@ use App\Exports\CategoryExport;
 use App\Exports\CategoryLineDataExport;
 use App\Exports\CategoryLineTemplateExport;
 use App\Imports\CategoryLineImport;
+use App\Jobs\BulkDeleteCategories;
 use App\Models\CategoryLine;
 use App\Models\ExportProcess;
 use App\Models\ImportProcess;
@@ -220,11 +221,91 @@ class CategoryResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->action(function (Category $record) {
+                        try {
+                            Log::info('Iniciando proceso de eliminación de categoría', [
+                                'category_id' => $record->id,
+                                'category_name' => $record->name
+                            ]);
+
+                            // Crear array con el ID de la categoría a eliminar
+                            $categoryIdToDelete = [$record->id];
+
+                            // Dispatch el job para eliminar la categoría en segundo plano
+                            BulkDeleteCategories::dispatch($categoryIdToDelete);
+
+                            self::makeNotification(
+                                'Eliminación en proceso',
+                                'La categoría será eliminada en segundo plano.'
+                            )->send();
+
+                            Log::info('Job de eliminación de categoría enviado a la cola', [
+                                'category_id' => $record->id
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al preparar eliminación de categoría', [
+                                'category_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            self::makeNotification(
+                                'Error',
+                                'Ha ocurrido un error al preparar la eliminación de la categoría: ' . $e->getMessage(),
+                                'danger'
+                            )->send();
+
+                            // Re-lanzar la excepción para que Filament la maneje
+                            throw $e;
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación masiva de categorías', [
+                                    'total_records' => $records->count(),
+                                    'category_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de las categorías a eliminar
+                                $categoryIdsToDelete = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para eliminar las categorías en segundo plano
+                                if (!empty($categoryIdsToDelete)) {
+                                    BulkDeleteCategories::dispatch($categoryIdsToDelete);
+
+                                    CategoryResource::makeNotification(
+                                        'Eliminación en proceso',
+                                        'Las categorías seleccionadas serán eliminadas en segundo plano.'
+                                    )->send();
+
+                                    Log::info('Job de eliminación masiva de categorías enviado a la cola', [
+                                        'category_ids' => $categoryIdsToDelete
+                                    ]);
+                                } else {
+                                    CategoryResource::makeNotification(
+                                        'Información',
+                                        'No hay categorías para eliminar.'
+                                    )->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de categorías', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                CategoryResource::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar la eliminación de categorías: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('export_categories')
                         ->label('Exportar categorías')
                         ->icon('heroicon-o-arrow-up-tray')

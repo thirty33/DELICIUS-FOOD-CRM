@@ -9,6 +9,7 @@ use App\Filament\Resources\ProductResource\Pages;
 use App\Models\Product;
 use Filament\Forms;
 use App\Filament\Resources\ProductResource\RelationManagers;
+use App\Jobs\BulkDeleteProducts;
 use App\Jobs\BulkUpdateProductImages;
 use App\Models\ExportProcess;
 use Filament\Forms\Components\Tabs\Tab;
@@ -239,7 +240,7 @@ class ProductResource extends Resource
                         ->action(function (array $data) {
                             try {
 
-                                
+
                                 $images = $data['images'] ?? [];
                                 $originalFileNames = $data['attachment_file_names'] ?? [];
 
@@ -256,7 +257,8 @@ class ProductResource extends Resource
                                 $importProcess = ImportProcess::create([
                                     'type' => ImportProcess::TYPE_PRODUCTS_IMAGES,
                                     'status' => ImportProcess::STATUS_QUEUED,
-                                    'file_url' => json_encode($originalFileNames)
+                                    // 'file_url' => json_encode($originalFileNames)
+                                    'file_url' => '-'
                                 ]);
 
                                 // Dispatch the job
@@ -290,11 +292,91 @@ class ProductResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->action(function (Product $record) {
+                        try {
+                            Log::info('Iniciando proceso de eliminación de producto', [
+                                'product_id' => $record->id,
+                                'product_name' => $record->name
+                            ]);
+
+                            // Crear array con el ID del producto a eliminar
+                            $productIdToDelete = [$record->id];
+
+                            // Dispatch el job para eliminar el producto en segundo plano
+                            BulkDeleteProducts::dispatch($productIdToDelete);
+
+                            self::makeNotification(
+                                'Eliminación en proceso',
+                                'El producto será eliminado en segundo plano.'
+                            )->send();
+
+                            Log::info('Job de eliminación de producto enviado a la cola', [
+                                'product_id' => $record->id
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al preparar eliminación de producto', [
+                                'product_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            self::makeNotification(
+                                'Error',
+                                'Ha ocurrido un error al preparar la eliminación del producto: ' . $e->getMessage(),
+                                'danger'
+                            )->send();
+
+                            // Re-lanzar la excepción para que Filament la maneje
+                            throw $e;
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación masiva de productos', [
+                                    'total_records' => $records->count(),
+                                    'product_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de los productos a eliminar
+                                $productIdsToDelete = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para eliminar los productos en segundo plano
+                                if (!empty($productIdsToDelete)) {
+                                    BulkDeleteProducts::dispatch($productIdsToDelete);
+
+                                    self::makeNotification(
+                                        'Eliminación en proceso',
+                                        'Los productos seleccionados serán eliminados en segundo plano.'
+                                    )->send();
+
+                                    Log::info('Job de eliminación masiva de productos enviado a la cola', [
+                                        'product_ids' => $productIdsToDelete
+                                    ]);
+                                } else {
+                                    self::makeNotification(
+                                        'Información',
+                                        'No hay productos para eliminar.'
+                                    )->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de productos', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar la eliminación de productos: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('export_products')
                         ->label('Exportar productos')
                         ->icon('heroicon-o-arrow-up-tray')
@@ -305,74 +387,6 @@ class ProductResource extends Resource
                                 $productIds = $records->pluck('id')->toArray();
                                 $productsIds = Product::whereIn('id', $productIds)
                                     ->pluck('id');
-
-                                // if (count($productIds) > 20) {
-
-                                //     $chunks = array_chunk($productIds, 20);
-
-                                //     foreach ($chunks as $index => $chunk) {
-
-                                //         $productsIds = Product::whereIn('id', $chunk)
-                                //             ->pluck('id');
-
-                                //         $exportProcess = ExportProcess::create([
-                                //             'type' => ExportProcess::TYPE_PRODUCTS,
-                                //             'status' => ExportProcess::STATUS_QUEUED,
-                                //             'file_url' => '-'
-                                //         ]);
-
-                                //         $fileName = "exports/products/productos_export_{$exportProcess->id}_" . time() . '.xlsx';
-
-                                //         $chunkFileName = "exports/products/productos_export_{$exportProcess->id}_chunk_{$index}_" . time() . '.xlsx';
-
-                                //         Excel::store(
-                                //             new ProductsDataExport($productsIds, $exportProcess->id),
-                                //             $chunkFileName,
-                                //             's3',
-                                //             \Maatwebsite\Excel\Excel::XLSX
-                                //         );
-
-                                //         $fileUrl = Storage::disk('s3')->url($chunkFileName);
-
-                                //         $exportProcess->update([
-                                //             'file_url' => $fileUrl
-                                //         ]);
-
-                                //     }
-
-                                //     self::makeNotification(
-                                //         'Exportación iniciada',
-                                //         'Se han iniciado múltiples procesos de exportación debido al volumen de datos'
-                                //     )->send();
-
-
-                                // } else {
-
-                                //     $exportProcess = ExportProcess::create([
-                                //         'type' => ExportProcess::TYPE_PRODUCTS,
-                                //         'status' => ExportProcess::STATUS_QUEUED,
-                                //         'file_url' => '-'
-                                //     ]);
-
-                                //     $fileName = "exports/products/productos_export_{$exportProcess->id}_" . time() . '.xlsx';
-
-                                //     Excel::store(
-                                //         new ProductsDataExport($productsIds, $exportProcess->id),
-                                //         $fileName,
-                                //         's3',
-                                //         \Maatwebsite\Excel\Excel::XLSX
-                                //     );
-
-                                //     $fileUrl = Storage::disk('s3')->url($fileName);
-                                //     $exportProcess->update([
-                                //         'file_url' => $fileUrl
-                                //     ]);
-
-                                //     self::makeNotification(
-                                //         'Exportación iniciada',
-                                //         'El proceso de exportación finalizará en breve'
-                                //     )->send();
-                                // }
 
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::TYPE_PRODUCTS,

@@ -24,6 +24,7 @@ use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Jobs\BulkDeleteCompanies;
 
 class CompanyResource extends Resource
 {
@@ -342,11 +343,91 @@ class CompanyResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->action(function (Company $record) {
+                        try {
+                            Log::info('Iniciando proceso de eliminación de empresa', [
+                                'company_id' => $record->id,
+                                'company_name' => $record->name
+                            ]);
+
+                            // Crear array con el ID de la empresa a eliminar
+                            $companyIdToDelete = [$record->id];
+
+                            // Dispatch el job para eliminar la empresa en segundo plano
+                            BulkDeleteCompanies::dispatch($companyIdToDelete);
+
+                            self::makeNotification(
+                                'Eliminación en proceso',
+                                'La empresa será eliminada en segundo plano.'
+                            )->send();
+
+                            Log::info('Job de eliminación de empresa enviado a la cola', [
+                                'company_id' => $record->id
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al preparar eliminación de empresa', [
+                                'company_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            self::makeNotification(
+                                'Error',
+                                'Ha ocurrido un error al preparar la eliminación de la empresa: ' . $e->getMessage(),
+                                'danger'
+                            )->send();
+
+                            // Re-lanzar la excepción para que Filament la maneje
+                            throw $e;
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación masiva de empresas', [
+                                    'total_records' => $records->count(),
+                                    'company_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de las empresas a eliminar
+                                $companyIdsToDelete = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para eliminar las empresas en segundo plano
+                                if (!empty($companyIdsToDelete)) {
+                                    BulkDeleteCompanies::dispatch($companyIdsToDelete);
+
+                                    CompanyResource::makeNotification(
+                                        'Eliminación en proceso',
+                                        'Las empresas seleccionadas serán eliminadas en segundo plano.'
+                                    )->send();
+
+                                    Log::info('Job de eliminación masiva de empresas enviado a la cola', [
+                                        'company_ids' => $companyIdsToDelete
+                                    ]);
+                                } else {
+                                    CompanyResource::makeNotification(
+                                        'Información',
+                                        'No hay empresas para eliminar.'
+                                    )->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de empresas', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                CompanyResource::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar la eliminación de empresas: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('Exportar empresas')
                         ->icon('tabler-file-download')
                         ->color('info')

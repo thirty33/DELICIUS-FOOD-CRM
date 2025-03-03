@@ -19,6 +19,21 @@ use Illuminate\Support\Facades\Hash;
 use Filament\Forms\Components\Toggle;
 use Closure;
 use Filament\Forms\Get;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\UserImport;
+use App\Exports\UserDataExport;
+use App\Exports\UserTemplateExport;
+use App\Jobs\BulkDeleteUsers;
+use App\Models\ImportProcess;
+use App\Models\ExportProcess;
+use App\Classes\ErrorManagment\ExportErrorHandler;
+use Filament\Notifications\Notification;
+use Filament\Support\Enums\MaxWidth;
+use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
+use Filament\Tables\Columns\TextColumn;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class UserResource extends Resource
 {
@@ -174,7 +189,11 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label(__('Nombre'))
                     ->sortable()
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    })
                     ->description(fn(User $user) => $user->email),
                 Tables\Columns\TextColumn::make('roles.name')
                     ->label(__('Tipo de usuario'))
@@ -187,23 +206,279 @@ class UserResource extends Resource
                     ->sortable()
                     ->date('d/m/Y H:i'),
                 Tables\Columns\TextColumn::make('company.name')
-                    ->label(__('Empresa')),
+                    ->label(__('Empresa'))
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('branch.fantasy_name')
                     ->label(__('Sucursal'))
+                    ->searchable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')
                     ->relationship('roles', 'name')
                     ->label(__('Roles'))
                     ->options(Role::pluck('name', 'id')->toArray()),
+                Tables\Filters\SelectFilter::make('permissions')
+                    ->relationship('permissions', 'name')
+                    ->label(__('Tipo de Convenio')),
+                DateRangeFilter::make('created_at')
+                    ->label(__('Fecha de creación')),
+
+            ])
+            ->headerActions([
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('import_users')
+                        ->label('Importar usuarios')
+                        ->color('info')
+                        ->icon('tabler-file-upload')
+                        ->form([
+                            Forms\Components\FileUpload::make('file')
+                                ->disk('s3')
+                                ->maxSize(10240)
+                                ->maxFiles(1)
+                                ->directory('users-imports')
+                                ->visibility('public')
+                                ->label('Archivo')
+                                ->required(),
+                        ])
+                        ->action(function (array $data) {
+                            try {
+                                $importProcess = ImportProcess::create([
+                                    'type' => ImportProcess::TYPE_USERS,
+                                    'status' => ImportProcess::STATUS_QUEUED,
+                                    'file_url' => $data['file'],
+                                ]);
+
+                                Excel::import(
+                                    new UserImport($importProcess->id),
+                                    $data['file'],
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                Notification::make()
+                                    ->title('Usuarios importados')
+                                    ->body('El proceso de importación finalizará en breve')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $e) {
+                                // Usar ExportErrorHandler para registrar el error
+                                ExportErrorHandler::handle(
+                                    $e,
+                                    $importProcess->id ?? 0,
+                                    'import_users_action',
+                                    'ImportProcess'
+                                );
+
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('El proceso ha fallado')
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+                    Tables\Actions\Action::make('download_users_template')
+                        ->label('Bajar plantilla de usuarios')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('info')
+                        ->action(function () {
+                            try {
+                                return Excel::download(
+                                    new UserTemplateExport(),
+                                    'template_importacion_usuarios.xlsx'
+                                );
+                            } catch (\Exception $e) {
+                                // Usar ExportErrorHandler para registrar el error
+                                ExportErrorHandler::handle(
+                                    $e,
+                                    0,
+                                    'download_users_template_action'
+                                );
+
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Error al generar la plantilla de usuarios')
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+                ])->dropdownWidth(MaxWidth::ExtraSmall)
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->hidden(fn(User $record): bool => $record->id === auth()->id())
+                    ->before(function (User $record) {
+                        if ($record->id === auth()->id()) {
+                            Notification::make()
+                                ->title('Error')
+                                ->body('No puedes eliminar tu propio usuario.')
+                                ->danger()
+                                ->send();
+
+                            return false;
+                        }
+                    })
+                    ->action(function (User $record) {
+                        try {
+                            Log::info('Iniciando proceso de eliminación de usuario', [
+                                'user_id' => $record->id,
+                                'user_name' => $record->name
+                            ]);
+
+                            // Crear array con el ID del usuario a eliminar
+                            $userIdToDelete = [$record->id];
+
+                            // Dispatch el job para eliminar el usuario en segundo plano
+                            BulkDeleteUsers::dispatch($userIdToDelete);
+
+                            Notification::make()
+                                ->title('Eliminación en proceso')
+                                ->body('El usuario será eliminado en segundo plano.')
+                                ->success()
+                                ->send();
+
+                            Log::info('Job de eliminación de usuario enviado a la cola', [
+                                'user_id' => $record->id
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al preparar eliminación de usuario', [
+                                'user_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            Notification::make()
+                                ->title('Error')
+                                ->body('Ha ocurrido un error al preparar la eliminación del usuario: ' . $e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            // Re-lanzar la excepción para que Filament la maneje
+                            throw $e;
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (Collection $records) {
+                            try {
+                                \Log::info('Iniciando proceso de eliminación masiva de usuarios', [
+                                    'total_records' => $records->count(),
+                                    'user_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                $currentUserId = auth()->id();
+                                \Log::info('Usuario actual', ['current_user_id' => $currentUserId]);
+
+                                // Filtrar el usuario actual de los registros a eliminar
+                                $userIdsToDelete = $records
+                                    ->filter(function ($record) use ($currentUserId) {
+                                        return $record->id !== $currentUserId;
+                                    })
+                                    ->pluck('id')
+                                    ->toArray();
+
+                                \Log::info('Registros después de filtrar', [
+                                    'filtered_count' => count($userIdsToDelete),
+                                    'filtered_ids' => $userIdsToDelete
+                                ]);
+
+                                // Si se intentó eliminar al usuario actual, mostrar notificación
+                                if ($records->count() !== count($userIdsToDelete)) {
+                                    \Log::info('Se intentó eliminar al usuario actual');
+
+                                    Notification::make()
+                                        ->title('Advertencia')
+                                        ->body('No puedes eliminar tu propio usuario. Se procesarán los demás usuarios seleccionados.')
+                                        ->warning()
+                                        ->send();
+                                }
+
+                                // Dispatch el job para eliminar los usuarios en segundo plano
+                                if (!empty($userIdsToDelete)) {
+                                    BulkDeleteUsers::dispatch($userIdsToDelete);
+
+                                    Notification::make()
+                                        ->title('Eliminación en proceso')
+                                        ->body('Los usuarios seleccionados serán eliminados en segundo plano.')
+                                        ->success()
+                                        ->send();
+
+                                    \Log::info('Job de eliminación masiva de usuarios enviado a la cola', [
+                                        'user_ids' => $userIdsToDelete
+                                    ]);
+                                } else {
+                                    Notification::make()
+                                        ->title('Información')
+                                        ->body('No hay usuarios para eliminar.')
+                                        ->info()
+                                        ->send();
+                                }
+                            } catch (\Exception $e) {
+                                \Log::error('Error al preparar eliminación de usuarios', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Ha ocurrido un error al preparar la eliminación de usuarios: ' . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+                    Tables\Actions\BulkAction::make('export_users')
+                        ->label('Exportar usuarios')
+                        ->icon('heroicon-o-arrow-up-tray')
+                        ->color('success')
+                        ->action(function (Collection $records) {
+                            try {
+                                $userIds = $records->pluck('id');
+
+                                $exportProcess = ExportProcess::create([
+                                    'type' => ExportProcess::TYPE_USERS,
+                                    'status' => ExportProcess::STATUS_QUEUED,
+                                    'file_url' => '-'
+                                ]);
+
+                                $fileName = "exports/users/usuarios_export_{$exportProcess->id}_" . time() . '.xlsx';
+
+                                Excel::store(
+                                    new UserDataExport($userIds, $exportProcess->id),
+                                    $fileName,
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                $fileUrl = Storage::disk('s3')->url($fileName);
+                                $exportProcess->update([
+                                    'file_url' => $fileUrl
+                                ]);
+
+                                Notification::make()
+                                    ->title('Exportación iniciada')
+                                    ->body('El proceso de exportación finalizará en breve')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $e) {
+                                // Usar ExportErrorHandler para registrar el error de manera consistente
+                                ExportErrorHandler::handle(
+                                    $e,
+                                    $exportProcess->id ?? 0,
+                                    'bulk_export_users'
+                                );
+
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Error al iniciar la exportación')
+                                    ->danger()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
                 ]),
             ])
             ->emptyStateActions([

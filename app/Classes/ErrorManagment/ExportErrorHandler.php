@@ -3,16 +3,27 @@
 namespace App\Classes\ErrorManagment;
 
 use App\Models\ExportProcess;
+use App\Models\ImportProcess;
 use Throwable;
 use Illuminate\Support\Facades\Log;
 
 class ExportErrorHandler
 {
     /**
-     * Handle export errors and update process status
+     * Handle export/import errors and update process status
+     *
+     * @param Throwable $e The exception that was thrown
+     * @param int $processId The ID of the export or import process
+     * @param string $context The context in which the error occurred
+     * @param string $processType The type of process (ExportProcess or ImportProcess)
+     * @return void
      */
-    public static function handle(Throwable $e, int $exportProcessId, string $context = 'general'): void
-    {
+    public static function handle(
+        Throwable $e,
+        int $processId,
+        string $context = 'general',
+        string $processType = 'ExportProcess'
+    ): void {
         $error = [
             'row' => 0,
             'attribute' => $context,
@@ -24,20 +35,33 @@ class ExportErrorHandler
             ]
         ];
 
-        $exportProcess = ExportProcess::find($exportProcessId);
-        
-        if ($exportProcess) {
-            $existingErrors = $exportProcess->error_log ?? [];
+        // Determine which model to use based on the process type
+        $process = null;
+        $statusWithErrors = null;
+
+        if ($processType === 'ImportProcess') {
+            $process = ImportProcess::find($processId);
+            $statusWithErrors = ImportProcess::STATUS_PROCESSED_WITH_ERRORS;
+            $logPrefix = 'Error en importación';
+        } else {
+            $process = ExportProcess::find($processId);
+            $statusWithErrors = ExportProcess::STATUS_PROCESSED_WITH_ERRORS;
+            $logPrefix = 'Error en exportación';
+        }
+
+        if ($process) {
+            $existingErrors = $process->error_log ?? [];
             $existingErrors[] = $error;
 
-            $exportProcess->update([
+            $process->update([
                 'error_log' => $existingErrors,
-                'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
+                'status' => $statusWithErrors
             ]);
         }
 
-        Log::error('Error en exportación', [
-            'export_process_id' => $exportProcessId,
+        Log::error($logPrefix, [
+            'process_id' => $processId,
+            'process_type' => $processType,
             'context' => $context,
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString()

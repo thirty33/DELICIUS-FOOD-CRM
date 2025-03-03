@@ -75,8 +75,13 @@ class BulkUpdateProductImages implements ShouldQueue
                     
                     if (!$originalFileName) {
                         $processErrors[] = [
-                            'image_index' => $index,
-                            'error' => 'Nombre de archivo original no encontrado'
+                            'row' => $index,
+                            'attribute' => 'image_processing',
+                            'errors' => ['Nombre de archivo original no encontrado'],
+                            'values' => [
+                                'image' => $image,
+                                'original_filename' => null
+                            ]
                         ];
                         $failedCount++;
                         continue;
@@ -90,9 +95,13 @@ class BulkUpdateProductImages implements ShouldQueue
 
                     if ($products->isEmpty()) {
                         $processErrors[] = [
-                            'image_index' => $index,
-                            'original_filename' => $originalFileName,
-                            'error' => 'No se encontraron productos con este nombre de archivo'
+                            'row' => $index,
+                            'attribute' => 'product_matching',
+                            'errors' => ['No se encontraron productos con este nombre de archivo'],
+                            'values' => [
+                                'image' => $image,
+                                'original_filename' => $originalFileName
+                            ]
                         ];
                         $failedCount++;
                         continue;
@@ -107,8 +116,15 @@ class BulkUpdateProductImages implements ShouldQueue
                                     Storage::disk('s3')->delete($product->image);
                                 } catch (\Exception $storageException) {
                                     $processErrors[] = [
-                                        'product_id' => $product->id,
-                                        'error' => 'Error eliminando imagen anterior: ' . $storageException->getMessage()
+                                        'row' => $index,
+                                        'attribute' => 'storage_deletion',
+                                        'errors' => ['Error eliminando imagen anterior: ' . $storageException->getMessage()],
+                                        'values' => [
+                                            'product_id' => $product->id,
+                                            'image' => $product->image,
+                                            'file' => $storageException->getFile(),
+                                            'line' => $storageException->getLine()
+                                        ]
                                     ];
                                 }
                             }
@@ -120,17 +136,31 @@ class BulkUpdateProductImages implements ShouldQueue
                             $successCount++;
                         } catch (\Exception $productUpdateException) {
                             $processErrors[] = [
-                                'product_id' => $product->id,
-                                'original_filename' => $originalFileName,
-                                'error' => 'Error actualizando producto: ' . $productUpdateException->getMessage()
+                                'row' => $index,
+                                'attribute' => 'product_update',
+                                'errors' => ['Error actualizando producto: ' . $productUpdateException->getMessage()],
+                                'values' => [
+                                    'product_id' => $product->id,
+                                    'original_filename' => $originalFileName,
+                                    'file' => $productUpdateException->getFile(),
+                                    'line' => $productUpdateException->getLine(),
+                                    'trace' => $productUpdateException->getTraceAsString()
+                                ]
                             ];
                             $failedCount++;
                         }
                     }
                 } catch (\Exception $individualImageException) {
                     $processErrors[] = [
-                        'image_index' => $index,
-                        'error' => 'Error procesando imagen: ' . $individualImageException->getMessage()
+                        'row' => $index,
+                        'attribute' => 'image_processing',
+                        'errors' => ['Error procesando imagen: ' . $individualImageException->getMessage()],
+                        'values' => [
+                            'image' => $image,
+                            'file' => $individualImageException->getFile(),
+                            'line' => $individualImageException->getLine(),
+                            'trace' => $individualImageException->getTraceAsString()
+                        ]
                     ];
                     $failedCount++;
                 }
@@ -151,35 +181,76 @@ class BulkUpdateProductImages implements ShouldQueue
                 'failed_uploads' => $failedCount
             ]);
         } catch (\Exception $mainException) {
-            // Use ExportErrorHandler to manage the error
-            ExportErrorHandler::handle(
-                $mainException, 
-                $this->importProcess->id, 
-                'bulk_image_upload_job'
-            );
+            $this->handleMainError($mainException);
         }
+    }
+
+    /**
+     * Handle main process error
+     */
+    private function handleMainError(\Throwable $e): void
+    {
+        $error = [
+            'row' => 0,
+            'attribute' => 'bulk_image_upload_job',
+            'errors' => [$e->getMessage()],
+            'values' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]
+        ];
+
+        // Update the import process with error information
+        if ($this->importProcess) {
+            $existingErrors = $this->importProcess->error_log ?? [];
+            $existingErrors[] = $error;
+            
+            $this->importProcess->update([
+                'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
+                'error_log' => $existingErrors
+            ]);
+        }
+
+        // Log the error
+        Log::error('Error en proceso de actualización de imágenes', [
+            'import_process_id' => $this->importProcess ? $this->importProcess->id : 'unknown',
+            'context' => 'bulk_image_upload_job',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
     }
 
     /**
      * Handle a job failure.
      */
-    public function failed(\Exception $exception): void
+    public function failed(\Throwable $exception): void
     {
-        // Ensure the import process is marked as failed
-        $this->importProcess->update([
-            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
-            'error_log' => [
-                [
-                    'error' => 'Job failed completely',
-                    'message' => $exception->getMessage(),
-                    'trace' => $exception->getTraceAsString()
-                ]
+        $error = [
+            'row' => 0,
+            'attribute' => 'job_failure',
+            'errors' => ['Job failed completely: ' . $exception->getMessage()],
+            'values' => [
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString()
             ]
-        ]);
+        ];
+
+        // Ensure the import process is marked as failed
+        if ($this->importProcess) {
+            $existingErrors = $this->importProcess->error_log ?? [];
+            $existingErrors[] = $error;
+            
+            $this->importProcess->update([
+                'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
+                'error_log' => $existingErrors
+            ]);
+        }
 
         // Log the failure
         Log::error('Bulk Product Image Update Job Failed', [
-            'import_process_id' => $this->importProcess->id,
+            'import_process_id' => $this->importProcess ? $this->importProcess->id : 'unknown',
             'error' => $exception->getMessage(),
             'trace' => $exception->getTraceAsString()
         ]);
