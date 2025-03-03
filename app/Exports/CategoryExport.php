@@ -19,9 +19,10 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Throwable;
+use Maatwebsite\Excel\Concerns\FromQuery;
 
 class CategoryExport implements
-    FromCollection,
+    FromQuery,
     WithHeadings,
     WithMapping,
     ShouldAutoSize,
@@ -48,11 +49,10 @@ class CategoryExport implements
         $this->exportProcessId = $exportProcessId;
     }
 
-    public function collection()
+    public function query()
     {
         return Category::whereIn('id', $this->categoryIds)
-            ->with('subcategories')
-            ->get();
+            ->with('subcategories');
     }
 
     public function chunkSize(): int
@@ -66,7 +66,7 @@ class CategoryExport implements
             return [
                 'nombre' => $category->name,
                 'descripcion' => $category->description,
-                'activo' => $category->is_active ? 'VERDADERO' : 'FALSO',
+                'activo' => $category->is_active ? '1' : '0',
                 'subcategorias' => $category->subcategories->pluck('name')->implode(', ')
             ];
         } catch (\Exception $e) {

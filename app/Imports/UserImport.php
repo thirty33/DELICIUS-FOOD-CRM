@@ -366,8 +366,10 @@ class UserImport implements
         // Solo agregar contraseña si el usuario no existe
         if (!$existingUser) {
             // Generar contraseña temporal solo para usuarios nuevos
-            $temporaryPassword = bin2hex(random_bytes(8)); // 16 caracteres aleatorios
-            $userData['password'] = Hash::make($temporaryPassword);
+            // $temporaryPassword = bin2hex(random_bytes(8)); // 16 caracteres aleatorios
+            // $userData['password'] = Hash::make($temporaryPassword);
+            $temporaryPassword = Hash::make('Pssword123..$');
+            $userData['password'] = $temporaryPassword;
             
             Log::info('Contraseña temporal generada para nuevo usuario', [
                 'email' => $row['correo_electronico'],

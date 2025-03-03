@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\ExportProcess;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -18,16 +17,17 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\FromQuery;
 
-class CompanyBranchesDataExport implements 
-    FromCollection, 
-    WithHeadings, 
-    WithMapping, 
-    ShouldAutoSize, 
+class CompanyBranchesDataExport implements
+    FromQuery,
+    WithHeadings,
+    WithMapping,
+    ShouldAutoSize,
     WithStyles,
     WithEvents,
     ShouldQueue,
-    WithChunkReading 
+    WithChunkReading
 {
     use Exportable;
 
@@ -45,26 +45,26 @@ class CompanyBranchesDataExport implements
 
     private $exportProcessId;
     private $branches;
+    private $companyIds;
 
-    public function __construct(Collection $companies, int $exportProcessId)
+    public function __construct(Collection $companyIds, int $exportProcessId)
     {
         // Extraer todas las sucursales de las empresas seleccionadas
-        $this->branches = $companies->load('branches')
-            ->pluck('branches')
-            ->flatten();
+        $this->companyIds = $companyIds;
         $this->exportProcessId = $exportProcessId;
     }
 
-    public function collection()
+    public function query()
     {
-        return $this->branches;
+        return Branch::whereIn('company_id', $this->companyIds)
+            ->with('company');
     }
 
     public function chunkSize(): int
     {
-        return 1;
+        return 10;
     }
-    
+
     public function map($branch): array
     {
         try {
@@ -111,11 +111,11 @@ class CompanyBranchesDataExport implements
     public function registerEvents(): array
     {
         return [
-            BeforeExport::class => function(BeforeExport $event) {
+            BeforeExport::class => function (BeforeExport $event) {
                 ExportProcess::where('id', $this->exportProcessId)
                     ->update(['status' => ExportProcess::STATUS_PROCESSING]);
             },
-            AfterSheet::class => function(AfterSheet $event) {
+            AfterSheet::class => function (AfterSheet $event) {
                 ExportProcess::where('id', $this->exportProcessId)
                     ->update(['status' => ExportProcess::STATUS_PROCESSED]);
             },

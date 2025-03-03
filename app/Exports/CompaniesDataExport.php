@@ -18,9 +18,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\FromQuery;
 
 class CompaniesDataExport implements
-    FromCollection,
+    FromQuery,
     WithHeadings,
     WithMapping,
     ShouldAutoSize,
@@ -61,24 +62,22 @@ class CompaniesDataExport implements
 
     private $exportProcessId;
     private $companies;
+    private $companyIds;
 
-    public function __construct(Collection $companies, int $exportProcessId)
+    public function __construct(Collection $companyIds, int $exportProcessId)
     {
-        $this->companies = $companies;
+        $this->companyIds = $companyIds;
         $this->exportProcessId = $exportProcessId;
     }
 
     public function chunkSize(): int
     {
-        return 1; // Procesar 100 registros a la vez
+        return 10; // Procesar 100 registros a la vez
     }
     
-    /**
-     * @return Collection
-     */
-    public function collection()
+    public function query()
     {
-        return $this->companies;
+        return Company::whereIn('id', $this->companyIds);
     }
 
     public function registerEvents(): array
@@ -125,7 +124,7 @@ class CompaniesDataExport implements
             'zip_code' => $company->zip_code,
             'payment_condition' => $company->payment_condition,
             'description' => $company->description,
-            'active' => $company->active ? 'VERDADERO' : 'FALSO'
+            'active' => $company->active ? '1' : '0'
         ];
     }
 

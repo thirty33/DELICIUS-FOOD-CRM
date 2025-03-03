@@ -18,9 +18,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\FromQuery;
 
 class CategoryLineDataExport implements
-    FromCollection,
+    FromQuery,
     WithHeadings,
     WithMapping,
     ShouldAutoSize,
@@ -58,16 +59,15 @@ class CategoryLineDataExport implements
         $this->exportProcessId = $exportProcessId;
     }
 
-    public function collection()
+    public function query()
     {
         return CategoryLine::with('category')
-            ->whereIn('id', $this->categoryLineIds)
-            ->get();
+            ->whereIn('id', $this->categoryLineIds);
     }
 
     public function chunkSize(): int
     {
-        return 1;
+        return 10;
     }
 
     public function map($categoryLine): array

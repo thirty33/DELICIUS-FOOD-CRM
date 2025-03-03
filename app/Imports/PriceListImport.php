@@ -61,17 +61,17 @@ class PriceListImport implements
     {
         $this->importProcessId = $importProcessId;
     }
-    
+
     /**
      * Process the collection of rows.
      */
     public function collection(Collection $rows)
     {
-        try {
+        // try {
             Validator::make($rows->toArray(), $this->getValidationRules(), $this->getValidationMessages())->validate();
 
             foreach ($rows as $index => $row) {
-                try {
+                // try {
                     // Preparar datos de la lista de precios
                     $priceListData = $this->preparePriceListData($row);
 
@@ -90,13 +90,13 @@ class PriceListImport implements
                     if (!empty($row['codigo_de_producto']) && isset($row['precio_unitario'])) {
                         $this->processPriceListLine($row, $priceList->id, $index);
                     }
-                } catch (\Exception $e) {
-                    $this->handleRowError($e, $index, $row);
-                }
+                // } catch (\Exception $e) {
+                //     // $this->handleRowError($e, $index, $row);
+                // }
             }
-        } catch (\Exception $e) {
-            $this->handleImportError($e);
-        }
+        // } catch (\Exception $e) {
+        //     // $this->handleImportError($e);
+        // }
     }
 
     /**
@@ -235,8 +235,15 @@ class PriceListImport implements
                     ->update(['status' => ImportProcess::STATUS_PROCESSING]);
             },
             AfterImport::class => function (AfterImport $event) {
-                ImportProcess::where('id', $this->importProcessId)
-                    ->update(['status' => ImportProcess::STATUS_PROCESSED]);
+                $importProcess = ImportProcess::find($this->importProcessId);
+
+                if ($importProcess->status !== ImportProcess::STATUS_PROCESSED_WITH_ERRORS) {
+                    $importProcess->update([
+                        'status' => ImportProcess::STATUS_PROCESSED
+                    ]);
+                }
+
+                Log::info('Finalizada importación de listas de precios', ['process_id' => $this->importProcessId]);
             },
         ];
     }
@@ -270,7 +277,25 @@ class PriceListImport implements
             'values' => $rowData
         ];
 
-        $this->updateImportProcessError($error);
+        // Obtener el proceso actual y sus errores existentes
+        $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
+        $existingErrors = $importProcess->error_log ?? [];
+
+        // Agregar el nuevo error al array existente
+        $existingErrors[] = $error;
+
+        // Actualizar el error_log en el ImportProcess
+        $importProcess->update([
+            'error_log' => $existingErrors,
+            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+        ]);
+
+        Log::warning('Error procesando fila en importación de listas de precio', [
+            'import_process_id' => $this->importProcessId,
+            'row_number' => $index + 2,
+            'error' => $e->getMessage(),
+            'values' => $rowData
+        ]);
     }
 
     /**
@@ -285,40 +310,38 @@ class PriceListImport implements
             'values' => [
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
-                // Omitir la traza completa para reducir el tamaño
             ]
         ];
 
-        $this->updateImportProcessError($error);
+        // Obtener el proceso actual y sus errores existentes
+        $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
+        $existingErrors = $importProcess->error_log ?? [];
+
+        // Agregar el nuevo error al array existente
+        $existingErrors[] = $error;
+
+        // Actualizar el error_log en el ImportProcess
+        $importProcess->update([
+            'error_log' => $existingErrors,
+            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+        ]);
+
+        Log::error('Error en proceso de importación de listas de precio', [
+            'import_process_id' => $this->importProcessId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
     }
 
     /**
      * Update import process with error log.
-     * Optimizado para reducir el tamaño de los datos almacenados.
+     * Esta función ya no se necesita porque ahora se manejan los errores directamente
+     * en las funciones específicas siguiendo el patrón de onFailure
      */
     private function updateImportProcessError(array $error)
     {
-        try {
-            ImportProcess::where('id', $this->importProcessId)
-                ->update([
-                    'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
-                ]);
-
-            // En lugar de cargar y modificar todo el array, añadir el error directamente a la base de datos
-            // utilizando JSON_ARRAY_APPEND (disponible en MySQL)
-            $jsonError = json_encode($error);
-            $sql = "UPDATE import_processes 
-                    SET error_log = JSON_ARRAY_APPEND(
-                        COALESCE(error_log, JSON_ARRAY()), 
-                        '$', 
-                        CAST(? AS JSON)
-                    ) 
-                    WHERE id = ?";
-
-            \DB::statement($sql, [$jsonError, $this->importProcessId]);
-        } catch (\Exception $e) {
-            // Error silencioso
-        }
+        // Esta función ya no se utiliza
     }
 
     /**
@@ -327,22 +350,33 @@ class PriceListImport implements
     public function onFailure(Failure ...$failures)
     {
         foreach ($failures as $failure) {
-            // Limitar el tamaño de los valores
-            $values = array_map(function ($value) {
-                if (is_string($value) && strlen($value) > 200) {
-                    return substr($value, 0, 200) . '...';
-                }
-                return $value;
-            }, $failure->values());
-
             $error = [
                 'row' => $failure->row(),
                 'attribute' => $failure->attribute(),
                 'errors' => $failure->errors(),
-                'values' => $values
+                'values' => $failure->values(),
             ];
 
-            $this->updateImportProcessError($error);
+            // Obtener el proceso actual y sus errores existentes
+            $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
+            $existingErrors = $importProcess->error_log ?? [];
+
+            // Agregar el nuevo error al array existente
+            $existingErrors[] = $error;
+
+            // Actualizar el error_log en el ImportProcess
+            $importProcess->update([
+                'error_log' => $existingErrors,
+                'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+            ]);
+
+            Log::warning('Fallo en validación de importación de listas de precio', [
+                'import_process_id' => $this->importProcessId,
+                'row_number' => $failure->row(),
+                'attribute' => $failure->attribute(),
+                'errors' => $failure->errors(),
+                'values' => $failure->values(),
+            ]);
         }
     }
 
@@ -358,11 +392,28 @@ class PriceListImport implements
             'values' => [
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
-                // Omitir la traza completa para reducir el tamaño
             ]
         ];
 
-        $this->updateImportProcessError($error);
+        // Obtener el proceso actual y sus errores existentes
+        $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
+        $existingErrors = $importProcess->error_log ?? [];
+
+        // Agregar el nuevo error al array existente
+        $existingErrors[] = $error;
+
+        // Actualizar el error_log en el ImportProcess
+        $importProcess->update([
+            'error_log' => $existingErrors,
+            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+        ]);
+
+        Log::error('Error general en importación de listas de precio', [
+            'import_process_id' => $this->importProcessId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
     }
 
     /**

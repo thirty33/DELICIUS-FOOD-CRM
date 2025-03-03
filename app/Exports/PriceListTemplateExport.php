@@ -11,8 +11,8 @@ class PriceListTemplateExport implements FromArray, WithStyles, ShouldAutoSize
 {
     private $headers = [
         'nombre_de_lista_de_precio' => 'Nombre de Lista de Precio',
-        'descripcion' => 'Descripción',
         'precio_minimo' => 'Precio Mínimo',
+        'descripcion' => 'Descripción',
         'numeros_de_registro_de_empresas' => 'Números de Registro de Empresas',
         'codigo_de_producto' => 'Código de Producto',
         'precio_unitario' => 'Precio Unitario'

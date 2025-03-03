@@ -336,7 +336,7 @@ class CompanyResource extends Resource
                         ->action(function () {
                             return Excel::download(
                                 new CompanyBranchesExport(),
-                                'template_importacion_empresas.xlsx'
+                                'template_importacion_sucursales.xlsx'
                             );
                         }),
                 ])->dropdownWidth(MaxWidth::ExtraSmall)
@@ -434,6 +434,8 @@ class CompanyResource extends Resource
                         ->action(function (Collection $records) {
                             try {
 
+                                $companyIds = $records->pluck('id');
+
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::TYPE_COMPANIES,
                                     'status' => ExportProcess::STATUS_QUEUED,
@@ -443,7 +445,7 @@ class CompanyResource extends Resource
                                 $fileName = "exports/companies/empresas_export_{$exportProcess->id}_" . time() . '.xlsx';
 
                                 Excel::store(
-                                    new \App\Exports\CompaniesDataExport($records, $exportProcess->id),
+                                    new \App\Exports\CompaniesDataExport($companyIds, $exportProcess->id),
                                     $fileName,
                                     's3',
                                     \Maatwebsite\Excel\Excel::XLSX
@@ -479,6 +481,9 @@ class CompanyResource extends Resource
                         ->color('success')
                         ->action(function (Collection $records) {
                             try {
+
+                                $companyIds = $records->pluck('id');
+
                                 // Crear el proceso de exportación
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::TYPE_BRANCHES,
@@ -491,7 +496,7 @@ class CompanyResource extends Resource
 
                                 // Realizar la exportación
                                 Excel::store(
-                                    new \App\Exports\CompanyBranchesDataExport($records, $exportProcess->id),
+                                    new \App\Exports\CompanyBranchesDataExport($companyIds, $exportProcess->id),
                                     $fileName,
                                     's3',
                                     \Maatwebsite\Excel\Excel::XLSX

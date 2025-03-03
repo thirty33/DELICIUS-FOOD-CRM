@@ -75,7 +75,7 @@ class MenuDataExport implements
                 'tipo_de_usuario' => $menu->rol ? $menu->rol->name : null,
                 'tipo_de_convenio' => $menu->permission ? $menu->permission->name : null,
                 'fecha_hora_maxima_pedido' => $menu->max_order_date ? "'" . Carbon::parse($menu->max_order_date)->format('d/m/Y H:i:s') : null, // Añadimos comilla al inicio
-                'activo' => $menu->active ? 'VERDADERO' : 'FALSO',
+                'activo' => $menu->active ? '1' : '0',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando menú para exportación', [
