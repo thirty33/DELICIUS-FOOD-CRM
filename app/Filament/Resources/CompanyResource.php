@@ -490,6 +490,9 @@ class CompanyResource extends Resource
                                     'El archivo está listo para descargar',
                                 )->send();
                             } catch (\Exception $e) {
+
+                                ExportErrorHandler::handle($e, $exportProcess->id ?? 0, 'bulk_action');
+                                
                                 Log::error('Error en exportación de empresas', [
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
@@ -497,7 +500,7 @@ class CompanyResource extends Resource
 
                                 if (isset($exportProcess)) {
                                     $exportProcess->update([
-                                        'status' => ExportProcess::STATUS_FAILED
+                                        'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
                                     ]);
                                 }
 
