@@ -229,6 +229,7 @@ class ProductResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('images')
                                 ->label('Imágenes')
+                                ->disk('s3')
                                 ->multiple()
                                 ->storeFileNamesIn('attachment_file_names')
                                 ->image()
