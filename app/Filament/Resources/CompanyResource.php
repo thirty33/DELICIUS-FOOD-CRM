@@ -433,7 +433,6 @@ class CompanyResource extends Resource
                         ->color('info')
                         ->action(function (Collection $records) {
                             try {
-
                                 $companyIds = $records->pluck('id');
 
                                 $exportProcess = ExportProcess::create([
@@ -442,35 +441,69 @@ class CompanyResource extends Resource
                                     'file_url' => '-'
                                 ]);
 
-                                $fileName = "exports/companies/empresas_export_{$exportProcess->id}_" . time() . '.xlsx';
+                                // Crear directorio temporal local si no existe
+                                $localTempDir = storage_path('app/public/tmp');
+                                if (!file_exists($localTempDir)) {
+                                    mkdir($localTempDir, 0775, true);
+                                }
 
+                                // Generar nombre de archivo único
+                                $localFileName = "companies_export_{$exportProcess->id}_" . time() . '.xlsx';
+                                $localFilePath = "{$localTempDir}/{$localFileName}";
+
+                                // Nombre para S3
+                                $s3FileName = "exports/companies/{$localFileName}";
+
+                                // Primero generar el archivo localmente
                                 Excel::store(
                                     new \App\Exports\CompaniesDataExport($companyIds, $exportProcess->id),
-                                    $fileName,
-                                    's3',
+                                    "public/tmp/{$localFileName}",
+                                    'local',
                                     \Maatwebsite\Excel\Excel::XLSX
                                 );
 
-                                $fileUrl = Storage::disk('s3')->url($fileName);
+                                // Verificar que el archivo exista
+                                if (!file_exists($localFilePath)) {
+                                    throw new \Exception("El archivo no pudo ser generado en la ubicación: {$localFilePath}");
+                                }
+
+                                // Asegurar permisos correctos
+                                chmod($localFilePath, 0664);
+
+                                // Subir a S3 desde el archivo local
+                                Storage::disk('s3')->put(
+                                    $s3FileName,
+                                    file_get_contents($localFilePath)
+                                );
+
+                                $fileUrl = Storage::disk('s3')->url($s3FileName);
 
                                 $exportProcess->update([
                                     'file_url' => $fileUrl
                                 ]);
 
+                                // Opcional: eliminar archivo local después de subir a S3
+                                // unlink($localFilePath);
+
                                 CompanyResource::makeNotification(
-                                    'Exportación iniciada',
-                                    'El proceso de exportación finalizará en breve',
+                                    'Exportación completada',
+                                    'El archivo está listo para descargar',
                                 )->send();
                             } catch (\Exception $e) {
-
                                 Log::error('Error en exportación de empresas', [
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
                                 ]);
 
+                                if (isset($exportProcess)) {
+                                    $exportProcess->update([
+                                        'status' => ExportProcess::STATUS_FAILED
+                                    ]);
+                                }
+
                                 CompanyResource::makeNotification(
                                     'Error',
-                                    'Error al iniciar la exportación',
+                                    'Error al generar la exportación: ' . $e->getMessage(),
                                 )->send();
                             }
                         })
