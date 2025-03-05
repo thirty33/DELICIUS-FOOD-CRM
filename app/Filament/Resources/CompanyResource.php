@@ -435,64 +435,40 @@ class CompanyResource extends Resource
                             try {
                                 $companyIds = $records->pluck('id');
 
+                                // Crear el proceso de exportación
                                 $exportProcess = ExportProcess::create([
-                                    'type' => ExportProcess::TYPE_COMPANIES,
+                                    'type' => ExportProcess::TYPE_BRANCHES,
                                     'status' => ExportProcess::STATUS_QUEUED,
                                     'file_url' => '-'
                                 ]);
 
-                                // Crear directorio temporal local si no existe
-                                $localTempDir = storage_path('app/public/tmp');
-                                if (!file_exists($localTempDir)) {
-                                    mkdir($localTempDir, 0775, true);
-                                }
+                                // Generar el nombre del archivo
+                                $fileName = "exports/branches/sucursales_export_{$exportProcess->id}_" . time() . '.xlsx';
 
-                                // Generar nombre de archivo único
-                                $localFileName = "companies_export_{$exportProcess->id}_" . time() . '.xlsx';
-                                $localFilePath = "{$localTempDir}/{$localFileName}";
-
-                                // Nombre para S3
-                                $s3FileName = "exports/companies/{$localFileName}";
-
-                                // Primero generar el archivo localmente
+                                // Realizar la exportación
                                 Excel::store(
-                                    new \App\Exports\CompaniesDataExport($companyIds, $exportProcess->id),
-                                    "public/tmp/{$localFileName}",
-                                    'local',
+                                    new \App\Exports\CompanyBranchesDataExport($companyIds, $exportProcess->id),
+                                    $fileName,
+                                    's3',
                                     \Maatwebsite\Excel\Excel::XLSX
                                 );
 
-                                // Verificar que el archivo exista
-                                if (!file_exists($localFilePath)) {
-                                    throw new \Exception("El archivo no pudo ser generado en la ubicación: {$localFilePath}");
-                                }
-
-                                // Asegurar permisos correctos
-                                chmod($localFilePath, 0664);
-
-                                // Subir a S3 desde el archivo local
-                                Storage::disk('s3')->put(
-                                    $s3FileName,
-                                    file_get_contents($localFilePath)
-                                );
-
-                                $fileUrl = Storage::disk('s3')->url($s3FileName);
-
+                                // Actualizar la URL del archivo
+                                $fileUrl = Storage::disk('s3')->url($fileName);
+                                
                                 $exportProcess->update([
                                     'file_url' => $fileUrl
                                 ]);
 
-                                // Opcional: eliminar archivo local después de subir a S3
-                                // unlink($localFilePath);
-
                                 CompanyResource::makeNotification(
-                                    'Exportación completada',
-                                    'El archivo está listo para descargar',
+                                    'Exportación iniciada',
+                                    'El proceso de exportación de sucursales finalizará en breve',
                                 )->send();
+
                             } catch (\Exception $e) {
 
                                 ExportErrorHandler::handle($e, $exportProcess->id ?? 0, 'bulk_action');
-                                
+
                                 Log::error('Error en exportación de empresas', [
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
