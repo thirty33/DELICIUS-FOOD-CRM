@@ -152,11 +152,18 @@ class MenuDataExport implements
      */
     public function failed(Throwable $e): void
     {
+
+        $currentUser = exec('whoami');
+
         $error = [
             'row' => 0,
             'attribute' => 'export',
             'errors' => [$e->getMessage()],
-            'values' => ['file' => $e->getFile(), 'line' => $e->getLine()],
+            'values' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'user' => $currentUser
+            ],
         ];
 
         // Obtener el proceso actual y sus errores existentes
