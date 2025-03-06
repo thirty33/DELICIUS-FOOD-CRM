@@ -149,34 +149,34 @@
          * @param Throwable $exception
          * @return void
          */
-        public function failed(Throwable $exception): void
+        public function failed(Throwable $e): void
         {
             $error = [
-                'error' => $exception->getMessage(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-                'trace' => $exception->getTraceAsString()
+                'row' => 0,
+                'attribute' => 'export',
+                'errors' => [$e->getMessage()],
+                'values' => ['file' => $e->getFile(), 'line' => $e->getLine()],
             ];
-
+    
             // Obtener el proceso actual y sus errores existentes
             $exportProcess = ExportProcess::find($this->exportProcessId);
             $existingErrors = $exportProcess->error_log ?? [];
-
+    
             // Agregar el nuevo error al array existente
             $existingErrors[] = $error;
-
+    
             // Actualizar el error_log en el ExportProcess
             $exportProcess->update([
                 'error_log' => $existingErrors,
                 'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
             ]);
-
+    
             Log::error('Error en exportación de menús', [
                 'export_process_id' => $this->exportProcessId,
-                'error' => $exception->getMessage(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-                'trace' => $exception->getTraceAsString()
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
