@@ -433,56 +433,44 @@ class CompanyResource extends Resource
                         ->color('info')
                         ->action(function (Collection $records) {
                             try {
+
                                 $companyIds = $records->pluck('id');
 
-                                // Crear el proceso de exportación
                                 $exportProcess = ExportProcess::create([
-                                    'type' => ExportProcess::TYPE_BRANCHES,
+                                    'type' => ExportProcess::TYPE_COMPANIES,
                                     'status' => ExportProcess::STATUS_QUEUED,
                                     'file_url' => '-'
                                 ]);
 
-                                // Generar el nombre del archivo
-                                $fileName = "exports/branches/sucursales_export_{$exportProcess->id}_" . time() . '.xlsx';
+                                $fileName = "exports/companies/empresas_export_{$exportProcess->id}_" . time() . '.xlsx';
 
-                                // Realizar la exportación
                                 Excel::store(
-                                    new \App\Exports\CompanyBranchesDataExport($companyIds, $exportProcess->id),
+                                    new \App\Exports\CompaniesDataExport($companyIds, $exportProcess->id),
                                     $fileName,
                                     's3',
                                     \Maatwebsite\Excel\Excel::XLSX
                                 );
 
-                                // Actualizar la URL del archivo
                                 $fileUrl = Storage::disk('s3')->url($fileName);
-                                
+
                                 $exportProcess->update([
                                     'file_url' => $fileUrl
                                 ]);
 
                                 CompanyResource::makeNotification(
                                     'Exportación iniciada',
-                                    'El proceso de exportación de sucursales finalizará en breve',
+                                    'El proceso de exportación finalizará en breve',
                                 )->send();
-
                             } catch (\Exception $e) {
-
-                                ExportErrorHandler::handle($e, $exportProcess->id ?? 0, 'bulk_action');
 
                                 Log::error('Error en exportación de empresas', [
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
                                 ]);
 
-                                if (isset($exportProcess)) {
-                                    $exportProcess->update([
-                                        'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
-                                    ]);
-                                }
-
                                 CompanyResource::makeNotification(
                                     'Error',
-                                    'Error al generar la exportación: ' . $e->getMessage(),
+                                    'Error al iniciar la exportación',
                                 )->send();
                             }
                         })

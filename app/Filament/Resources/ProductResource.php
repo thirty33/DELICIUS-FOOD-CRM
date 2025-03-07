@@ -134,6 +134,7 @@ class ProductResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
+                    ->disk('s3')
                     ->label(__('Imagen')),
                 Tables\Columns\TextColumn::make('code')
                     ->label(__('Código'))
