@@ -67,8 +67,8 @@ class PriceListDataExport implements
             if ($priceList->priceListLines->isEmpty()) {
                 return [
                     'nombre_de_lista_de_precio' => $priceList->name,
-                    'descripcion' => $priceList->description,
                     'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
+                    'descripcion' => $priceList->description,
                     'numeros_de_registro_de_empresas' => $priceList->companies->pluck('registration_number')->implode(', '),
                     'codigo_de_producto' => null,
                     'precio_unitario' => null,
@@ -80,8 +80,8 @@ class PriceListDataExport implements
             foreach ($priceList->priceListLines as $line) {
                 $rows[] = [
                     'nombre_de_lista_de_precio' => $priceList->name,
-                    'descripcion' => $priceList->description,
                     'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
+                    'descripcion' => $priceList->description,
                     'numeros_de_registro_de_empresas' => $priceList->companies->pluck('registration_number')->implode(', '),
                     'codigo_de_producto' => $line->product ? $line->product->code : null,
                     'precio_unitario' => $line->unit_price ? '$' . number_format($line->unit_price, 2, '.', ',') : null,
