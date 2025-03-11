@@ -21,7 +21,15 @@ use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 use Filament\Forms\Components\Hidden;
 use Closure;
 use Filament\Forms\Get;
-
+use App\Classes\ErrorManagment\ExportErrorHandler;
+use App\Exports\OrderLineExport;
+use App\Models\ExportProcess;
+use App\Models\OrderLine;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
+use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 
 class OrderResource extends Resource
 {
@@ -173,6 +181,80 @@ class OrderResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('export_order_lines')
+                    ->label('Exportar líneas de pedido')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('success')
+                    ->action(function (Collection $records) {
+                        try {
+                            Log::info('Iniciando proceso de exportación de líneas de pedido', [
+                                'total_records' => $records->count(),
+                                'order_ids' => $records->pluck('id')->toArray()
+                            ]);
+                
+                            $orderIds = $records->pluck('id')->toArray();
+                            $orderLineIds = OrderLine::whereIn('order_id', $orderIds)
+                                ->pluck('id');
+                
+                            Log::info('Obtenidas líneas de pedido para exportar', [
+                                'total_order_lines' => $orderLineIds->count()
+                            ]);
+                
+                            $exportProcess = ExportProcess::create([
+                                'type' => ExportProcess::TYPE_ORDER_LINES,
+                                'status' => ExportProcess::STATUS_QUEUED,
+                                'file_url' => '-'
+                            ]);
+                
+                            Log::info('Proceso de exportación creado', [
+                                'export_process_id' => $exportProcess->id
+                            ]);
+                
+                            $fileName = "exports/order-lines/lineas_pedido_export_{$exportProcess->id}_" . time() . '.xlsx';
+                
+                            Excel::store(
+                                new OrderLineExport($orderLineIds, $exportProcess->id),
+                                $fileName,
+                                's3',
+                                \Maatwebsite\Excel\Excel::XLSX
+                            );
+                
+                            $fileUrl = Storage::disk('s3')->url($fileName);
+                            $exportProcess->update([
+                                'file_url' => $fileUrl
+                            ]);
+                
+                            Log::info('Exportación completada con éxito', [
+                                'export_process_id' => $exportProcess->id,
+                                'file_url' => $fileUrl
+                            ]);
+                
+                            self::makeNotification(
+                                'Exportación iniciada',
+                                'El proceso de exportación finalizará en breve'
+                            )->send();
+                        } catch (\Exception $e) {
+                            Log::error('Error en la exportación de líneas de pedido', [
+                                'export_process_id' => $exportProcess->id ?? 0,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                
+                            // Usar ExportErrorHandler para registrar el error de manera consistente
+                            ExportErrorHandler::handle(
+                                $e,
+                                $exportProcess->id ?? 0,
+                                'bulk_export_order_lines'
+                            );
+                
+                            self::makeNotification(
+                                'Error',
+                                'Error al iniciar la exportación',
+                                'danger'
+                            )->send();
+                        }
+                    })
+                    ->deselectRecordsAfterCompletion()
                 ]),
             ])
             ->emptyStateActions([
@@ -195,5 +277,13 @@ class OrderResource extends Resource
             'create' => Pages\CreateOrder::route('/create'),
             'edit' => Pages\EditOrder::route('/{record}/edit'),
         ];
+    }
+
+    private static function makeNotification(string $title, string $body, string $color = 'success'): Notification
+    {
+        return Notification::make()
+            ->color($color)
+            ->title($title)
+            ->body($body);
     }
 }
