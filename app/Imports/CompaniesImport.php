@@ -72,7 +72,7 @@ class CompaniesImport implements
 
     public function chunkSize(): int
     {
-        return 1;
+        return 100;
     }
 
     /**

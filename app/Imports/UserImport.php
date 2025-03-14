@@ -63,7 +63,7 @@ class UserImport implements
 
     public function chunkSize(): int
     {
-        return 10;
+        return 100;
     }
 
     public function registerEvents(): array

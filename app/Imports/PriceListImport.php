@@ -253,7 +253,7 @@ class PriceListImport implements
      */
     public function chunkSize(): int
     {
-        return 50;
+        return 100;
     }
 
     /**

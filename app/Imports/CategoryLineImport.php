@@ -187,7 +187,7 @@ class CategoryLineImport implements
 
     public function chunkSize(): int
     {
-        return 10;
+        return 100;
     }
 
     private function handleRowError(\Exception $e, int $index, $row)

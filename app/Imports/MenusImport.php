@@ -67,7 +67,7 @@ class MenusImport implements
 
     public function chunkSize(): int
     {
-        return 10; // Aumentado para mejor rendimiento
+        return 100; // Aumentado para mejor rendimiento
     }
 
     /**

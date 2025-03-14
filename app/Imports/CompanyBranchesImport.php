@@ -137,7 +137,7 @@ class CompanyBranchesImport implements
 
     public function chunkSize(): int
     {
-        return 1;
+        return 100;
     }
 
     private function handleRowError(\Exception $e, int $index, $row)

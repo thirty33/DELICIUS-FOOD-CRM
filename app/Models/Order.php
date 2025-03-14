@@ -58,13 +58,4 @@ class Order extends Model
         );
     }
 
-    // public function currentMenu(User $user): Attribute
-    // {
-    //     return Attribute::make(
-    //         get: function () use ($user) {
-    //             $carbonDate = Carbon::parse($this->dispatch_date)->format('Y-m-d');
-    //             return MenuHelper::getCurrentMenuQuery($carbonDate, $user)->first();
-    //         }
-    //     );
-    // }
 }
