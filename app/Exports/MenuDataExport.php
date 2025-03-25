@@ -130,16 +130,7 @@ class MenuDataExport implements
             AfterSheet::class => function (AfterSheet $event) {
                 ExportProcess::where('id', $this->exportProcessId)
                     ->update(['status' => ExportProcess::STATUS_PROCESSED]);
-
-                // Pre-configurar la columna F como texto
-                // $event->sheet->getDelegate()->getStyle('F:F')
-                //     ->getNumberFormat()
-                //     ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-
-                // // Agregar información útil
-                // $event->sheet->setCellValue('A' . ($event->sheet->getHighestRow() + 2), 'NOTA: La columna "Fecha Hora Máxima Pedido" contiene una comilla simple al inicio para evitar que Excel cambie el formato.');
-                // $event->sheet->mergeCells('A' . ($event->sheet->getHighestRow()) . ':G' . ($event->sheet->getHighestRow()));
-                // $event->sheet->getStyle('A' . ($event->sheet->getHighestRow()))->getFont()->setBold(true);
+                
             },
         ];
     }

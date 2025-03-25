@@ -30,8 +30,13 @@ return new class extends Migration
             return $type !== ExportProcess::TYPE_ORDER_LINES;
         });
 
+        // Primero actualiza todos los registros que tienen el tipo que vas a eliminar
+        DB::table('export_processes')
+            ->where('type', ExportProcess::TYPE_ORDER_LINES)
+            ->update(['type' => $previousValidTypes[0] ?? ExportProcess::TYPE_COMPANIES]);
+
+        // Ahora modifica la columna
         Schema::table('export_processes', function (Blueprint $table) use ($previousValidTypes) {
-            // Restauramos la columna a su estado anterior sin el nuevo tipo
             $table->enum('type', $previousValidTypes)
                 ->comment('Tipo de exportación')
                 ->change();

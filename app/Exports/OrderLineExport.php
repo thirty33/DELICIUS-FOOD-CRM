@@ -21,6 +21,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Throwable;
 
 class OrderLineExport implements
     FromQuery,
@@ -36,17 +37,13 @@ class OrderLineExport implements
 
     private $headers = [
         'codigo_pedido' => 'Código de Pedido',
-        'estado_orden' => 'Estado',
+        'estado_orden' => 'Estado Pedido',
         'fecha_orden' => 'Fecha de Orden',
         'fecha_despacho' => 'Fecha de Despacho',
         'usuario' => 'Usuario',
-        'direccion_alternativa' => 'Dirección Alternativa',
-        'precio_minimo' => 'Precio Mínimo',
         'codigo_producto' => 'Código de Producto',
         'cantidad' => 'Cantidad',
         'precio_unitario' => 'Precio Unitario',
-        'precio_total' => 'Precio Total',
-        'total_orden' => 'Total de la Orden',
         'parcialmente_programado' => 'Parcialmente Programado'
     ];
 
@@ -64,7 +61,7 @@ class OrderLineExport implements
         return OrderLine::with(['order.user', 'order.user.company.priceList', 'product'])
             ->whereIn('id', $this->orderLineIds);
     }
-    
+
     public function chunkSize(): int
     {
         return 100;
@@ -74,18 +71,18 @@ class OrderLineExport implements
     {
         try {
             $order = $orderLine->order;
-            
+
             // Formatear las fechas con comilla inicial
             $fechaOrden = '';
             if ($order && $order->created_at) {
                 $fechaOrden = "'" . $order->created_at->format('d/m/Y');
             }
-            
+
             $fechaDespacho = '';
             if ($order && $order->dispatch_date) {
                 $fechaDespacho = "'" . Carbon::parse($order->dispatch_date)->format('d/m/Y');
             }
-            
+
             // Obtener el estado formateado del pedido
             $estadoOrden = null;
             if ($order && $order->status) {
@@ -99,20 +96,16 @@ class OrderLineExport implements
                     $estadoOrden = $order->status;
                 }
             }
-            
+
             return [
                 'codigo_pedido' => $order ? $order->id : null,
                 'estado_orden' => $estadoOrden,
                 'fecha_orden' => $fechaOrden,
                 'fecha_despacho' => $fechaDespacho,
                 'usuario' => $order && $order->user ? $order->user->email : null,
-                'direccion_alternativa' => $order ? $order->alternative_address : null,
-                'precio_minimo' => $order && $order->price_list_min ? '$' . number_format($order->price_list_min / 100, 2, '.', ',') : null,
                 'codigo_producto' => $orderLine->product ? $orderLine->product->code : null,
                 'cantidad' => $orderLine->quantity,
                 'precio_unitario' => '$' . number_format($orderLine->unit_price / 100, 2, '.', ','),
-                'precio_total' => '$' . number_format($orderLine->getTotalPriceAttribute() / 100, 2, '.', ','),
-                'total_orden' => $order ? '$' . number_format($order->total / 100, 2, '.', ',') : null,
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0'
             ];
         } catch (\Exception $e) {
@@ -156,5 +149,49 @@ class OrderLineExport implements
                     ->update(['status' => ExportProcess::STATUS_PROCESSED]);
             },
         ];
+    }
+
+    /**
+     * Handle a failed export
+     * 
+     * @param Throwable $exception
+     * @return void
+     */
+    public function failed(Throwable $e): void
+    {
+
+        $currentUser = exec('whoami');
+
+        $error = [
+            'row' => 0,
+            'attribute' => 'export',
+            'errors' => [$e->getMessage()],
+            'values' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'user' => $currentUser
+            ],
+        ];
+
+        // Obtener el proceso actual y sus errores existentes
+        $exportProcess = ExportProcess::find($this->exportProcessId);
+        $existingErrors = $exportProcess->error_log ?? [];
+
+        // Agregar el nuevo error al array existente
+        $existingErrors[] = $error;
+
+        // Actualizar el error_log en el ExportProcess
+        $exportProcess->update([
+            'error_log' => $existingErrors,
+            'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
+        ]);
+
+        Log::error('Error en exportación de Order Lines', [
+            'export_process_id' => $this->exportProcessId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
     }
 }

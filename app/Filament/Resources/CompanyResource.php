@@ -192,6 +192,9 @@ class CompanyResource extends Resource
                                     Checkbox::make('active')
                                         ->label(__('Activo'))
                                         ->columns(2),
+                                    Checkbox::make('exclude_from_consolidated_report')
+                                        ->label(__('Discriminar en reporte consolidado'))
+                                        ->columns(2),
                                     Forms\Components\Textarea::make('description')
                                         ->required()
                                         ->minLength(2)
@@ -230,6 +233,9 @@ class CompanyResource extends Resource
                     ->date('d/m/Y H:i'),
                 Tables\Columns\ToggleColumn::make('active')
                     ->label(__('Activo'))
+                    ->sortable(),
+                Tables\Columns\ToggleColumn::make('exclude_from_consolidated_report')
+                    ->label(__('Discriminar en reporte consolidado'))
                     ->sortable(),
             ])
             ->filters([

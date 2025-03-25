@@ -106,13 +106,19 @@ class ImportProcessResource extends Resource
                     ->label('Descargar Log')
                     ->icon('heroicon-o-document-arrow-down')
                     ->color('success')
-                    ->visible(fn($record) => !empty($record->error_log) && $record->status === ImportProcess::STATUS_PROCESSED_WITH_ERRORS)
+                    ->visible(fn($record) => $record->status === ImportProcess::STATUS_PROCESSED_WITH_ERRORS)
                     ->action(function ($record) {
+
+                        $fullRecord = ImportProcess::find($record->id);
+        
+                        if (empty($fullRecord->error_log)) {
+                            return;
+                        }
 
                         $fileName = "logs/import_errors/log_errores_importacion_{$record->id}_" . time() . '.xlsx';
 
                         Excel::store(
-                            new ImportErrorLogExport($record->error_log),
+                            new ImportErrorLogExport($fullRecord->error_log),
                             $fileName,
                             's3',
                             \Maatwebsite\Excel\Excel::XLSX
@@ -128,7 +134,10 @@ class ImportProcessResource extends Resource
 
                     }),
             ])
-            ->bulkActions([]);
+            ->bulkActions([])
+            ->modifyQueryUsing(function (Builder $query) {
+                return $query->select('id', 'created_at', 'type', 'status', 'file_url', 'file_error_url');
+            });
     }
 
     public static function getPages(): array

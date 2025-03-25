@@ -39,7 +39,8 @@ class Company extends Model
         'fantasy_name',
         'price_list_id',
         'company_code',
-        'payment_condition'
+        'payment_condition',
+        'exclude_from_consolidated_report'
     ];
 
     public function branches(): HasMany

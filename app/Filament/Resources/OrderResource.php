@@ -28,10 +28,14 @@ use App\Models\ExportProcess;
 use App\Models\OrderLine;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
-use Maatwebsite\Excel\Facades\Excel;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\Log;
 use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
+use App\Imports\OrderLinesImport;
+use App\Jobs\DeleteOrders;
+use App\Models\ImportProcess;
+use Maatwebsite\Excel\Facades\Excel;
 
 class OrderResource extends Resource
 {
@@ -183,11 +187,48 @@ class OrderResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->action(function (Order $record) {
+                        try {
+                            Log::info('Iniciando proceso de eliminación de orden', [
+                                'order_id' => $record->id,
+                                'client' => $record->user->name ?? 'N/A'
+                            ]);
+
+                            // Crear array con el ID de la orden a eliminar
+                            $orderIdToDelete = [$record->id];
+
+                            // Dispatch el job para eliminar la orden en segundo plano
+                            DeleteOrders::dispatch($orderIdToDelete);
+
+                            self::makeNotification(
+                                'Eliminación en proceso',
+                                'La orden será eliminada en segundo plano.'
+                            )->send();
+
+                            Log::info('Job de eliminación de orden enviado a la cola', [
+                                'order_id' => $record->id
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al preparar eliminación de orden', [
+                                'order_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            self::makeNotification(
+                                'Error',
+                                'Ha ocurrido un error al preparar la eliminación de la orden: ' . $e->getMessage(),
+                                'danger'
+                            )->send();
+
+                            // Re-lanzar la excepción para que Filament la maneje
+                            throw $e;
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
                     Tables\Actions\BulkAction::make('export_order_lines')
                         ->label('Exportar líneas de pedido')
                         ->icon('heroicon-o-arrow-up-tray')
@@ -262,7 +303,7 @@ class OrderResource extends Resource
                             }
                         })
                         ->deselectRecordsAfterCompletion(),
-                    Tables\Actions\BulkAction::make('export_order_lines')
+                    Tables\Actions\BulkAction::make('export_order_lines_consolidated')
                         ->label('Exportar consolidado de pedidos')
                         ->icon('heroicon-o-arrow-up-tray')
                         ->color('success')
@@ -336,7 +377,121 @@ class OrderResource extends Resource
                             }
                         })
                         ->deselectRecordsAfterCompletion(),
-                ]),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación masiva de órdenes', [
+                                    'total_records' => $records->count(),
+                                    'order_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de las órdenes a eliminar
+                                $orderIdsToDelete = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para eliminar las órdenes en segundo plano
+                                if (!empty($orderIdsToDelete)) {
+                                    DeleteOrders::dispatch($orderIdsToDelete);
+
+                                    self::makeNotification(
+                                        'Eliminación en proceso',
+                                        'Las órdenes seleccionadas serán eliminadas en segundo plano.'
+                                    )->send();
+
+                                    Log::info('Job de eliminación masiva de órdenes enviado a la cola', [
+                                        'order_ids' => $orderIdsToDelete
+                                    ]);
+                                } else {
+                                    self::makeNotification(
+                                        'Información',
+                                        'No hay órdenes para eliminar.'
+                                    )->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de órdenes', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar la eliminación de órdenes: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                ])->dropdownWidth(MaxWidth::ExtraSmall),
+            ])
+            ->headerActions([
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('import_orders')
+                        ->label('Importar pedidos')
+                        ->color('info')
+                        ->icon('tabler-file-upload')
+                        ->form([
+                            Forms\Components\FileUpload::make('file')
+                                ->disk('s3')
+                                ->maxSize(10240)
+                                ->maxFiles(1)
+                                ->directory('orders-imports')
+                                ->visibility('public')
+                                ->label('Archivo')
+                                ->required(),
+                        ])
+                        ->action(function (array $data) {
+                            try {
+                                $importProcess = ImportProcess::create([
+                                    'type' => ImportProcess::TYPE_ORDERS,
+                                    'status' => ImportProcess::STATUS_QUEUED,
+                                    'file_url' => $data['file'],
+                                ]);
+
+                                Excel::import(
+                                    new OrderLinesImport($importProcess->id),
+                                    $data['file'],
+                                    's3',
+                                    \Maatwebsite\Excel\Excel::XLSX
+                                );
+
+                                self::makeNotification(
+                                    'Pedidos importados',
+                                    'El proceso de importación finalizará en breve'
+                                )->send();
+                            } catch (\Exception $e) {
+                                // Usar ExportErrorHandler para registrar el error
+                                ExportErrorHandler::handle(
+                                    $e,
+                                    $importProcess->id ?? 0,
+                                    'import_orders_action',
+                                    'ImportProcess'
+                                );
+
+                                self::makeNotification(
+                                    'Error',
+                                    'El proceso ha fallado',
+                                    'danger'
+                                )->send();
+                            }
+                        }),
+                    Tables\Actions\Action::make('download_orders_template')
+                        ->label('Bajar plantilla de pedidos')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('info')
+                        ->action(function () {
+                            try {
+                                return Excel::download(
+                                    new OrderLineExport(collect(), 0),
+                                    'template_importacion_pedidos.xlsx'
+                                );
+                            } catch (\Exception $e) {
+                                self::makeNotification(
+                                    'Error',
+                                    'Error al generar la plantilla de pedidos',
+                                    'danger'
+                                )->send();
+                            }
+                        }),
+                ])->dropdownWidth(MaxWidth::ExtraSmall)
             ])
             ->emptyStateActions([
                 Tables\Actions\CreateAction::make(),
