@@ -31,6 +31,7 @@ class ExportProcess extends Model
     const TYPE_MENU_CATEGORIES = 'categorías de menus';
     const TYPE_USERS = 'usuarios';
     const TYPE_ORDER_LINES = 'líneas de pedidos';
+    const ORDER_CONSOLIDATED = 'consolidado de pedidos';
 
     // Constantes para los estados
     const STATUS_QUEUED = 'en cola';
@@ -54,7 +55,8 @@ class ExportProcess extends Model
             self::TYPE_MENUS,
             self::TYPE_MENU_CATEGORIES,
             self::TYPE_USERS,
-            self::TYPE_ORDER_LINES
+            self::TYPE_ORDER_LINES,
+            self::ORDER_CONSOLIDATED,
         ];
     }
 

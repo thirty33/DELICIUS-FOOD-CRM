@@ -47,7 +47,7 @@ class OrderLinesImport implements
     private $processedOrders = [];
 
     private $headingMap = [
-        'codigo_de_pedido' => 'order_id',
+        'codigo_de_pedido' => 'order_number', // Cambiado de order_id a order_number
         'estado' => 'status',
         'fecha_de_orden' => 'created_at',
         'fecha_de_despacho' => 'dispatch_date',
@@ -57,6 +57,7 @@ class OrderLinesImport implements
         'precio_unitario' => 'unit_price',
         'parcialmente_programado' => 'partially_scheduled'
     ];
+    
 
     public function __construct(int $importProcessId)
     {
@@ -124,7 +125,7 @@ class OrderLinesImport implements
     private function getValidationRules(): array
     {
         return [
-            '*.codigo_de_pedido' => ['nullable', 'integer'],
+            '*.codigo_de_pedido' => ['nullable', 'string', 'max:14'], // Cambiado a string
             '*.estado' => ['required', 'string'],
             '*.fecha_de_orden' => ['required', 'string'],
             '*.fecha_de_despacho' => ['required', 'string'],
@@ -144,7 +145,8 @@ class OrderLinesImport implements
     private function getValidationMessages(): array
     {
         return [
-            '*.codigo_de_pedido.integer' => 'El código de pedido debe ser un número entero.',
+            '*.codigo_de_pedido.string' => 'El código de pedido debe ser un texto.',
+            '*.codigo_de_pedido.max' => 'El código de pedido no debe exceder 14 caracteres.',
             '*.estado.required' => 'El estado del pedido es obligatorio.',
             '*.fecha_de_orden.required' => 'La fecha de orden es obligatoria.',
             '*.fecha_de_despacho.required' => 'La fecha de despacho es obligatoria.',
@@ -173,8 +175,7 @@ class OrderLinesImport implements
             ]);
 
             foreach ($data as $index => $row) {
-                // Eliminada la validación de existencia del código de pedido
-                // Si no existe, se creará una nueva orden
+                // No validamos existencia de order_number, si no existe se creará uno nuevo
 
                 // Validar el formato de fechas
                 if (!empty($row['fecha_de_orden'])) {
@@ -241,14 +242,14 @@ class OrderLinesImport implements
             }
 
             // Agrupar filas por código de pedido para procesarlas juntas
-            $rowsByOrderId = $rows->groupBy('codigo_de_pedido');
+            $rowsByOrderNumber = $rows->groupBy('codigo_de_pedido');
 
             DB::beginTransaction();
 
             try {
                 // Procesar cada grupo de pedidos
-                foreach ($rowsByOrderId as $orderId => $orderRows) {
-                    $this->processOrderRows($orderId, $orderRows);
+                foreach ($rowsByOrderNumber as $orderNumber => $orderRows) {
+                    $this->processOrderRows($orderNumber, $orderRows);
                 }
 
                 DB::commit();
@@ -275,14 +276,14 @@ class OrderLinesImport implements
     /**
      * Process all rows for a single order
      * 
-     * @param string|int $orderId
+     * @param string|int $orderNumber
      * @param Collection $rows
      */
-    private function processOrderRows($orderId, Collection $rows)
+    private function processOrderRows($orderNumber, Collection $rows)
     {
         try {
             // Si no hay código de pedido, crear uno nuevo
-            if (empty($orderId)) {
+            if (empty($orderNumber)) {
                 $this->createNewOrder($rows);
                 return;
             }
@@ -291,8 +292,8 @@ class OrderLinesImport implements
             $firstRow = $rows->first();
             
             // Si este pedido ya fue procesado, verificar si hay cambios en los campos de la orden
-            if (isset($this->processedOrders[$orderId])) {
-                $processedData = $this->processedOrders[$orderId];
+            if (isset($this->processedOrders[$orderNumber])) {
+                $processedData = $this->processedOrders[$orderNumber];
                 
                 // Verificar si hay cambios en los campos de la orden
                 $orderDataChanged = 
@@ -303,16 +304,16 @@ class OrderLinesImport implements
                 
                 // Si no hay cambios, solo procesar las líneas de pedido
                 if (!$orderDataChanged) {
-                    $this->processOrderLines($orderId, $rows);
+                    $this->processOrderLines($processedData['order_id'], $rows);
                     return;
                 }
             }
             
-            // Verificar si la orden existe, si no, crear una nueva con el ID específico
-            $order = Order::find($orderId);
+            // Verificar si la orden existe por el order_number
+            $order = Order::where('order_number', $orderNumber)->first();
             if (!$order) {
-                // Si no existe la orden con ese ID, crear una nueva
-                $this->createNewOrderWithId($orderId, $rows);
+                // Si no existe la orden con ese order_number, crear una nueva
+                $this->createNewOrderWithNumber($orderNumber, $rows);
                 return;
             }
             
@@ -343,7 +344,8 @@ class OrderLinesImport implements
             }
             
             // Guardar los datos procesados para comparaciones futuras
-            $this->processedOrders[$orderId] = [
+            $this->processedOrders[$orderNumber] = [
+                'order_id' => $order->id,
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
@@ -351,30 +353,33 @@ class OrderLinesImport implements
             ];
             
             // Procesar las líneas de pedido
-            $this->processOrderLines($orderId, $rows);
+            $this->processOrderLines($order->id, $rows);
             
-            Log::info("Pedido actualizado con éxito", ['order_id' => $orderId]);
+            Log::info("Pedido actualizado con éxito", [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number
+            ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
-                'order_' . $orderId,
+                'order_' . $orderNumber,
                 'ImportProcess'
             );
             
-            Log::error("Error procesando pedido {$orderId}", [
+            Log::error("Error procesando pedido {$orderNumber}", [
                 'error' => $e->getMessage()
             ]);
         }
     }
 
     /**
-     * Create a new order with a specific ID and its order lines
+     * Create a new order with a specific order number and its order lines
      * 
-     * @param int $orderId
+     * @param string $orderNumber
      * @param Collection $rows
      */
-    private function createNewOrderWithId($orderId, Collection $rows)
+    private function createNewOrderWithNumber($orderNumber, Collection $rows)
     {
         try {
             $firstRow = $rows->first();
@@ -392,17 +397,18 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
             
-            // Crear la orden con el ID específico
-            $order = new Order();
-            $order->id = $orderId;
-            $order->status = $status;
-            $order->user_id = $user->id;
-            $order->dispatch_date = $dispatchDate;
-            $order->created_at = $createdAt;
-            $order->save();
+            // Crear la orden con el order_number específico
+            $order = Order::create([
+                'order_number' => $orderNumber,
+                'status' => $status,
+                'user_id' => $user->id,
+                'dispatch_date' => $dispatchDate,
+                'created_at' => $createdAt
+            ]);
             
             // Guardar los datos procesados para comparaciones futuras
-            $this->processedOrders[$orderId] = [
+            $this->processedOrders[$orderNumber] = [
+                'order_id' => $order->id,
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
@@ -412,17 +418,20 @@ class OrderLinesImport implements
             // Procesar las líneas de pedido
             $this->processOrderLines($order->id, $rows);
             
-            Log::info("Pedido creado con ID específico", ['order_id' => $order->id]);
+            Log::info("Pedido creado con order_number específico", [
+                'order_id' => $order->id,
+                'order_number' => $orderNumber
+            ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
-                'new_order_with_id_' . $orderId,
+                'new_order_with_number_' . $orderNumber,
                 'ImportProcess'
             );
             
-            Log::error("Error creando nuevo pedido con ID específico", [
-                'order_id' => $orderId,
+            Log::error("Error creando nuevo pedido con order_number específico", [
+                'order_number' => $orderNumber,
                 'error' => $e->getMessage()
             ]);
         }
@@ -451,7 +460,7 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
             
-            // Crear la orden
+            // Crear la orden (el order_number se generará automáticamente en el modelo)
             $order = Order::create([
                 'status' => $status,
                 'user_id' => $user->id,
@@ -459,10 +468,22 @@ class OrderLinesImport implements
                 'created_at' => $createdAt
             ]);
             
+            // Guardar los datos procesados para comparaciones futuras usando el order_number como clave
+            $this->processedOrders[$order->order_number] = [
+                'order_id' => $order->id,
+                'status' => $firstRow['estado'],
+                'created_at' => $firstRow['fecha_de_orden'],
+                'dispatch_date' => $firstRow['fecha_de_despacho'],
+                'user_email' => $firstRow['usuario']
+            ];
+            
             // Procesar las líneas de pedido
             $this->processOrderLines($order->id, $rows);
             
-            Log::info("Pedido creado con éxito", ['order_id' => $order->id]);
+            Log::info("Pedido creado con éxito", [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number
+            ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
                 $e,
@@ -509,7 +530,6 @@ class OrderLinesImport implements
                     'quantity' => $row['cantidad'],
                     'partially_scheduled' => $partiallyScheduled,
                     'unit_price' => $unitPrice,
-                    // No procesar el precio unitario
                 ]);
             }
             

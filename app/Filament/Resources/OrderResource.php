@@ -68,6 +68,10 @@ class OrderResource extends Resource
                     ->columns(3)
                     ->schema([
                         Hidden::make('id'),
+                        Forms\Components\TextInput::make('order_number')
+                            ->label(__('Número de Orden'))
+                            ->disabled()
+                            ->columnSpan(1),
                         Forms\Components\Select::make('user_id')
                             ->options(User::customers()->pluck('name', 'id'))
                             ->label(__('Cliente'))
@@ -139,6 +143,10 @@ class OrderResource extends Resource
                     ->searchable()
                     ->prefix('#')
                     ->suffix('#'),
+                Tables\Columns\TextColumn::make('order_number')
+                    ->label(__('Número de Orden'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Cliente'))
                     ->sortable()
@@ -323,7 +331,7 @@ class OrderResource extends Resource
                                 ]);
 
                                 $exportProcess = ExportProcess::create([
-                                    'type' => ExportProcess::TYPE_ORDER_LINES,
+                                    'type' => ExportProcess::ORDER_CONSOLIDATED,
                                     'status' => ExportProcess::STATUS_QUEUED,
                                     'file_url' => '-'
                                 ]);

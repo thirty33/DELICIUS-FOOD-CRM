@@ -35,13 +35,18 @@ class OrderLineExport implements
 {
     use Exportable;
 
+    /**
+     * Headers modificados para mostrar textos amigables al usuario pero mantener compatibilidad
+     * con las claves que espera el sistema importador.
+     * Las claves son los nombres internos que usa el sistema y los valores son los textos visibles.
+     */
     private $headers = [
-        'codigo_pedido' => 'Código de Pedido',
-        'estado_orden' => 'Estado Pedido',
-        'fecha_orden' => 'Fecha de Orden',
-        'fecha_despacho' => 'Fecha de Despacho',
+        'codigo_de_pedido' => 'Código de Pedido',
+        'estado' => 'Estado',
+        'fecha_de_orden' => 'Fecha de Orden',
+        'fecha_de_despacho' => 'Fecha de Despacho',
         'usuario' => 'Usuario',
-        'codigo_producto' => 'Código de Producto',
+        'codigo_de_producto' => 'Código de Producto',
         'cantidad' => 'Cantidad',
         'precio_unitario' => 'Precio Unitario',
         'parcialmente_programado' => 'Parcialmente Programado'
@@ -97,13 +102,14 @@ class OrderLineExport implements
                 }
             }
 
+            // Mapeamos los datos usando las mismas claves que espera el importador
             return [
-                'codigo_pedido' => $order ? $order->id : null,
-                'estado_orden' => $estadoOrden,
-                'fecha_orden' => $fechaOrden,
-                'fecha_despacho' => $fechaDespacho,
+                'codigo_de_pedido' => $order ? $order->order_number : null,
+                'estado' => $estadoOrden,  // Cambiado de 'estado_orden' a 'estado'
+                'fecha_de_orden' => $fechaOrden,  // Cambiado de 'fecha_orden' a 'fecha_de_orden'
+                'fecha_de_despacho' => $fechaDespacho,  // Cambiado de 'fecha_despacho' a 'fecha_de_despacho'
                 'usuario' => $order && $order->user ? $order->user->email : null,
-                'codigo_producto' => $orderLine->product ? $orderLine->product->code : null,
+                'codigo_de_producto' => $orderLine->product ? $orderLine->product->code : null,  // Cambiado de 'codigo_producto' a 'codigo_de_producto'
                 'cantidad' => $orderLine->quantity,
                 'precio_unitario' => '$' . number_format($orderLine->unit_price / 100, 2, '.', ','),
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0'
