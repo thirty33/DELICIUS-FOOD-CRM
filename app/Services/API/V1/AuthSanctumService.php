@@ -10,25 +10,49 @@ class AuthSanctumService implements AuthServiceInterface
 {
     public function login(array $credentials): JsonResponse
     {
-        if (! auth()->attempt([
-            'email' => data_get($credentials, 'email'),
-            'password' => data_get($credentials, 'password'),
-        ])
-        ) {
-            return ApiResponseService::unauthorized();
+        $identifier = data_get($credentials, 'email');
+
+        if (!$identifier) {
+            return ApiResponseService::unauthorized('Email or nickname is required');
         }
 
-        $token = auth()
-            ->user()
-            ->createToken(data_get($credentials, 'device_name'))
-            ->plainTextToken;
+        if (auth()->attempt([
+            'email' => $identifier,
+            'password' => data_get($credentials, 'password'),
+        ])) {
 
-        return ApiResponseService::success([
-            'token' => $token,
-            'token_type' => 'bearer',
-            'role' => optional(auth()->user()->roles->first())->name ?? null,
-            'permission' => optional(auth()->user()->permissions->first())->name ?? null,
-        ]);
+            $token = auth()
+                ->user()
+                ->createToken(data_get($credentials, 'device_name'))
+                ->plainTextToken;
+
+            return ApiResponseService::success([
+                'token' => $token,
+                'token_type' => 'bearer',
+                'role' => optional(auth()->user()->roles->first())->name ?? null,
+                'permission' => optional(auth()->user()->permissions->first())->name ?? null,
+            ]);
+        }
+
+        if (auth()->attempt([
+            'nickname' => $identifier,
+            'password' => data_get($credentials, 'password'),
+        ])) {
+
+            $token = auth()
+                ->user()
+                ->createToken(data_get($credentials, 'device_name'))
+                ->plainTextToken;
+
+            return ApiResponseService::success([
+                'token' => $token,
+                'token_type' => 'bearer',
+                'role' => optional(auth()->user()->roles->first())->name ?? null,
+                'permission' => optional(auth()->user()->permissions->first())->name ?? null,
+            ]);
+        }
+
+        return ApiResponseService::unauthorized();
     }
 
     public function register(array $data): JsonResponse

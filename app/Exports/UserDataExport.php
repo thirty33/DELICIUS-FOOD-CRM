@@ -40,7 +40,9 @@ class UserDataExport implements
         'sucursal' => 'Sucursal',
         'validar_fecha_y_reglas_de_despacho' => 'Validar Fecha y Reglas de Despacho',
         'validar_precio_minimo' => 'Validar Precio Mínimo',
-        'validar_reglas_de_subcategoria' => 'Validar Reglas de Subcategoría'
+        'validar_reglas_de_subcategoria' => 'Validar Reglas de Subcategoría',
+        'nombre_de_usuario' => 'Nombre de Usuario',
+        'contrasena' => 'Contraseña',
     ];
 
     private $exportProcessId;
@@ -76,6 +78,8 @@ class UserDataExport implements
                 'validar_fecha_y_reglas_de_despacho' => $user->allow_late_orders ? '1' : '0',
                 'validar_precio_minimo' => $user->validate_min_price ? '1' : '0',
                 'validar_reglas_de_subcategoria' => $user->validate_subcategory_rules ? '1' : '0',
+                'nombre_de_usuario' => $user->nickname ?? '',
+                'contrasena' => $user->plain_password ?? '',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando usuario para exportación', [

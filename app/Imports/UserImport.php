@@ -53,7 +53,9 @@ class UserImport implements
         'sucursal' => 'branch_code',
         'validar_fecha_y_reglas_de_despacho' => 'allow_late_orders',
         'validar_precio_minimo' => 'validate_min_price',
-        'validar_reglas_de_subcategoria' => 'validate_subcategory_rules'
+        'validar_reglas_de_subcategoria' => 'validate_subcategory_rules',
+        'nombre_de_usuario' => 'nickname',
+        'contrasena' => 'plain_password'
     ];
 
     public function __construct(int $importProcessId)
@@ -120,14 +122,16 @@ class UserImport implements
     {
         return [
             '*.nombre' => ['required', 'string', 'max:200'],
-            '*.correo_electronico' => ['required', 'email', 'max:200'],
+            '*.correo_electronico' => ['nullable', 'email', 'max:200'],
             '*.tipo_de_usuario' => ['required', 'string', 'exists:roles,name'],
             '*.tipo_de_convenio' => ['nullable', 'string', 'exists:permissions,name'],
             '*.compania' => ['required', 'string', 'exists:companies,registration_number'],
             '*.sucursal' => ['required', 'string', 'exists:branches,branch_code'],
             '*.validar_fecha_y_reglas_de_despacho' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
             '*.validar_precio_minimo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
-            '*.validar_reglas_de_subcategoria' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no']
+            '*.validar_reglas_de_subcategoria' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
+            '*.nombre_de_usuario' => ['nullable', 'string', 'max:200'],
+            '*.contrasena' => ['required', 'string', 'max:200']
         ];
     }
 
@@ -140,7 +144,6 @@ class UserImport implements
     {
         return [
             '*.nombre.required' => 'El nombre es obligatorio.',
-            '*.correo_electronico.required' => 'El correo electrónico es obligatorio.',
             '*.correo_electronico.email' => 'El correo electrónico debe ser válido.',
             '*.correo_electronico.unique' => 'El correo electrónico ya existe.',
             '*.tipo_de_usuario.required' => 'El tipo de usuario es obligatorio.',
@@ -150,7 +153,31 @@ class UserImport implements
             '*.compania.exists' => 'La compañía no existe.',
             '*.sucursal.required' => 'La sucursal es obligatoria.',
             '*.sucursal.exists' => 'La sucursal no existe.',
+            '*.contrasena.required' => 'La contraseña es obligatoria.',
         ];
+    }
+
+    /**
+     * Validate that either email or nickname is provided
+     */
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            $rows = $validator->getData();
+            
+            foreach ($rows as $rowIndex => $row) {
+                if (empty($row['correo_electronico']) && empty($row['nombre_de_usuario'])) {
+                    $validator->errors()->add(
+                        $rowIndex . '.correo_electronico', 
+                        'Se debe proporcionar al menos un correo electrónico o un nombre de usuario.'
+                    );
+                    $validator->errors()->add(
+                        $rowIndex . '.nombre_de_usuario', 
+                        'Se debe proporcionar al menos un correo electrónico o un nombre de usuario.'
+                    );
+                }
+            }
+        });
     }
 
     /**
@@ -179,11 +206,18 @@ class UserImport implements
                     ]);
                     
                     // Verificar existencia de usuario antes de procesar
-                    $existingUser = User::where('email', $row['correo_electronico'])->first();
+                    $existingUser = null;
+                    if (!empty($row['correo_electronico'])) {
+                        $existingUser = User::where('email', $row['correo_electronico'])->first();
+                    } elseif (!empty($row['nombre_de_usuario'])) {
+                        $existingUser = User::where('nickname', $row['nombre_de_usuario'])->first();
+                    }
+                    
                     if ($existingUser) {
                         Log::info('Usuario existente encontrado', [
                             'user_id' => $existingUser->id,
                             'email' => $existingUser->email,
+                            'nickname' => $existingUser->nickname,
                             'current_data' => [
                                 'name' => $existingUser->name,
                                 'company_id' => $existingUser->company_id,
@@ -198,16 +232,25 @@ class UserImport implements
                     $userData = $this->prepareUserData($row);
                     
                     Log::info('Datos preparados para actualización/creación', [
-                        'email' => $row['correo_electronico'],
+                        'email' => $row['correo_electronico'] ?? 'null',
+                        'nickname' => $row['nombre_de_usuario'] ?? 'null',
                         'processed_data' => $userData,
                         'is_new_user' => !$existingUser
                     ]);
 
-                    // Crear o actualizar usuario usando el correo electrónico como clave única
-                    $user = User::updateOrCreate(
-                        ['email' => $userData['email']],
-                        $userData
-                    );
+                    // Crear o actualizar usuario usando el correo electrónico o nickname como clave única
+                    $user = null;
+                    if (!empty($userData['email'])) {
+                        $user = User::updateOrCreate(
+                            ['email' => $userData['email']],
+                            $userData
+                        );
+                    } else {
+                        $user = User::updateOrCreate(
+                            ['nickname' => $userData['nickname']],
+                            $userData
+                        );
+                    }
                     
                     Log::info('Usuario después de updateOrCreate', [
                         'user_id' => $user->id,
@@ -247,7 +290,8 @@ class UserImport implements
 
                     Log::info('Usuario creado/actualizado con éxito', [
                         'user_id' => $user->id,
-                        'email' => $userData['email'],
+                        'email' => $userData['email'] ?? 'null',
+                        'nickname' => $userData['nickname'] ?? 'null',
                         'name' => $userData['name'],
                         'is_new' => $user->wasRecentlyCreated
                     ]);
@@ -292,7 +336,8 @@ class UserImport implements
     private function prepareUserData(Collection $row): array
     {
         Log::info('Preparando datos de usuario', [
-            'email' => $row['correo_electronico'],
+            'email' => $row['correo_electronico'] ?? 'null',
+            'nickname' => $row['nombre_de_usuario'] ?? 'null',
             'values' => $row->toArray()
         ]);
         
@@ -330,12 +375,18 @@ class UserImport implements
             'branch_name' => $branch->fantasy_name
         ]);
 
-        $existingUser = User::where('email', $row['correo_electronico'])->first();
+        $existingUser = null;
+        if (!empty($row['correo_electronico'])) {
+            $existingUser = User::where('email', $row['correo_electronico'])->first();
+        } elseif (!empty($row['nombre_de_usuario'])) {
+            $existingUser = User::where('nickname', $row['nombre_de_usuario'])->first();
+        }
         
         if ($existingUser) {
             Log::info('Usuario existente encontrado en prepareUserData', [
                 'user_id' => $existingUser->id,
-                'email' => $existingUser->email
+                'email' => $existingUser->email,
+                'nickname' => $existingUser->nickname
             ]);
         }
 
@@ -355,7 +406,6 @@ class UserImport implements
 
         $userData = [
             'name' => $row['nombre'],
-            'email' => $row['correo_electronico'],
             'company_id' => $company->id,
             'branch_id' => $branch->id,
             'allow_late_orders' => $allowLateOrders,
@@ -363,26 +413,31 @@ class UserImport implements
             'validate_subcategory_rules' => $validateSubcategoryRules
         ];
 
-        // Solo agregar contraseña si el usuario no existe
-        if (!$existingUser) {
-            // Generar contraseña temporal solo para usuarios nuevos
-            // $temporaryPassword = bin2hex(random_bytes(8)); // 16 caracteres aleatorios
-            // $userData['password'] = Hash::make($temporaryPassword);
-            $temporaryPassword = Hash::make('Pssword123..$');
-            $userData['password'] = $temporaryPassword;
+        // Agregar email si está presente
+        if (!empty($row['correo_electronico'])) {
+            $userData['email'] = $row['correo_electronico'];
+        }
+
+        // Agregar nickname si está presente
+        if (!empty($row['nombre_de_usuario'])) {
+            $userData['nickname'] = $row['nombre_de_usuario'];
+        }
+
+        // Agregar contraseña si está presente
+        if (!empty($row['contrasena'])) {
+            $userData['plain_password'] = $row['contrasena'];
+            $userData['password'] = Hash::make($row['contrasena']);
             
-            Log::info('Contraseña temporal generada para nuevo usuario', [
-                'email' => $row['correo_electronico'],
-                'password_length' => strlen($temporaryPassword)
-            ]);
-        } else {
-            Log::info('No se generó contraseña para usuario existente', [
-                'email' => $row['correo_electronico']
+            Log::info('Contraseña guardada para usuario', [
+                'email' => $row['correo_electronico'] ?? 'null',
+                'nickname' => $row['nombre_de_usuario'] ?? 'null',
+                'password_length' => strlen($userData['password'])
             ]);
         }
         
         Log::info('Datos preparados para usuario', [
-            'email' => $row['correo_electronico'],
+            'email' => $row['correo_electronico'] ?? 'null',
+            'nickname' => $row['nombre_de_usuario'] ?? 'null',
             'user_data' => array_keys($userData),
             'password_included' => isset($userData['password'])
         ]);

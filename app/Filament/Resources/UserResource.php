@@ -61,6 +61,8 @@ class UserResource extends Resource
     public static function form(Form $form): Form
     {
         return $form
+            // Desactivar validaciones HTML5 nativas del navegador
+            ->extraAttributes(['novalidate' => true])
             ->schema([
                 TextInput::make('name')
                     ->autofocus()
@@ -69,10 +71,19 @@ class UserResource extends Resource
                     ->label(__('Nombre')),
                 TextInput::make('email')
                     ->email()
-                    ->required()
+                    ->required(fn(Get $get): bool => empty($get('nickname')))
                     ->maxLength(200)
                     ->unique(static::getModel(), 'email', ignoreRecord: true)
-                    ->label(__('Correo electrónico')),
+                    ->label(__('Correo electrónico'))
+                    // Evitar validación nativa del navegador
+                    ->extraAttributes(['required' => false]),
+                TextInput::make('nickname')
+                    ->maxLength(200)
+                    ->required(fn(Get $get): bool => empty($get('email')))
+                    ->unique(static::getModel(), 'nickname', ignoreRecord: true)
+                    ->label(__('Nickname'))
+                    // Evitar validación nativa del navegador
+                    ->extraAttributes(['required' => false]),
                 Forms\Components\Select::make('roles')
                     ->relationship('roles', 'name')
                     // ->multiple()
@@ -81,31 +92,7 @@ class UserResource extends Resource
                     ->live(),
                 Forms\Components\Select::make('permissions')
                     ->relationship('permissions', 'name')
-                    // ->multiple()
                     ->label(__('Tipo de Convenio'))
-                    // ->rules([
-                    //     fn(Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
-                    //         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
-                    //         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
-
-                    //         $selectedRoles = (array)$get('roles');
-
-                    //         if ((in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles)) && empty($value)) {
-                    //             $fail(__('El Tipo de Convenio es obligatorio para este tipo de usuario.'));
-                    //         }
-                    //     }
-                    // ])
-                    // ->requiredIf('roles', function (Get $get) {
-                    //     $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
-                    //     $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
-
-                    //     $selectedRoles = (array)$get('roles');
-
-                    //     return in_array($agreementRoleId, $selectedRoles) || in_array($cafeRoleId, $selectedRoles);
-                    // })
-                    // ->validationMessages([
-                    //     'required_if' => __('El Tipo de Convenio es obligatorio para este tipo de usuario.'),
-                    // ])
                     ->required(function (Get $get) {
                         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
                         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
@@ -135,41 +122,134 @@ class UserResource extends Resource
                     )
                     ->required()
                     ->searchable(),
-                TextInput::make('password')
-                    ->password()
-                    ->dehydrateStateUsing(fn($state) => Hash::make($state))
-                    ->dehydrated(fn($state) => filled($state))
-                    ->required(fn(string $context): bool => $context === 'create')
-                    ->confirmed()
-                    ->minLength(8)
-                    ->maxLength(25)
-                    ->rule(function () {
-                        return function (string $attribute, $value, Closure $fail) {
-                            // Check lowercase
-                            if (!preg_match('/[a-z]/', $value)) {
-                                $fail(__('La contraseña debe contener al menos una letra minúscula.'));
-                            }
+                Forms\Components\Section::make(__('Información de contraseña'))
+                    ->description(__('La contraseña debe cumplir con los siguientes requisitos de seguridad:
+                    • Mínimo 8 caracteres y máximo 25
+                    • Al menos una letra minúscula (a-z)
+                    • Al menos una letra mayúscula (A-Z)
+                    • Al menos un número (0-9)
+                    • Al menos un carácter especial (@$!%*?&#)'))
+                    ->schema([
+                        // Campo para mostrar la contraseña en texto plano
+                        TextInput::make('plain_password')
+                            ->label(__('Contraseña actual (texto plano)'))
+                            ->disabled() // No se puede editar directamente
+                            ->dehydrated(false) // No se envía en el formulario
+                            ->visible(function ($record, $livewire) {
+                                // Mostrar si hay un registro existente con plain_password
+                                // o si se ha ingresado una nueva contraseña
+                                return ($record && !empty($record->plain_password)) ||
+                                    (!empty($livewire->data['plain_password']));
+                            })
+                            ->afterStateHydrated(function (TextInput $component, $record) {
+                                if ($record && $record->plain_password) {
+                                    $component->state($record->plain_password);
+                                }
+                            }),
 
-                            // Check uppercase
-                            if (!preg_match('/[A-Z]/', $value)) {
-                                $fail(__('La contraseña debe contener al menos una letra mayúscula.'));
-                            }
+                        // Añadimos un campo oculto para guardar la contraseña en texto plano
+                        Forms\Components\Hidden::make('plain_password_input')
+                            ->dehydrated(true),
 
-                            // Check number
-                            if (!preg_match('/[0-9]/', $value)) {
-                                $fail(__('La contraseña debe contener al menos un número.'));
-                            }
+                        TextInput::make('password')
+                            ->password()
+                            // Descripción de los requisitos de la contraseña
+                            ->helperText(__('Debe tener entre 8 y 25 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales (@$!%*?&#)'))
+                            // Modificado para guardar también en plain_password
+                            ->live() // Hacer el campo live para poder reaccionar a cambios
+                            ->afterStateUpdated(function (TextInput $component, $state, $livewire) {
+                                // Si se ingresó una nueva contraseña, actualizar el campo de visualización
+                                if (!empty($state)) {
+                                    \Log::info('Password field updated - afterStateUpdated', [
+                                        'state_length' => strlen($state),
+                                        'is_create' => !isset($livewire->record)
+                                    ]);
 
-                            // Check special character
-                            if (!preg_match('/[@$!%*?&#]/', $value)) {
-                                $fail(__('La contraseña debe contener al menos un carácter especial (@$!%*?&#).'));
-                            }
-                        };
-                    })
-                    ->label(__('Contraseña')),
-                TextInput::make('password_confirmation')
-                    ->password()
-                    ->label(__('Confirmar contraseña')),
+                                    // También actualizamos el campo oculto con la contraseña original
+                                    $livewire->data['plain_password_input'] = $state;
+
+                                    // Para mostrar en tiempo real
+                                    $livewire->data['plain_password'] = $state;
+                                }
+                            })
+                            ->dehydrateStateUsing(function ($state, $record = null) {
+                                // Log al inicio de dehydrateStateUsing
+                                \Log::info('Password dehydrateStateUsing - start', [
+                                    'state' => $state,
+                                    'record_id' => $record ? $record->id : null,
+                                    'is_creating' => $record === null
+                                ]);
+
+                                // Si hay un valor nuevo de contraseña
+                                if (filled($state)) {
+                                    // Solo guardamos plain_password si $record no es null
+                                    if ($record !== null) {
+                                        \Log::info('Saving plain_password to DB directly', [
+                                            'user_id' => $record->id,
+                                            'plain_password_length' => strlen($state)
+                                        ]);
+
+                                        try {
+                                            // Guardamos directamente en la base de datos para evitar que pase por los mutators del modelo
+                                            \DB::table('users')
+                                                ->where('id', $record->id)
+                                                ->update(['plain_password' => $state]);
+
+                                            \Log::info('Successfully saved plain_password');
+                                        } catch (\Exception $e) {
+                                            \Log::error('Error saving plain_password', [
+                                                'error' => $e->getMessage(),
+                                                'trace' => $e->getTraceAsString()
+                                            ]);
+                                        }
+                                    } else {
+                                        \Log::info('Record is null, not saving plain_password yet');
+                                    }
+
+                                    // Devolver el hash para password
+                                    $hashedPassword = Hash::make($state);
+                                    \Log::info('Returning hashed password', [
+                                        'hash_length' => strlen($hashedPassword)
+                                    ]);
+                                    return $hashedPassword;
+                                }
+
+                                \Log::info('No new password provided, returning null');
+                                return null; // No modificar la contraseña si está vacío
+                            })
+                            ->dehydrated(fn($state) => filled($state))
+                            ->required(fn(string $context): bool => $context === 'create')
+                            ->confirmed()
+                            ->minLength(8)
+                            ->maxLength(25)
+                            ->rule(function () {
+                                return function (string $attribute, $value, Closure $fail) {
+                                    // Check lowercase
+                                    if (!preg_match('/[a-z]/', $value)) {
+                                        $fail(__('La contraseña debe contener al menos una letra minúscula.'));
+                                    }
+
+                                    // Check uppercase
+                                    if (!preg_match('/[A-Z]/', $value)) {
+                                        $fail(__('La contraseña debe contener al menos una letra mayúscula.'));
+                                    }
+
+                                    // Check number
+                                    if (!preg_match('/[0-9]/', $value)) {
+                                        $fail(__('La contraseña debe contener al menos un número.'));
+                                    }
+
+                                    // Check special character
+                                    if (!preg_match('/[@$!%*?&#]/', $value)) {
+                                        $fail(__('La contraseña debe contener al menos un carácter especial (@$!%*?&#).'));
+                                    }
+                                };
+                            })
+                            ->label(__('Contraseña')),
+                        TextInput::make('password_confirmation')
+                            ->password()
+                            ->label(__('Confirmar contraseña')),
+                    ]),
                 Toggle::make('allow_late_orders')
                     ->label(__('Validar fecha y reglas de despacho'))
                     ->inline(false),
@@ -192,9 +272,15 @@ class UserResource extends Resource
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query
                             ->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('nickname', 'like', "%{$search}%");
                     })
-                    ->description(fn(User $user) => $user->email),
+                    ->description(fn(User $user) => $user->email ?: $user->nickname),
+                Tables\Columns\TextColumn::make('nickname')
+                    ->label(__('Nickname'))
+                    ->sortable()
+                    ->searchable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('roles.name')
                     ->label(__('Tipo de usuario'))
                     ->badge(),
@@ -222,7 +308,6 @@ class UserResource extends Resource
                     ->label(__('Tipo de Convenio')),
                 DateRangeFilter::make('created_at')
                     ->label(__('Fecha de creación')),
-
             ])
             ->headerActions([
                 Tables\Actions\ActionGroup::make([
@@ -478,7 +563,6 @@ class UserResource extends Resource
                             }
                         })
                         ->deselectRecordsAfterCompletion(),
-
                 ]),
             ])
             ->emptyStateActions([

@@ -21,7 +21,7 @@ class ProductResource extends JsonResource
             'description' => $this->description,
             'price' => '$'.number_format($this->price / 100, 2, ',', '.'), 
             // 'image' => env('APP_URL').Storage::url($this->image),
-            'image' => Storage::url($this->image),
+            'image' => $this->image ? Storage::url($this->image) : null,
             'category_id' => $this->category_id,
             'code' => $this->code,
             'active' => $this->active,

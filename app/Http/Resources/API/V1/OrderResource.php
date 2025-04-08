@@ -31,6 +31,7 @@ class OrderResource extends JsonResource
         $data = [
             'id' => $this->id,
             'total' => PriceFormatter::format($this->total),
+            'total_with_tax' => PriceFormatter::format($this->total_with_tax),
             'status' => $this->status,
             'user_id' => $this->user_id,
             'price_list_min' => $this->price_list_min,

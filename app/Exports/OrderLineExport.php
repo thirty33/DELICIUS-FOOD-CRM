@@ -46,9 +46,17 @@ class OrderLineExport implements
         'fecha_de_orden' => 'Fecha de Orden',
         'fecha_de_despacho' => 'Fecha de Despacho',
         'usuario' => 'Usuario',
+        'cliente' => 'Cliente',
+        'empresa' => 'Empresa',
+        'nombre_fantasia' => 'Nombre Fantasía',
         'codigo_de_producto' => 'Código de Producto',
+        'nombre_producto' => 'Nombre Producto',
+        'categoria_producto' => 'Categoría',
         'cantidad' => 'Cantidad',
-        'precio_unitario' => 'Precio Unitario',
+        'precio_neto' => 'Precio Neto',
+        'precio_con_impuesto' => 'Precio con Impuesto',
+        'precio_total_neto' => 'Precio Total Neto',
+        'precio_total_con_impuesto' => 'Precio Total con Impuesto',
         'parcialmente_programado' => 'Parcialmente Programado'
     ];
 
@@ -63,8 +71,11 @@ class OrderLineExport implements
 
     public function query()
     {
-        return OrderLine::with(['order.user', 'order.user.company.priceList', 'product'])
-            ->whereIn('id', $this->orderLineIds);
+        return OrderLine::with([
+            'order.user', 
+            'order.user.company', 
+            'product.category'
+        ])->whereIn('id', $this->orderLineIds);
     }
 
     public function chunkSize(): int
@@ -76,6 +87,10 @@ class OrderLineExport implements
     {
         try {
             $order = $orderLine->order;
+            $user = $order->user ?? null;
+            $company = $user->company ?? null;
+            $product = $orderLine->product ?? null;
+            $category = $product->category ?? null;
 
             // Formatear las fechas con comilla inicial
             $fechaOrden = '';
@@ -102,16 +117,33 @@ class OrderLineExport implements
                 }
             }
 
+            // Añadir comilla al inicio del código de pedido y código de producto
+            // para evitar que Excel los convierta a notación científica
+            $codigoPedido = ($order && $order->order_number) ? "'" . $order->order_number : null;
+            $codigoProducto = ($product && $product->code) ? "'" . $product->code : null;
+            
+            // Calcular precios totales
+            $precioTotalNeto = $orderLine->quantity * $orderLine->unit_price;
+            $precioTotalConImpuesto = $orderLine->quantity * $orderLine->unit_price_with_tax;
+
             // Mapeamos los datos usando las mismas claves que espera el importador
             return [
-                'codigo_de_pedido' => $order ? $order->order_number : null,
-                'estado' => $estadoOrden,  // Cambiado de 'estado_orden' a 'estado'
-                'fecha_de_orden' => $fechaOrden,  // Cambiado de 'fecha_orden' a 'fecha_de_orden'
-                'fecha_de_despacho' => $fechaDespacho,  // Cambiado de 'fecha_despacho' a 'fecha_de_despacho'
-                'usuario' => $order && $order->user ? $order->user->email : null,
-                'codigo_de_producto' => $orderLine->product ? $orderLine->product->code : null,  // Cambiado de 'codigo_producto' a 'codigo_de_producto'
+                'codigo_de_pedido' => $codigoPedido,
+                'estado' => $estadoOrden,
+                'fecha_de_orden' => $fechaOrden,
+                'fecha_de_despacho' => $fechaDespacho,
+                'usuario' => $user ? $user->email : null,
+                'cliente' => $user ? $user->name : null,
+                'empresa' => $company ? $company->name : null,
+                'nombre_fantasia' => $company ? $company->fantasy_name : null,
+                'codigo_de_producto' => $codigoProducto,
+                'nombre_producto' => $product ? $product->name : null,
+                'categoria_producto' => $category ? $category->name : null,
                 'cantidad' => $orderLine->quantity,
-                'precio_unitario' => '$' . number_format($orderLine->unit_price / 100, 2, '.', ','),
+                'precio_neto' => '$' . number_format($orderLine->unit_price / 100, 2, '.', ','),
+                'precio_con_impuesto' => '$' . number_format($orderLine->unit_price_with_tax / 100, 2, '.', ','),
+                'precio_total_neto' => '$' . number_format($precioTotalNeto / 100, 2, '.', ','),
+                'precio_total_con_impuesto' => '$' . number_format($precioTotalConImpuesto / 100, 2, '.', ','),
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0'
             ];
         } catch (\Exception $e) {
@@ -165,7 +197,6 @@ class OrderLineExport implements
      */
     public function failed(Throwable $e): void
     {
-
         $currentUser = exec('whoami');
 
         $error = [

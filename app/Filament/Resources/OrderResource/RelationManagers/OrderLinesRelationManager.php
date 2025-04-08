@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\OrderResource\RelationManagers;
 
+use App\Models\Parameter;
 use App\Models\Product;
 use App\Models\PriceListLine;
 use Filament\Forms;
@@ -68,12 +69,12 @@ class OrderLinesRelationManager extends RelationManager
                             ->searchable()
                             ->reactive()
                             ->afterStateUpdated(function (Forms\Components\Select $component, Forms\Set $set) {
-
                                 $productId = $component->getState();
                                 $product = Product::find($productId);
 
                                 if (!$product) {
                                     $set('unit_price', 0);
+                                    $set('unit_price_with_tax', 0);
                                     return;
                                 }
 
@@ -88,12 +89,23 @@ class OrderLinesRelationManager extends RelationManager
                                         ->first();
                                 }
 
+                                // Obtener el precio unitario sin impuesto
+                                $unitPrice = 0;
                                 if ($priceListLine) {
-                                    $set('unit_price', $priceListLine->unit_price / 100);
+                                    $unitPrice = $priceListLine->unit_price / 100;
                                 } else {
                                     $productPrice = $product->price ?? 0;
-                                    $set('unit_price', $productPrice > 0 ? $productPrice / 100 : 0);
+                                    $unitPrice = $productPrice > 0 ? $productPrice / 100 : 0;
                                 }
+
+                                // Obtener el impuesto
+                                $taxValue = Parameter::getValue(Parameter::TAX_VALUE, 0);
+                                
+                                // Calcular precio con impuesto
+                                $unitPriceWithTax = $unitPrice * (1 + $taxValue);
+
+                                $set('unit_price', $unitPrice);
+                                $set('unit_price_with_tax', $unitPriceWithTax);
                             }),
                         Forms\Components\TextInput::make('quantity')
                             ->numeric()
@@ -102,12 +114,26 @@ class OrderLinesRelationManager extends RelationManager
                             ->placeholder(__('Cantidad del producto'))
                             ->default(1),
                         MoneyInput::make('unit_price')
-                            ->label(__('Precio unitario'))
+                            ->label(__('Precio Neto'))
                             ->placeholder(__('Precio unitario del producto'))
                             ->currency('USD')
                             ->locale('en_US')
                             ->minValue(0)
-                            ->decimals(2),
+                            ->decimals(2)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                $taxValue = Parameter::getValue(Parameter::TAX_VALUE, 0);
+                                $unitPriceWithTax = $state * (1 + $taxValue);
+                                $set('unit_price_with_tax', $unitPriceWithTax);
+                            }),
+                        MoneyInput::make('unit_price_with_tax')
+                            ->label(__('Precio con impuesto'))
+                            ->placeholder(__('Precio con impuesto'))
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2)
+                            ->disabled(),
                         Forms\Components\Toggle::make('partially_scheduled')
                             ->label('Parcialmente agendado')
                             ->disabled()
@@ -132,15 +158,26 @@ class OrderLinesRelationManager extends RelationManager
                     ->label(__('Cantidad'))
                     ->sortable(),
                 MoneyColumn::make('unit_price')
-                    ->label(__('Precio unitario'))
+                    ->label(__('Precio Neto'))
+                    ->currency('USD')
+                    ->locale('en_US'),
+                MoneyColumn::make('unit_price_with_tax')
+                    ->label(__('Precio con impuesto'))
                     ->currency('USD')
                     ->locale('en_US'),
                 MoneyColumn::make('total_price')
-                    ->label(__('Precio total'))
+                    ->label(__('Precio total sin impuesto'))
                     ->currency('USD')
                     ->locale('en_US')
                     ->state(function (Model $record): float {
                         return $record->quantity * $record->unit_price;
+                    }),
+                MoneyColumn::make('total_price_with_tax')
+                    ->label(__('Precio total con impuesto'))
+                    ->currency('USD')
+                    ->locale('en_US')
+                    ->state(function (Model $record): float {
+                        return $record->quantity * $record->unit_price_with_tax;
                     }),
                 Tables\Columns\ToggleColumn::make('partially_scheduled')
                     ->label('Parcialmente agendado')

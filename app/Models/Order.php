@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 
 class Order extends Model
 {
@@ -25,7 +26,8 @@ class Order extends Model
 
     protected $appends = [
         'price_list_min',
-        'total'
+        'total',
+        'total_with_tax'
     ];
 
     /**
@@ -39,6 +41,32 @@ class Order extends Model
         static::creating(function ($order) {
             if (empty($order->order_number)) {
                 $order->order_number = self::generateOrderNumber();
+            }
+
+            if (empty($order->branch_id) && !empty($order->user_id)) {
+                try {
+                    $user = User::find($order->user_id);
+
+                    if ($user) {
+                        // Si el usuario tiene una sucursal asignada directamente
+                        if (!empty($user->branch_id)) {
+                            $order->branch_id = $user->branch_id;
+                        }
+                        // Si el usuario pertenece a una empresa con una sucursal predeterminada
+                        elseif ($user->company && $user->company->branches()->count() > 0) {
+                            // Obtener la primera sucursal de la empresa como predeterminada
+                            $branch = $user->company->branches()->first();
+                            if ($branch) {
+                                $order->branch_id = $branch->id;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error al asignar sucursal al pedido:', [
+                        'user_id' => $order->user_id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
         });
     }
@@ -84,6 +112,19 @@ class Order extends Model
 
         return Attribute::make(
             get: fn($value) => $hasBranch && $branchMinPrice ? $branchMinPrice : $this->user->company->priceList->min_price_order,
+        );
+    }
+
+    protected function TotalWithTax(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                $totalWithTax = 0;
+                foreach ($this->orderLines as $line) {
+                    $totalWithTax += $line->quantity * $line->unit_price_with_tax;
+                }
+                return $totalWithTax;
+            }
         );
     }
 }

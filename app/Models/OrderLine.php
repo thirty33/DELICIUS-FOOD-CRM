@@ -13,7 +13,8 @@ class OrderLine extends Model
         'unit_price',
         'order_id',
         'product_id',
-        'partially_scheduled'
+        'partially_scheduled',
+        'unit_price_with_tax',
     ];
 
     public function order(): BelongsTo
@@ -90,5 +91,63 @@ class OrderLine extends Model
 
             return null;
         }
+    }
+
+    /**
+     * Calcula el precio unitario con impuesto incluido
+     * 
+     * @param float $unitPrice Precio unitario sin impuesto
+     * @return float|null Precio unitario con impuesto o null si no se puede calcular
+     */
+    public static function calculateUnitPriceWithTax($unitPrice)
+    {
+        try {
+            if ($unitPrice === null) {
+                return null;
+            }
+
+            // Obtener el valor del impuesto desde los parámetros
+            $taxValue = Parameter::getValue(Parameter::TAX_VALUE);
+
+            if ($taxValue === null) {
+                Log::warning("No se encontró el parámetro 'tax value'");
+                return $unitPrice; // Retornar el precio sin impuesto si no hay valor de impuesto
+            }
+
+            // Calcular el precio con impuesto
+            return $unitPrice * (1 + $taxValue);
+        } catch (\Exception $e) {
+            Log::error('Error al calcular precio con impuesto:', [
+                'unit_price' => $unitPrice,
+                'error' => $e->getMessage()
+            ]);
+
+            return $unitPrice; // Retornar el precio sin impuesto en caso de error
+        }
+    }
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted()
+    {
+        static::creating(function (OrderLine $orderLine) {
+            // Si no tiene precio unitario y tiene producto y orden, calcularlo
+            if ($orderLine->unit_price === null && $orderLine->product_id && $orderLine->order_id) {
+                $orderLine->unit_price = self::calculateUnitPrice($orderLine->product_id, $orderLine->order_id);
+            }
+
+            // Calcular el precio con impuesto
+            if ($orderLine->unit_price !== null) {
+                $orderLine->unit_price_with_tax = self::calculateUnitPriceWithTax($orderLine->unit_price);
+            }
+        });
+
+        static::updating(function (OrderLine $orderLine) {
+            // Si se actualizó el precio unitario, actualizar también el precio con impuesto
+            if ($orderLine->isDirty('unit_price')) {
+                $orderLine->unit_price_with_tax = self::calculateUnitPriceWithTax($orderLine->unit_price);
+            }
+        });
     }
 }

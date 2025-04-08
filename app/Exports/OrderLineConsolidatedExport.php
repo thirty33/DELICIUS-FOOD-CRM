@@ -102,7 +102,7 @@ class OrderLineConsolidatedExport implements
             $columnKey = 'company_' . $company->id;
 
             // Usar registration_number como identificador
-            $displayName = !empty($company->registration_number) ? 'REG-' . $company->registration_number : 'EC' . $company->id;
+            $displayName = !empty($company->fantasy_name) ? $company->fantasy_name : $company->name;
 
             $this->excludedCompanies[$company->id] = [
                 'id' => $company->id,

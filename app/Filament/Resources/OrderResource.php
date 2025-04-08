@@ -78,7 +78,7 @@ class OrderResource extends Resource
                             ->searchable()
                             ->disabledOn('edit'),
                         MoneyInput::make('total')
-                            ->label(__('Total'))
+                            ->label(__('Total Neto'))
                             ->currency('USD')
                             ->locale('en_US')
                             ->minValue(0)
@@ -91,6 +91,13 @@ class OrderResource extends Resource
                                     }
                                 },
                             ])
+                            ->disabled(),
+                        MoneyInput::make('total_with_tax')
+                            ->label(__('Total con impuesto'))
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2)
                             ->disabled(),
                         MoneyInput::make('price_list_min')
                             ->label(__('Monto mínimo'))
@@ -149,6 +156,10 @@ class OrderResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Cliente'))
+                    ->sortable()
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('user.company.fantasy_name')
+                    ->label(__('Empresa'))
                     ->sortable()
                     ->searchable(),
                 MoneyColumn::make('total')
