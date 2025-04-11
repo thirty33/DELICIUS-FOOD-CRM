@@ -34,6 +34,9 @@ use Filament\Tables\Columns\TextColumn;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Jobs\SendCredentialsEmails;
+use Filament\Support\Enums\ActionSize;
+use Filament\Tables\Actions\ActionGroup as ActionsActionGroup;
 
 class UserResource extends Resource
 {
@@ -389,59 +392,102 @@ class UserResource extends Resource
                 ])->dropdownWidth(MaxWidth::ExtraSmall)
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->hidden(fn(User $record): bool => $record->id === auth()->id())
-                    ->before(function (User $record) {
-                        if ($record->id === auth()->id()) {
-                            Notification::make()
-                                ->title('Error')
-                                ->body('No puedes eliminar tu propio usuario.')
-                                ->danger()
-                                ->send();
+                ActionsActionGroup::make([
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->hidden(fn(User $record): bool => $record->id === auth()->id())
+                        ->before(function (User $record) {
+                            if ($record->id === auth()->id()) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('No puedes eliminar tu propio usuario.')
+                                    ->danger()
+                                    ->send();
+    
+                                return false;
+                            }
+                        })
+                        ->action(function (User $record) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación de usuario', [
+                                    'user_id' => $record->id,
+                                    'user_name' => $record->name
+                                ]);
+    
+                                // Crear array con el ID del usuario a eliminar
+                                $userIdToDelete = [$record->id];
+    
+                                // Dispatch el job para eliminar el usuario en segundo plano
+                                BulkDeleteUsers::dispatch($userIdToDelete);
+    
+                                Notification::make()
+                                    ->title('Eliminación en proceso')
+                                    ->body('El usuario será eliminado en segundo plano.')
+                                    ->success()
+                                    ->send();
+    
+                                Log::info('Job de eliminación de usuario enviado a la cola', [
+                                    'user_id' => $record->id
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de usuario', [
+                                    'user_id' => $record->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+    
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Ha ocurrido un error al preparar la eliminación del usuario: ' . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+    
+                                // Re-lanzar la excepción para que Filament la maneje
+                                throw $e;
+                            }
+                        }),
+                    Tables\Actions\Action::make('send_credentials')
+                        ->label('Enviar credenciales')
+                        ->icon('heroicon-o-envelope')
+                        ->color('info')
+                        ->action(function (User $record) {
+                            try {
+                                // Crear array con el ID del usuario
+                                $userIdToSend = [$record->id];
+    
+                                // Dispatch el job para enviar el correo en segundo plano
+                                SendCredentialsEmails::dispatch($userIdToSend);
+    
+                                Notification::make()
+                                    ->title('Envío en proceso')
+                                    ->body('Las credenciales serán enviadas en segundo plano.')
+                                    ->success()
+                                    ->send();
+    
+                                Log::info('Job de envío de credenciales enviado a la cola', [
+                                    'user_id' => $record->id
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar envío de credenciales', [
+                                    'user_id' => $record->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+    
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Ha ocurrido un error al preparar el envío de credenciales: ' . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
 
-                            return false;
-                        }
-                    })
-                    ->action(function (User $record) {
-                        try {
-                            Log::info('Iniciando proceso de eliminación de usuario', [
-                                'user_id' => $record->id,
-                                'user_name' => $record->name
-                            ]);
-
-                            // Crear array con el ID del usuario a eliminar
-                            $userIdToDelete = [$record->id];
-
-                            // Dispatch el job para eliminar el usuario en segundo plano
-                            BulkDeleteUsers::dispatch($userIdToDelete);
-
-                            Notification::make()
-                                ->title('Eliminación en proceso')
-                                ->body('El usuario será eliminado en segundo plano.')
-                                ->success()
-                                ->send();
-
-                            Log::info('Job de eliminación de usuario enviado a la cola', [
-                                'user_id' => $record->id
-                            ]);
-                        } catch (\Exception $e) {
-                            Log::error('Error al preparar eliminación de usuario', [
-                                'user_id' => $record->id,
-                                'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
-                            ]);
-
-                            Notification::make()
-                                ->title('Error')
-                                ->body('Ha ocurrido un error al preparar la eliminación del usuario: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
-
-                            // Re-lanzar la excepción para que Filament la maneje
-                            throw $e;
-                        }
-                    }),
+                ])
+                ->label('Acciones')
+                ->icon('heroicon-m-ellipsis-vertical')
+                ->size(ActionSize::Small)
+                ->color('primary')
+                ->button()
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -558,6 +604,54 @@ class UserResource extends Resource
                                 Notification::make()
                                     ->title('Error')
                                     ->body('Error al iniciar la exportación')
+                                    ->danger()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('send_credentials_bulk')
+                        ->label('Enviar credenciales')
+                        ->icon('heroicon-o-envelope')
+                        ->color('info')
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de envío masivo de credenciales', [
+                                    'total_records' => $records->count(),
+                                    'user_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de los usuarios seleccionados
+                                $userIds = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para enviar los correos en segundo plano
+                                if (!empty($userIds)) {
+                                    SendCredentialsEmails::dispatch($userIds);
+
+                                    Notification::make()
+                                        ->title('Envío en proceso')
+                                        ->body('Las credenciales de los usuarios seleccionados serán enviadas en segundo plano.')
+                                        ->success()
+                                        ->send();
+
+                                    Log::info('Job de envío masivo de credenciales enviado a la cola', [
+                                        'user_ids' => $userIds
+                                    ]);
+                                } else {
+                                    Notification::make()
+                                        ->title('Información')
+                                        ->body('No hay usuarios seleccionados para enviar credenciales.')
+                                        ->info()
+                                        ->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar envío masivo de credenciales', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Ha ocurrido un error al preparar el envío masivo de credenciales: ' . $e->getMessage())
                                     ->danger()
                                     ->send();
                             }

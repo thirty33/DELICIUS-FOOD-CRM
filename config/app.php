@@ -123,6 +123,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
-    'TEST_IMAGE_PATH' => env('TEST_IMAGE_PATH', '')
+    'TEST_IMAGE_PATH' => env('TEST_IMAGE_PATH', ''),
+    'LOGO_URL' => env('LOGO_URL', '')
 
 ];

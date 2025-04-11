@@ -34,7 +34,11 @@ use Illuminate\Support\Facades\Log;
 use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
 use App\Imports\OrderLinesImport;
 use App\Jobs\DeleteOrders;
+use App\Jobs\SendOrdersEmails;
 use App\Models\ImportProcess;
+use Filament\Actions\ActionGroup;
+use Filament\Support\Enums\ActionSize;
+use Filament\Tables\Actions\ActionGroup as ActionsActionGroup;
 use Maatwebsite\Excel\Facades\Excel;
 
 class OrderResource extends Resource
@@ -157,12 +161,13 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Cliente'))
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn(Order $order) => $order->user->email ?: $order->user->nickname),
                 Tables\Columns\TextColumn::make('user.company.fantasy_name')
                     ->label(__('Empresa'))
                     ->sortable()
                     ->searchable(),
-                MoneyColumn::make('total')
+                MoneyColumn::make('total_with_tax')
                     ->label(__('Total'))
                     ->currency('USD')
                     ->locale('en_US'),
@@ -205,46 +210,87 @@ class OrderResource extends Resource
                     ->options(OrderStatus::getSelectOptions())
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->action(function (Order $record) {
-                        try {
-                            Log::info('Iniciando proceso de eliminación de orden', [
-                                'order_id' => $record->id,
-                                'client' => $record->user->name ?? 'N/A'
-                            ]);
+                ActionsActionGroup::make([
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make()
+                        ->action(function (Order $record) {
+                            try {
+                                Log::info('Iniciando proceso de eliminación de orden', [
+                                    'order_id' => $record->id,
+                                    'client' => $record->user->name ?? 'N/A'
+                                ]);
 
-                            // Crear array con el ID de la orden a eliminar
-                            $orderIdToDelete = [$record->id];
+                                // Crear array con el ID de la orden a eliminar
+                                $orderIdToDelete = [$record->id];
 
-                            // Dispatch el job para eliminar la orden en segundo plano
-                            DeleteOrders::dispatch($orderIdToDelete);
+                                // Dispatch el job para eliminar la orden en segundo plano
+                                DeleteOrders::dispatch($orderIdToDelete);
 
-                            self::makeNotification(
-                                'Eliminación en proceso',
-                                'La orden será eliminada en segundo plano.'
-                            )->send();
+                                self::makeNotification(
+                                    'Eliminación en proceso',
+                                    'La orden será eliminada en segundo plano.'
+                                )->send();
 
-                            Log::info('Job de eliminación de orden enviado a la cola', [
-                                'order_id' => $record->id
-                            ]);
-                        } catch (\Exception $e) {
-                            Log::error('Error al preparar eliminación de orden', [
-                                'order_id' => $record->id,
-                                'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
-                            ]);
+                                Log::info('Job de eliminación de orden enviado a la cola', [
+                                    'order_id' => $record->id
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar eliminación de orden', [
+                                    'order_id' => $record->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
 
-                            self::makeNotification(
-                                'Error',
-                                'Ha ocurrido un error al preparar la eliminación de la orden: ' . $e->getMessage(),
-                                'danger'
-                            )->send();
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar la eliminación de la orden: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
 
-                            // Re-lanzar la excepción para que Filament la maneje
-                            throw $e;
-                        }
-                    }),
+                                // Re-lanzar la excepción para que Filament la maneje
+                                throw $e;
+                            }
+                        }),
+                    Tables\Actions\Action::make('send_order_email')
+                        ->label('Enviar correo de pedido')
+                        ->icon('heroicon-o-envelope')
+                        ->color('info')
+                        ->action(function (Order $record) {
+                            try {
+                                // Crear array con el ID de la orden
+                                $orderIdToSend = [$record->id];
+
+                                // Dispatch el job para enviar el correo en segundo plano
+                                SendOrdersEmails::dispatch($orderIdToSend);
+
+                                self::makeNotification(
+                                    'Envío en proceso',
+                                    'El correo del pedido será enviado en segundo plano.'
+                                )->send();
+
+                                Log::info('Job de envío de correo de pedido enviado a la cola', [
+                                    'order_id' => $record->id
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar envío de correo de pedido', [
+                                    'order_id' => $record->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar el envío del correo: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        }),
+                ])
+                    ->label('Acciones')
+                    ->icon('heroicon-m-ellipsis-vertical')
+                    ->size(ActionSize::Small)
+                    ->color('primary')
+                    ->button()
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -434,6 +480,52 @@ class OrderResource extends Resource
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al preparar la eliminación de órdenes: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('send_orders_emails_bulk')
+                        ->label('Enviar correos de pedidos')
+                        ->icon('heroicon-o-envelope')
+                        ->color('info')
+                        ->action(function (Collection $records) {
+                            try {
+                                Log::info('Iniciando proceso de envío masivo de correos de pedidos', [
+                                    'total_records' => $records->count(),
+                                    'order_ids' => $records->pluck('id')->toArray()
+                                ]);
+
+                                // Obtener los IDs de los pedidos seleccionados
+                                $orderIds = $records->pluck('id')->toArray();
+
+                                // Dispatch el job para enviar los correos en segundo plano
+                                if (!empty($orderIds)) {
+                                    SendOrdersEmails::dispatch($orderIds);
+
+                                    self::makeNotification(
+                                        'Envío en proceso',
+                                        'Los correos de los pedidos seleccionados serán enviados en segundo plano.'
+                                    )->send();
+
+                                    Log::info('Job de envío masivo de correos de pedidos enviado a la cola', [
+                                        'order_ids' => $orderIds
+                                    ]);
+                                } else {
+                                    self::makeNotification(
+                                        'Información',
+                                        'No hay pedidos seleccionados para enviar correos.'
+                                    )->send();
+                                }
+                            } catch (\Exception $e) {
+                                Log::error('Error al preparar envío masivo de correos de pedidos', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al preparar el envío masivo de correos: ' . $e->getMessage(),
                                     'danger'
                                 )->send();
                             }
