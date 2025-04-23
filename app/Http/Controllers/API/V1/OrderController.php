@@ -23,6 +23,7 @@ use App\Models\Order;
 use App\Models\PriceListLine;
 use App\Http\Requests\API\V1\Order\OrderRequest;
 use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
+use App\Http\Requests\API\V1\Order\OrderByIdRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
 use App\Http\Requests\API\V1\Order\OrderListRequest;
 use App\Http\Resources\API\V1\OrderResourceCollection;
@@ -69,7 +70,7 @@ class OrderController extends Controller
         }
 
         $orders = $ordersQuery->orderBy('dispatch_date', 'desc')->paginate(10);
-        
+
         return ApiResponseService::success(
             (new OrderResourceCollection($orders))->withMenu(),
             'Orders retrieved successfully',
@@ -91,6 +92,25 @@ class OrderController extends Controller
             ->whereDay('dispatch_date', '=', $day)
             ->whereMonth('dispatch_date', '=', $month)
             ->whereYear('dispatch_date', '=', $year)
+            ->first();
+
+        if (!$order) {
+            return ApiResponseService::notFound('Order not found');
+        }
+
+        return ApiResponseService::success(
+            new OrderResource($order),
+            'Order retrieved successfully',
+        );
+    }
+
+    public function showById(OrderByIdRequest $request, string $id): JsonResponse
+    {
+        $order = Order::with([
+            'orderLines.product.category.subcategories',
+        ])
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
             ->first();
 
         if (!$order) {

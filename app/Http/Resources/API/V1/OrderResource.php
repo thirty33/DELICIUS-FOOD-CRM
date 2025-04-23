@@ -39,6 +39,7 @@ class OrderResource extends JsonResource
             'dispatch_date' => DateTimeHelper::formatDateReadable($this->dispatch_date),
             'created_date' => DateTimeHelper::formatDateReadable($this->created_at),
             'alternative_address' => $this->alternative_address,
+            'address' => $this->user->branch->address,
             'order_lines' => OrderLineResource::collection($this->whenLoaded('orderLines')),
         ];
 

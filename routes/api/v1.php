@@ -48,6 +48,8 @@ Route::prefix('categories')->middleware('auth:sanctum')->group(function () {
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::get('get-order/{date}', [OrderController::class, 'show'])
         ->name('orders.show');
+    Route::get('get-order-by-id/{id}', [OrderController::class, 'showById'])
+        ->name('orders.get-order-by-id');
     Route::get('get-orders', [OrderController::class, 'index'])
         ->name('orders.index');
     Route::post('create-or-update-order/{date}', [OrderController::class, 'update'])
@@ -82,19 +84,19 @@ Route::get('/preview-order-email', function (Request $request) {
     // Obtenemos los parámetros
     $email = $request->query('email', 'contact_convenio_consolidado@example.com');
     $orderId = $request->query('order_id');
-    
+
     // Primero buscamos al usuario
     $user = User::where('email', $email)->first();
-    
+
     // Si no se encuentra el usuario, mostrar un mensaje de error
     if (!$user) {
         return "Usuario con email {$email} no encontrado. Por favor especifica un email válido.";
     }
-    
+
     // Si se proporcionó un ID de orden específico, lo usamos
     if ($orderId) {
         $order = Order::find($orderId);
-        
+
         // Verificamos que la orden pertenezca al usuario
         if (!$order || $order->user_id != $user->id) {
             return "Orden #{$orderId} no encontrada o no pertenece al usuario {$email}";
@@ -102,13 +104,13 @@ Route::get('/preview-order-email', function (Request $request) {
     } else {
         // Si no se proporcionó ID, buscamos la primera orden del usuario
         $order = Order::where('user_id', $user->id)->first();
-        
+
         // Si el usuario no tiene órdenes
         if (!$order) {
             return "El usuario {$email} no tiene ninguna orden registrada.";
         }
     }
-    
+
     // Retornar el mailable directamente para verlo en el navegador
     return new OrderEmail($order);
 });
