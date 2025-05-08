@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "af5856f92091a4925a3b64ddacc5d907",
+    "content-hash": "b330eda8beccde4f51d2da508ddd6149",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -1442,6 +1442,75 @@
                 }
             ],
             "time": "2024-10-09T13:47:03+00:00"
+        },
+        {
+            "name": "dreamonkey/laravel-cloudfront-url-signer",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/dreamonkey/laravel-cloudfront-url-signer.git",
+                "reference": "b0129b0fb6de97f06b945ca227a838d16fcfb1c4"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/dreamonkey/laravel-cloudfront-url-signer/zipball/b0129b0fb6de97f06b945ca227a838d16fcfb1c4",
+                "reference": "b0129b0fb6de97f06b945ca227a838d16fcfb1c4",
+                "shasum": ""
+            },
+            "require": {
+                "aws/aws-sdk-php": "^3.52",
+                "illuminate/support": "^6.0|^7.0|^8.0|^9.0|^10.0|^11.0",
+                "php": "^7.3.0|^8.0"
+            },
+            "require-dev": {
+                "orchestra/testbench": "^6.0|^8.0|^9.0",
+                "phpunit/phpunit": "^8.0|^9.0|^10.5"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "CloudFrontUrlSigner": "Dreamonkey\\CloudFrontUrlSigner\\Facades\\CloudFrontUrlSigner"
+                    },
+                    "providers": [
+                        "Dreamonkey\\CloudFrontUrlSigner\\CloudFrontUrlSignerServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "files": [
+                    "src/helpers.php"
+                ],
+                "psr-4": {
+                    "Dreamonkey\\CloudFrontUrlSigner\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Paolo Caleffi",
+                    "email": "p.caleffi@dreamonkey.com",
+                    "homepage": "https://dreamonkey.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Laravel 5.6+ wrapper around CloudFront canned signed URLs",
+            "homepage": "https://github.com/dreamonkey/laravel-cloudfront-url-signer",
+            "keywords": [
+                "cloudfront",
+                "dreamonkey",
+                "laravel-cloudfront-url-signer",
+                "private content"
+            ],
+            "support": {
+                "issues": "https://github.com/dreamonkey/laravel-cloudfront-url-signer/issues",
+                "source": "https://github.com/dreamonkey/laravel-cloudfront-url-signer/tree/master"
+            },
+            "time": "2024-08-08T14:20:29+00:00"
         },
         {
             "name": "eduard9969/blade-polaris-icons",
@@ -11560,7 +11629,9 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "dreamonkey/laravel-cloudfront-url-signer": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

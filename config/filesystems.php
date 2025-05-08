@@ -56,7 +56,7 @@ return [
             'throw' => false,
             'throw' => true,
             'report' => true,
-            'visibility' => 'public',
+            'visibility' => 'private',
             'options' => [
                 'CacheControl' => 'max-age=3600'
             ],

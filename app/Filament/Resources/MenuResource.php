@@ -173,6 +173,7 @@ class MenuResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('file')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->maxSize(10240)
                                 ->maxFiles(1)
                                 ->directory('menus-imports')
@@ -240,6 +241,7 @@ class MenuResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('file')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->maxSize(10240)
                                 ->maxFiles(1)
                                 ->directory('menu-categories-imports')

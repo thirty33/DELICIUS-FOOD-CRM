@@ -111,6 +111,7 @@ class CategoryResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('file')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->maxSize(10240)
                                 ->maxFiles(1)
                                 ->directory('categories-imports')
@@ -167,6 +168,7 @@ class CategoryResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('file')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->maxSize(10240)
                                 ->maxFiles(1)
                                 ->directory('category-lines-imports')

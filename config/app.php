@@ -124,6 +124,7 @@ return [
     ],
 
     'TEST_IMAGE_PATH' => env('TEST_IMAGE_PATH', ''),
-    'LOGO_URL' => env('LOGO_URL', '')
+    'LOGO_URL' => env('LOGO_URL', ''),
+    'CLOUDFRONT_URL' => env('CLOUDFRONT_URL', ''),
 
 ];

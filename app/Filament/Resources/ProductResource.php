@@ -63,7 +63,9 @@ class ProductResource extends Resource
                     ->image()
                     ->maxSize(4096)
                     ->placeholder(__('Imagen del producto'))
-                    ->columnSpanFull(),
+                    ->columnSpanFull()
+                    ->disk('s3')
+                    ->visibility('private'),
                 Forms\Components\Grid::make()
                     ->schema([
                         Forms\Components\TextInput::make('code')
@@ -135,6 +137,8 @@ class ProductResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
                     ->disk('s3')
+                    ->visibility('private')
+                    ->visibility('private')
                     ->label(__('Imagen')),
                 Tables\Columns\TextColumn::make('code')
                     ->label(__('Código'))
@@ -175,6 +179,7 @@ class ProductResource extends Resource
                         ->form([
                             Forms\Components\FileUpload::make('file')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->maxSize(10240)
                                 ->maxFiles(1)
                                 ->directory('products-imports')
@@ -231,6 +236,7 @@ class ProductResource extends Resource
                             Forms\Components\FileUpload::make('images')
                                 ->label('Imágenes')
                                 ->disk('s3')
+                                ->visibility('private')
                                 ->multiple()
                                 ->storeFileNamesIn('attachment_file_names')
                                 ->image()

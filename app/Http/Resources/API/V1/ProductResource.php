@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\API\V1;
 
+use App\Facades\ImageSigner;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -20,8 +21,7 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'price' => '$'.number_format($this->price / 100, 2, ',', '.'), 
-            // 'image' => env('APP_URL').Storage::url($this->image),
-            'image' => $this->image ? Storage::url($this->image) : null,
+            'image' => $this->image ? ImageSigner::getSignedUrl($this->image, 1)['signed_url'] : null,
             'category_id' => $this->category_id,
             'code' => $this->code,
             'active' => $this->active,
