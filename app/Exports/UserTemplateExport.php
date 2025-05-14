@@ -19,7 +19,9 @@ class UserTemplateExport implements FromArray, WithStyles, ShouldAutoSize, WithH
         'sucursal' => 'Sucursal',
         'validar_fecha_y_reglas_de_despacho' => 'Validar Fecha y Reglas de Despacho',
         'validar_precio_minimo' => 'Validar Precio Mínimo',
-        'validar_reglas_de_subcategoria' => 'Validar Reglas de Subcategoría'
+        'validar_reglas_de_subcategoria' => 'Validar Reglas de Subcategoría',
+        'nombre_de_usuario' => 'Nombre de Usuario',
+        'contrasena' => 'Contraseña',
     ];
 
     public function array(): array
