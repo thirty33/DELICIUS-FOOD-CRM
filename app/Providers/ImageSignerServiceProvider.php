@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Decorators\ProductImageSignerDecorator;
 use App\Services\ImageSignerService;
 use Illuminate\Support\ServiceProvider;
 
@@ -13,7 +14,7 @@ class ImageSignerServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('image-signer', function ($app) {
-            return new ImageSignerService();
+            return new ProductImageSignerDecorator(new ImageSignerService());
         });
 
         $this->app->alias('image-signer', \App\Facades\ImageSigner::class);

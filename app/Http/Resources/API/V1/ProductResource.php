@@ -21,7 +21,7 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'price' => '$'.number_format($this->price / 100, 2, ',', '.'), 
-            'image' => $this->image ? ImageSigner::getSignedUrl($this->image, 1)['signed_url'] : null,
+            'image' => $this->image ? ImageSigner::getSignedUrl($this->image, 365)['signed_url'] : null,
             'category_id' => $this->category_id,
             'code' => $this->code,
             'active' => $this->active,
