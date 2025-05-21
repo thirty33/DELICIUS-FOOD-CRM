@@ -36,6 +36,8 @@ class MenuController extends Controller
             $query->where('max_order_date', '>', Carbon::now());
         }
         
+        $query->orderBy('publication_date', 'asc');
+        
         $menus = $query->paginate();
     
         return ApiResponseService::success(

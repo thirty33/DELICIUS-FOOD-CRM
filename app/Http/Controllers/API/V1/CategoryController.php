@@ -16,6 +16,7 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Enums\Weekday;
+use Illuminate\Support\Facades\Log;
 
 class CategoryController extends Controller
 {
@@ -29,7 +30,13 @@ class CategoryController extends Controller
 
         $weekdayInEnglish = Weekday::fromSpanish($weekday);
 
-
+        Log::info("Weekday value before conversion:", [
+            'menu->publication_date' => $menu->publication_date,
+            '$publicationDate' => $publicationDate,
+            'weekday' => $weekday,
+            '$weekdayInEnglish' => $weekdayInEnglish
+        ]);
+        
         $query = CategoryMenu::with([
             'category' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->whereHas('products', function ($priceListQuery) use ($user) {

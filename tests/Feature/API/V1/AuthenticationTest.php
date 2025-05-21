@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 use App\Models\User;
 
+#[Group('api:v1')]
 #[Group('api:v1:auth')]
 class AuthenticationTest extends TestCase
 {
