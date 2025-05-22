@@ -183,51 +183,50 @@ class MenusImport implements
                     );
                 }
 
-                // Validar título único excepto para el registro actual
-                // if (isset($row['titulo'])) {
-                //     $exists = Menu::where('title', $row['titulo'])->exists();
-
-                //     if ($exists) {
-                //         $validator->errors()->add(
-                //             "{$index}.titulo",
-                //             'Ya existe un menú con este título.'
-                //         );
-                //     }
-                // }
-
                 // Validar la combinación única de fecha-rol-permiso-activo
-                if (isset($row['fecha_de_despacho'], $row['tipo_de_usuario'], $row['tipo_de_convenio'])) {
+                if (isset($row['fecha_de_despacho'], $row['tipo_de_usuario'], $row['tipo_de_convenio'], $row['fecha_hora_maxima_pedido'])) {
                     try {
-
+                        // Process publication date
                         $dateValue = $row['fecha_de_despacho'];
                         if (substr($dateValue, 0, 1) === "'") {
                             $dateValue = substr($dateValue, 1);
                         }
-
                         $publicationDate = Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
+                        
+                        // Process max order date
+                        $maxOrderDateValue = $row['fecha_hora_maxima_pedido'];
+                        if (substr($maxOrderDateValue, 0, 1) === "'") {
+                            $maxOrderDateValue = substr($maxOrderDateValue, 1);
+                        }
+                        $maxOrderDate = $this->parseWithMultipleFormats($maxOrderDateValue, $this->dateTimeFormats);
+                        $maxOrderDateFormatted = $maxOrderDate ? $maxOrderDate->format('Y-m-d H:i:s') : null;
+                        
+                        // Get active status
                         $active = $this->convertToBoolean($row['activo'] ?? true);
-
+                
+                        // Find role and permission
                         $role = Role::where('name', $row['tipo_de_usuario'])->first();
                         $permission = Permission::where('name', $row['tipo_de_convenio'])->first();
-
-                        if ($role && $permission) {
+                
+                        if ($role && $permission && $maxOrderDate) {
                             $duplicate = Menu::where('publication_date', $publicationDate)
                                 ->where('role_id', $role->id)
                                 ->where('permissions_id', $permission->id)
                                 ->where('active', $active)
+                                ->where('max_order_date', $maxOrderDateFormatted)
                                 ->exists();
-
+                
                             if ($duplicate) {
                                 $validator->errors()->add(
                                     "{$index}.combinacion",
-                                    'Ya existe un menú con la misma combinación de Fecha de despacho, Tipo de usuario, Tipo de Convenio y estado Activo.'
+                                    'Ya existe un menú con la misma combinación de Fecha de despacho, Tipo de usuario, Tipo de Convenio, estado Activo y Fecha hora máxima de pedido.'
                                 );
                             }
                         }
                     } catch (\Exception $e) {
                         $validator->errors()->add(
                             "{$index}.fecha_formato",
-                            'Error al validar la combinación única. Verifique el formato de la fecha de despacho (debe ser DD/MM/YYYY).'
+                            'Error al validar la combinación única. Verifique el formato de las fechas (fecha de despacho: DD/MM/YYYY, fecha hora máxima: DD/MM/YYYY HH:MM:SS o DD/MM/YYYY HH:MM).'
                         );
                     }
                 }

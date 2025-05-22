@@ -26,7 +26,7 @@ use Tests\TestCase;
 class CategoryMenuTest extends TestCase
 {
     use RefreshDatabase;
-    
+
     /**
      * Test that the categories endpoint returns category data when all prerequisites are met.
      */
@@ -43,14 +43,14 @@ class CategoryMenuTest extends TestCase
 
         // Set timezone
         $timezone = config('app.timezone', 'UTC');
-        
+
         // 1. Create Product and Category
         $category = Category::create([
             'name' => 'Test Category',
             'description' => 'Description for test category',
             'is_active' => true,
         ]);
-        
+
         $product = Product::create([
             'name' => 'Test Product',
             'description' => 'Description for test product',
@@ -64,7 +64,7 @@ class CategoryMenuTest extends TestCase
             'weight' => '1.0',
             'allow_sales_without_stock' => 1,
         ]);
-        
+
         // 2. Create CategoryLine for Wednesday (Miércoles)
         $categoryLine = CategoryLine::create([
             'category_id' => $category->id,
@@ -73,22 +73,22 @@ class CategoryMenuTest extends TestCase
             'maximum_order_time' => '14:00:00',
             'active' => true
         ]);
-        
+
         // 3. Set current date to Monday, May 19, 2025
         $testDate = Carbon::create(2025, 5, 19, 9, 0, 0, $timezone);
         $this->travelTo($testDate);
-        
+
         // 4. Create User, Company and associate them
         $role = Role::create(['name' => 'Convenio']);
         $permission = Permission::create(['name' => 'Consolidado']);
-        
+
         $user = User::factory()->create([
             'allow_late_orders' => true,
         ]);
-        
+
         $user->roles()->attach($role);
         $user->permissions()->attach($permission);
-        
+
         $company = Company::create([
             'name' => 'Test Company',
             'fantasy_name' => 'Test Company',
@@ -100,28 +100,28 @@ class CategoryMenuTest extends TestCase
             'active' => true,
             'tax_id' => '123456789',
         ]);
-        
+
         // Associate User with Company
         $user->company_id = $company->id;
         $user->save();
-        
+
         // 5. Create PriceList and associate Company with it
         $priceList = PriceList::create([
             'name' => 'Test Price List',
             'description' => 'Test price list description',
             'min_price_order' => 0,
         ]);
-        
+
         $company->price_list_id = $priceList->id;
         $company->save();
-        
+
         // 6. Create PriceListLine for Product
         $priceListLine = PriceListLine::create([
             'unit_price' => 1000, // $10.00
             'price_list_id' => $priceList->id,
             'product_id' => $product->id,
         ]);
-        
+
         // 7. Create Menu for May 20, 2025
         $menu = Menu::create([
             'title' => 'Menu for May 20, 2025',
@@ -132,7 +132,7 @@ class CategoryMenuTest extends TestCase
             'permissions_id' => $permission->id,
             'active' => true,
         ]);
-        
+
         // 8. Create CategoryMenu to associate Category with Menu
         $categoryMenu = CategoryMenu::create([
             'category_id' => $category->id,
@@ -141,17 +141,17 @@ class CategoryMenuTest extends TestCase
             'show_all_products' => true,
             'mandatory_category' => false,
         ]);
-        
+
         // Create auth token for testing
         $token = $user->createToken('test-token')->plainTextToken;
-        
+
         // 9. Make API request and verify response
         $response = $this->withToken($token)
             ->getJson(route('v1.categories.show', $menu->id));
-        
+
         // Debug response content if needed
         // \Log::info('API Response:', ['data' => $response->json()]);
-        
+
         // 10. Assert response structure
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -202,31 +202,483 @@ class CategoryMenuTest extends TestCase
                     'total'
                 ]
             ]);
-        
+
         // Verify we have at least one record in data.data
         $responseData = $response->json('data.data');
         $this->assertIsArray($responseData);
         $this->assertNotEmpty($responseData);
         $this->assertGreaterThanOrEqual(1, count($responseData));
-        
+
         // Verify the category data is correct
         $firstCategory = $responseData[0]['category'];
         $this->assertEquals($category->id, $firstCategory['id']);
         $this->assertEquals($category->name, $firstCategory['name']);
-        
+
         // Verify the product data is present
         $this->assertNotEmpty($firstCategory['products']);
         $this->assertEquals($product->id, $firstCategory['products'][0]['id']);
         $this->assertEquals($product->name, $firstCategory['products'][0]['name']);
-        
+
         // Verify the category line information is present
         $this->assertNotEmpty($firstCategory['category_lines']);
         $this->assertEquals(Weekday::WEDNESDAY->toSpanish(), $firstCategory['category_lines'][0]['weekday']);
-        
+
         // Verify the menu information is correct
         $this->assertEquals($menu->id, $responseData[0]['menu']['id']);
         $this->assertEquals($menu->title, $responseData[0]['menu']['title']);
-        
+
+        // Return to the present
+        $this->travelBack();
+    }
+
+    /**
+     * Test that the maximum_order_time message in category_lines is formatted correctly for each day of the week
+     */
+    #[Test]
+    public function category_menu_api_shows_correct_maximum_order_time_message_for_each_weekday(): void
+    {
+        // Set timezone and locale for consistent date formatting
+        $timezone = config('app.timezone', 'UTC');
+        Carbon::setLocale(config('app.locale'));
+
+        // 1. Create Product and Category
+        $category = Category::create([
+            'name' => 'Test Category',
+            'description' => 'Description for test category',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'name' => 'Test Product',
+            'description' => 'Description for test product',
+            'price' => 1000,
+            'category_id' => $category->id,
+            'code' => 'PROD-TEST',
+            'active' => 1,
+            'measure_unit' => 'UND',
+            'price_list' => 1000,
+            'stock' => 100,
+            'weight' => '1.0',
+            'allow_sales_without_stock' => 1,
+        ]);
+
+        // 2. Create CategoryLine for each day of the week with incremental preparation_days
+        $weekdays = [
+            Weekday::MONDAY->value => 1,
+            Weekday::TUESDAY->value => 2,
+            Weekday::WEDNESDAY->value => 3,
+            Weekday::THURSDAY->value => 4,
+            Weekday::FRIDAY->value => 5,
+            Weekday::SATURDAY->value => 6,
+            Weekday::SUNDAY->value => 7
+        ];
+
+        foreach ($weekdays as $weekdayValue => $preparationDay) {
+            CategoryLine::create([
+                'category_id' => $category->id,
+                'weekday' => $weekdayValue,
+                'preparation_days' => $preparationDay,
+                'maximum_order_time' => '14:00:00',
+                'active' => true
+            ]);
+        }
+
+        // 3. Create User, Company and associate them
+        $role = Role::create(['name' => 'Convenio']);
+        $permission = Permission::create(['name' => 'Consolidado']);
+
+        $user = User::factory()->create([
+            'allow_late_orders' => true,
+        ]);
+
+        $user->roles()->attach($role);
+        $user->permissions()->attach($permission);
+
+        $company = Company::create([
+            'name' => 'Test Company',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@example.com',
+            'phone_number' => '123456789',
+            'registration_number' => 'REG123456',
+            'description' => 'Test company description',
+            'active' => true,
+            'tax_id' => '123456789',
+        ]);
+
+        // Associate User with Company
+        $user->company_id = $company->id;
+        $user->save();
+
+        // 4. Create PriceList and associate Company with it
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'description' => 'Test price list description',
+            'min_price_order' => 0,
+        ]);
+
+        $company->price_list_id = $priceList->id;
+        $company->save();
+
+        // 5. Create PriceListLine for Product
+        PriceListLine::create([
+            'unit_price' => 1000,
+            'price_list_id' => $priceList->id,
+            'product_id' => $product->id,
+        ]);
+
+        // Create auth token for testing
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        // 6. Test each day of the week
+        $testDates = [
+            'Monday' => Carbon::create(2025, 5, 19, 9, 0, 0, $timezone),
+            'Tuesday' => Carbon::create(2025, 5, 20, 9, 0, 0, $timezone),
+            'Wednesday' => Carbon::create(2025, 5, 21, 9, 0, 0, $timezone),
+            'Thursday' => Carbon::create(2025, 5, 22, 9, 0, 0, $timezone),
+            'Friday' => Carbon::create(2025, 5, 23, 9, 0, 0, $timezone),
+            'Saturday' => Carbon::create(2025, 5, 24, 9, 0, 0, $timezone),
+            'Sunday' => Carbon::create(2025, 5, 25, 9, 0, 0, $timezone),
+        ];
+
+        // Days of the week to create menus for (0 = current day, 1 = next day, etc.)
+        $daysOffset = [0, 1, 2, 3, 4, 5, 6];
+
+        foreach ($testDates as $currentDayName => $testDate) {
+            // Travel to the test date
+            $this->travelTo($testDate);
+
+            // For each day of the current week, create a menu and test it
+            foreach ($daysOffset as $offset) {
+                // Create a menu for this day
+                $menuDate = $testDate->copy()->addDays($offset);
+                $menu = Menu::create([
+                    'title' => "Menu for {$menuDate->format('F j, Y')}",
+                    'description' => 'Test menu description',
+                    'publication_date' => $menuDate->format('Y-m-d'),
+                    'max_order_date' => $testDate->format('Y-m-d') . ' 14:00:00',
+                    'role_id' => $role->id,
+                    'permissions_id' => $permission->id,
+                    'active' => true,
+                ]);
+
+                // Create CategoryMenu to associate Category with Menu
+                CategoryMenu::create([
+                    'category_id' => $category->id,
+                    'menu_id' => $menu->id,
+                    'display_order' => 10,
+                    'show_all_products' => true,
+                    'mandatory_category' => false,
+                ]);
+
+                // Make API request
+                $response = $this->withToken($token)
+                    ->getJson(route('v1.categories.show', $menu->id));
+
+                // Assert response status
+                $response->assertStatus(200);
+
+                // Get the category_lines data
+                $responseData = $response->json('data.data');
+                $this->assertIsArray($responseData);
+                $this->assertNotEmpty($responseData);
+
+                $categoryLines = $responseData[0]['category']['category_lines'];
+                $this->assertNotEmpty($categoryLines);
+
+                // Determine the expected weekday for the menu
+                $menuDayName = $menuDate->isoFormat('dddd');
+                $menuDayNameCapitalized = ucfirst(strtolower($menuDayName));
+
+                // Verify the weekday name is correct
+                $this->assertEquals($menuDayNameCapitalized, $categoryLines[0]['weekday']);
+
+                // Get preparation days for the menu day
+                $menuDayWeekday = Weekday::fromSpanish($menuDayNameCapitalized);
+                $preparationDays = $weekdays[$menuDayWeekday->value];
+
+                // Calculate the order date by subtracting preparation days from the menu date
+                $orderDate = $menuDate->copy()->subDays($preparationDays);
+                $formattedDate = $orderDate->isoFormat('dddd D [de] MMMM [de] YYYY');
+
+                // Build expected message
+                $expectedMessage = "Disponible hasta el {$formattedDate} a las 14:00";
+
+                // Log for debugging if needed
+                Log::info("Testing menu for {$menuDayNameCapitalized}", [
+                    'current_day' => $currentDayName,
+                    'menu_date' => $menuDate->format('Y-m-d'),
+                    'preparation_days' => $preparationDays,
+                    'order_date' => $orderDate->format('Y-m-d'),
+                    'expected_message' => $expectedMessage,
+                    'actual_message' => $categoryLines[0]['maximum_order_time']
+                ]);
+
+                // Verify the maximum_order_time message
+                $this->assertEquals($expectedMessage, $categoryLines[0]['maximum_order_time']);
+
+                // Clean up - delete the menu for this test
+                $menu->delete();
+            }
+        }
+
+        // Return to the present
+        $this->travelBack();
+    }
+
+    /**
+     * Test that category_lines array is empty when all CategoryLine records have active=false
+     */
+    #[Test]
+    public function category_menu_api_returns_empty_category_lines_when_inactive(): void
+    {
+        // Set timezone and locale for consistent date formatting
+        $timezone = config('app.timezone', 'UTC');
+        Carbon::setLocale(config('app.locale'));
+
+        // 1. Create Product and Category
+        $category = Category::create([
+            'name' => 'Test Category',
+            'description' => 'Description for test category',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'name' => 'Test Product',
+            'description' => 'Description for test product',
+            'price' => 1000,
+            'category_id' => $category->id,
+            'code' => 'PROD-TEST',
+            'active' => 1,
+            'measure_unit' => 'UND',
+            'price_list' => 1000,
+            'stock' => 100,
+            'weight' => '1.0',
+            'allow_sales_without_stock' => 1,
+        ]);
+
+        // 2. Create CategoryLine but set active=false
+        CategoryLine::create([
+            'category_id' => $category->id,
+            'weekday' => Weekday::WEDNESDAY->value,
+            'preparation_days' => 1,
+            'maximum_order_time' => '14:00:00',
+            'active' => false // Set to inactive
+        ]);
+
+        // 3. Create User, Company and associate them
+        $role = Role::create(['name' => 'Convenio']);
+        $permission = Permission::create(['name' => 'Consolidado']);
+
+        $user = User::factory()->create([
+            'allow_late_orders' => true,
+        ]);
+
+        $user->roles()->attach($role);
+        $user->permissions()->attach($permission);
+
+        $company = Company::create([
+            'name' => 'Test Company',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@example.com',
+            'phone_number' => '123456789',
+            'registration_number' => 'REG123456',
+            'description' => 'Test company description',
+            'active' => true,
+            'tax_id' => '123456789',
+        ]);
+
+        // Associate User with Company
+        $user->company_id = $company->id;
+        $user->save();
+
+        // 4. Create PriceList and associate Company with it
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'description' => 'Test price list description',
+            'min_price_order' => 0,
+        ]);
+
+        $company->price_list_id = $priceList->id;
+        $company->save();
+
+        // 5. Create PriceListLine for Product
+        PriceListLine::create([
+            'unit_price' => 1000,
+            'price_list_id' => $priceList->id,
+            'product_id' => $product->id,
+        ]);
+
+        // Create auth token for testing
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        // 6. Set current date to Wednesday (which matches our CategoryLine's weekday)
+        $testDate = Carbon::create(2025, 5, 21, 9, 0, 0, $timezone); // Wednesday, May 21, 2025
+        $this->travelTo($testDate);
+
+        // 7. Create Menu for the same day
+        $menu = Menu::create([
+            'title' => "Menu for {$testDate->format('F j, Y')}",
+            'description' => 'Test menu description',
+            'publication_date' => $testDate->format('Y-m-d'),
+            'max_order_date' => $testDate->format('Y-m-d') . ' 14:00:00',
+            'role_id' => $role->id,
+            'permissions_id' => $permission->id,
+            'active' => true,
+        ]);
+
+        // 8. Create CategoryMenu to associate Category with Menu
+        CategoryMenu::create([
+            'category_id' => $category->id,
+            'menu_id' => $menu->id,
+            'display_order' => 10,
+            'show_all_products' => true,
+            'mandatory_category' => false,
+        ]);
+
+        // 9. Make API request
+        $response = $this->withToken($token)
+            ->getJson(route('v1.categories.show', $menu->id));
+
+        // 10. Assert response status
+        $response->assertStatus(200);
+
+        // 11. Get the category_lines data
+        $responseData = $response->json('data.data');
+        $this->assertIsArray($responseData);
+        $this->assertNotEmpty($responseData);
+
+        // 12. Verify category_lines array is empty
+        $categoryLines = $responseData[0]['category']['category_lines'];
+        $this->assertIsArray($categoryLines);
+        $this->assertEmpty($categoryLines);
+
+        // Return to the present
+        $this->travelBack();
+    }
+
+    /**
+     * Test that category_lines array is empty when no CategoryLine records exist
+     */
+    #[Test]
+    public function category_menu_api_returns_empty_category_lines_when_none_exist(): void
+    {
+        // Set timezone and locale for consistent date formatting
+        $timezone = config('app.timezone', 'UTC');
+        Carbon::setLocale(config('app.locale'));
+
+        // 1. Create Product and Category
+        $category = Category::create([
+            'name' => 'Test Category',
+            'description' => 'Description for test category',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'name' => 'Test Product',
+            'description' => 'Description for test product',
+            'price' => 1000,
+            'category_id' => $category->id,
+            'code' => 'PROD-TEST',
+            'active' => 1,
+            'measure_unit' => 'UND',
+            'price_list' => 1000,
+            'stock' => 100,
+            'weight' => '1.0',
+            'allow_sales_without_stock' => 1,
+        ]);
+
+        // 2. Skip creating any CategoryLine records
+
+        // 3. Create User, Company and associate them
+        $role = Role::create(['name' => 'Convenio']);
+        $permission = Permission::create(['name' => 'Consolidado']);
+
+        $user = User::factory()->create([
+            'allow_late_orders' => true,
+        ]);
+
+        $user->roles()->attach($role);
+        $user->permissions()->attach($permission);
+
+        $company = Company::create([
+            'name' => 'Test Company',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@example.com',
+            'phone_number' => '123456789',
+            'registration_number' => 'REG123456',
+            'description' => 'Test company description',
+            'active' => true,
+            'tax_id' => '123456789',
+        ]);
+
+        // Associate User with Company
+        $user->company_id = $company->id;
+        $user->save();
+
+        // 4. Create PriceList and associate Company with it
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'description' => 'Test price list description',
+            'min_price_order' => 0,
+        ]);
+
+        $company->price_list_id = $priceList->id;
+        $company->save();
+
+        // 5. Create PriceListLine for Product
+        PriceListLine::create([
+            'unit_price' => 1000,
+            'price_list_id' => $priceList->id,
+            'product_id' => $product->id,
+        ]);
+
+        // Create auth token for testing
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        // 6. Set current date
+        $testDate = Carbon::create(2025, 5, 21, 9, 0, 0, $timezone); // Wednesday, May 21, 2025
+        $this->travelTo($testDate);
+
+        // 7. Create Menu for the same day
+        $menu = Menu::create([
+            'title' => "Menu for {$testDate->format('F j, Y')}",
+            'description' => 'Test menu description',
+            'publication_date' => $testDate->format('Y-m-d'),
+            'max_order_date' => $testDate->format('Y-m-d') . ' 14:00:00',
+            'role_id' => $role->id,
+            'permissions_id' => $permission->id,
+            'active' => true,
+        ]);
+
+        // 8. Create CategoryMenu to associate Category with Menu
+        CategoryMenu::create([
+            'category_id' => $category->id,
+            'menu_id' => $menu->id,
+            'display_order' => 10,
+            'show_all_products' => true,
+            'mandatory_category' => false,
+        ]);
+
+        // 9. Make API request
+        $response = $this->withToken($token)
+            ->getJson(route('v1.categories.show', $menu->id));
+
+        // 10. Assert response status
+        $response->assertStatus(200);
+
+        // 11. Get the category_lines data
+        $responseData = $response->json('data.data');
+        $this->assertIsArray($responseData);
+        $this->assertNotEmpty($responseData);
+
+        // 12. Verify category_lines array is empty
+        $categoryLines = $responseData[0]['category']['category_lines'];
+        $this->assertIsArray($categoryLines);
+        $this->assertEmpty($categoryLines);
+
         // Return to the present
         $this->travelBack();
     }
