@@ -14,6 +14,7 @@ class PriceListLine extends Model
         'unit_price',
         'price_list_id',
         'product_id',
+        'active'
     ];
 
     protected $casts = [

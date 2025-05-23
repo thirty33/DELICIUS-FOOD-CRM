@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\API\V1\Category;
 
+use App\Enums\RoleName;
 use App\Models\Menu;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
@@ -16,16 +17,16 @@ class CategoryMenuRequest extends FormRequest
         $user = auth()->user();
         $menuId = $this->route('menu')->id;
 
-        if ($user->hasRole('Admin')) {
+        if ($user->hasRole(RoleName::ADMIN->value)) {
             return true;
         }
 
-        if ($user->hasRole('Café')) {
+        if ($user->hasRole(RoleName::CAFE->value)) {
             $menu = Menu::find($menuId);
-            return $menu->rol->name === 'Café';
+            return $menu->rol->name === RoleName::CAFE->value;
         }
 
-        if ($user->hasRole('Convenio')) {
+        if ($user->hasRole(RoleName::AGREEMENT->value)) {
             $menu = Menu::find($menuId);
             return $menu->permission && $user->hasPermission($menu->permission->name);
         }

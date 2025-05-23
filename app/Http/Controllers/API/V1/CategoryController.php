@@ -36,25 +36,28 @@ class CategoryController extends Controller
             'weekday' => $weekday,
             '$weekdayInEnglish' => $weekdayInEnglish
         ]);
-        
+
         $query = CategoryMenu::with([
             'category' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->whereHas('products', function ($priceListQuery) use ($user) {
                     $priceListQuery->whereHas('priceListLines', function ($subQuery) use ($user) {
-                        $subQuery->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
+                        $subQuery->where('active', true)
+                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('id', $user->company->price_list_id);
+                            });
                     });
                 });
                 $query->with(['products' => function ($query) use ($user) {
                     $query->whereHas('priceListLines', function ($subQuery) use ($user) {
-                        $subQuery->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
+                        $subQuery->where('active', true)
+                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('id', $user->company->price_list_id);
+                            });
                     })->with(['priceListLines' => function ($query) use ($user) {
-                        $query->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
+                        $query->where('active', true)
+                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('id', $user->company->price_list_id);
+                            });
                     }])
                         ->with(['ingredients']);
                 }]);
@@ -72,13 +75,15 @@ class CategoryController extends Controller
             'menu',
             'products' => function ($query) use ($user) {
                 $query->whereHas('priceListLines', function ($subQuery) use ($user) {
-                    $subQuery->whereHas('priceList', function ($priceListQuery) use ($user) {
-                        $priceListQuery->where('id', $user->company->price_list_id);
-                    });
+                    $subQuery->where('active', true)
+                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                            $priceListQuery->where('id', $user->company->price_list_id);
+                        });
                 })->with(['priceListLines' => function ($query) use ($user) {
-                    $query->whereHas('priceList', function ($priceListQuery) use ($user) {
-                        $priceListQuery->where('id', $user->company->price_list_id);
-                    });
+                    $query->where('active', true)
+                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                            $priceListQuery->where('id', $user->company->price_list_id);
+                        });
                 }])->with(['ingredients']);
             }
         ])
@@ -87,6 +92,7 @@ class CategoryController extends Controller
                 Product::whereIn(
                     'id',
                     PriceListLine::where('price_list_id', $user->company->price_list_id)
+                        ->where('active', true)  // Añadido filtro para PriceListLine activas
                         ->select('product_id')
                 )
                     ->select('category_id')

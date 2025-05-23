@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pelmered\FilamentMoneyField\Forms\Components\MoneyInput;
 use Pelmered\FilamentMoneyField\Tables\Columns\MoneyColumn;
 use App\Models\PriceListLine;
+use Filament\Forms\Components\Toggle;
 use Illuminate\Validation\Rules\Unique;
 
 class PriceListLinesRelationManager extends RelationManager
@@ -40,11 +41,6 @@ class PriceListLinesRelationManager extends RelationManager
                         Forms\Components\Select::make('product_id')
                             ->label(__('Producto'))
                             ->placeholder(__('Selecciona un producto'))
-                            // ->options(
-                            //     Product::query()
-                            //         ->orderBy('name')
-                            //         ->pluck('name', 'id')
-                            // )
                             ->relationship(
                                 name: 'product',
                                 titleAttribute: 'name'
@@ -62,7 +58,7 @@ class PriceListLinesRelationManager extends RelationManager
                                 'unique' => __('Este producto ya está en la lista de precios.'),
                             ])
                             ->searchable()
-                            ->getOptionLabelFromRecordUsing(fn (Model $record) => $record->title_product),
+                            ->getOptionLabelFromRecordUsing(fn(Model $record) => $record->title_product),
                         MoneyInput::make('unit_price')
                             ->label(__('Precio unitario'))
                             ->placeholder(__('Precio unitario del producto'))
@@ -70,7 +66,7 @@ class PriceListLinesRelationManager extends RelationManager
                             ->locale('en_US')
                             ->required()
                             ->minValue(0)
-                            ->decimals(2),
+                            ->decimals(2)
                     ])
             ]);
     }
@@ -94,6 +90,8 @@ class PriceListLinesRelationManager extends RelationManager
                     ->currency('USD')
                     ->locale('en_US')
                     ->decimals(2),
+                Tables\Columns\ToggleColumn::make('active')
+                    ->label(__('Activo'))
             ])
             ->filters([
                 //
