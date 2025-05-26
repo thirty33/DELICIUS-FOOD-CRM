@@ -89,11 +89,11 @@ class CompaniesAndUsersSeeder extends Seeder
         ]);
         
         $admin = User::firstOrCreate([
-            'email' => 'yonathan.martinez@deliciusfood.cl',
+            'email' => config('app.ADMIN_EMAIL'),
         ], [
             'name' => 'Yonathan Martinez',
             'company_id' => $company->id,
-            'password' => static::$password ??= Hash::make('Pssword123..$'),
+            'password' => static::$password ??= Hash::make(config('app.ADMIN_PASSWORD')),
             'branch_id' => $branch->id
         ]);
 
