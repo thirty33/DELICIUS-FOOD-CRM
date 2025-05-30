@@ -92,7 +92,7 @@ class CategoryController extends Controller
                 Product::whereIn(
                     'id',
                     PriceListLine::where('price_list_id', $user->company->price_list_id)
-                        ->where('active', true)  // Añadido filtro para PriceListLine activas
+                        ->where('active', true)
                         ->select('product_id')
                 )
                     ->select('category_id')
