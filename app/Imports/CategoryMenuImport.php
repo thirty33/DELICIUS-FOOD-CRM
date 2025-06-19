@@ -58,7 +58,7 @@ class CategoryMenuImport implements
 
     public function chunkSize(): int
     {
-        return 100;
+        return 200;
     }
 
     /**

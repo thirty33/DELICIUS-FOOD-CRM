@@ -404,7 +404,7 @@ class CategoryMenuTest extends TestCase
                 $formattedDate = $orderDate->isoFormat('dddd D [de] MMMM [de] YYYY');
 
                 // Build expected message
-                $expectedMessage = "Disponible hasta el {$formattedDate} a las 14:00";
+                $expectedMessage = "disponible hasta el {$formattedDate} a las 14:00";
 
                 // Log for debugging if needed
                 Log::info("Testing menu for {$menuDayNameCapitalized}", [

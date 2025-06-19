@@ -27,7 +27,7 @@ class DateTimeHelper
         $formattedTime = $dateTime->format('H:i');
 
         // Combinar todo en un texto legible
-        return "Disponible hasta el {$formattedDate} a las {$formattedTime}";
+        return "disponible hasta el {$formattedDate} a las {$formattedTime}";
     }
 
     public static function formatDateReadable($date): string
