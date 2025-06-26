@@ -26,6 +26,7 @@ use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
 use App\Http\Requests\API\V1\Order\OrderByIdRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
 use App\Http\Requests\API\V1\Order\OrderListRequest;
+use App\Http\Requests\API\V1\Order\UpdateOrderUserCommentRequest;
 use App\Http\Resources\API\V1\OrderResourceCollection;
 use App\Models\Menu;
 use App\Models\Product;
@@ -388,6 +389,35 @@ class OrderController extends Controller
             return ApiResponseService::success(
                 new OrderResource($this->getOrder($user->id, $carbonDate)),
                 'Order status updated successfully',
+            );
+        } catch (Exception $e) {
+            return ApiResponseService::unprocessableEntity('error', [
+                'message' => [$e->getMessage()],
+            ]);
+        }
+    }
+
+    public function updateUserComment(UpdateOrderUserCommentRequest $request, string $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            
+            // Find the order by ID and ensure it belongs to the authenticated user
+            $order = Order::where('id', $id)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if (!$order) {
+                return ApiResponseService::notFound('Order not found');
+            }
+
+            // Update the user comment
+            $order->user_comment = $request->validated()['user_comment'];
+            $order->save();
+
+            return ApiResponseService::success(
+                new OrderResource($order),
+                'Order user comment updated successfully'
             );
         } catch (Exception $e) {
             return ApiResponseService::unprocessableEntity('error', [

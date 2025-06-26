@@ -21,7 +21,12 @@ class Order extends Model
         'branch_id',
         'dispatch_date',
         'alternative_address',
-        'order_number'
+        'order_number',
+        'user_comment'
+    ];
+
+    protected $casts = [
+        'user_comment' => 'string',
     ];
 
     protected $appends = [

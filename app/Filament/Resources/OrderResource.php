@@ -141,6 +141,10 @@ class OrderResource extends Resource
                         Forms\Components\DateTimePicker::make('dispatch_date')
                             ->label(__('Fecha de despacho'))
                             ->disabledOn('create'),
+                        Forms\Components\Textarea::make('user_comment')
+                            ->label(__('Comentario de usuario'))
+                            ->maxLength(240)
+                            ->columnSpanFull(),
                     ])
             ]);
     }

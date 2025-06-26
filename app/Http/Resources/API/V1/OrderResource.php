@@ -41,6 +41,7 @@ class OrderResource extends JsonResource
             'alternative_address' => $this->alternative_address,
             'address' => $this->user->branch->address,
             'order_lines' => OrderLineResource::collection($this->whenLoaded('orderLines')),
+            'user_comment' => $this->user_comment
         ];
 
         if ($this->withMenu) {

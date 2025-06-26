@@ -55,6 +55,8 @@ Route::prefix('orders')->middleware(['auth:sanctum', ThrottleRequests::with(60, 
         ->name('orders.update_status');
     Route::post('partially-schedule-order/{date}', [OrderController::class, 'partiallyScheduleOrder'])
         ->name('orders.partially_schedule_order');
+    Route::patch('update-user-comment/{id}', [OrderController::class, 'updateUserComment'])
+        ->name('orders.update_user_comment');
 });
 
 Route::prefix('signed-urls')->middleware(['auth:sanctum', ThrottleRequests::with(30, 1)])->group(function () {
