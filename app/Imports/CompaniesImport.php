@@ -72,7 +72,7 @@ class CompaniesImport implements
 
     public function chunkSize(): int
     {
-        return 100;
+        return 25;
     }
 
     /**
@@ -206,19 +206,23 @@ class CompaniesImport implements
                     }
                 }
 
-                // Validar email único excepto para el registro actual
-                if (isset($row['email'])) {
-                    $exists = Company::where('email', $row['email'])
-                        ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
-                        ->exists();
-
-                    if ($exists) {
-                        $validator->errors()->add(
-                            "{$index}.email",
-                            'El email ya existe en otra empresa.'
-                        );
-                    }
-                }
+                // Validación de email único eliminada
+                // Comentario: Se eliminó la validación de email único para permitir
+                // que el constraint de BD maneje los duplicados y genere errores más claros
+                
+                // Original validation code:
+                // if (isset($row['email'])) {
+                //     $exists = Company::where('email', $row['email'])
+                //         ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
+                //         ->exists();
+                //
+                //     if ($exists) {
+                //         $validator->errors()->add(
+                //             "{$index}.email",
+                //             'El email ya existe en otra empresa.'
+                //         );
+                //     }
+                // }
 
                 // Validar nombre único excepto para el registro actual
                 if (isset($row['razon_social'])) {
@@ -274,6 +278,11 @@ class CompaniesImport implements
                 try {
 
                     $companyData = $this->prepareCompanyData($row);
+                    
+                    // Validación de email único eliminada
+                    // Comentario: Se eliminó la validación previa de email único
+                    // para permitir que el constraint de BD maneje los duplicados
+                    
                     Company::updateOrCreate(
                         [
                             'registration_number' => $companyData['registration_number'],
@@ -283,8 +292,20 @@ class CompaniesImport implements
 
                 } catch (\Exception $e) {
 
+                    // Original error structure:
+                    // $error = [
+                    //     'row' => $index + 2,
+                    //     'data' => $row->toArray(),
+                    //     'error' => $e->getMessage(),
+                    //     'file' => $e->getFile(),
+                    //     'line' => $e->getLine(),
+                    //     'trace' => $e->getTraceAsString()
+                    // ];
+                    
                     $error = [
+                        'type' => 'processing_error',
                         'row' => $index + 2,
+                        'attribute' => 'general',
                         'data' => $row->toArray(),
                         'error' => $e->getMessage(),
                         'file' => $e->getFile(),
@@ -311,7 +332,17 @@ class CompaniesImport implements
             }
         } catch (\Exception $e) {
 
+            // Original error structure:
+            // $error = [
+            //     'error' => $e->getMessage(),
+            //     'file' => $e->getFile(),
+            //     'line' => $e->getLine(),
+            //     'trace' => $e->getTraceAsString()
+            // ];
+            
             $error = [
+                'type' => 'general_error',
+                'attribute' => 'general',
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -440,9 +471,18 @@ class CompaniesImport implements
     public function onFailure(Failure ...$failures)
     {
         foreach ($failures as $failure) {
+            // Original error structure:
+            // $error = [
+            //     'row' => $failure->row(),
+            //     'attribute' => $failure->attribute(),
+            //     'errors' => $failure->errors(),
+            //     'values' => $failure->values(),
+            // ];
+            
             $error = [
+                'type' => 'validation_failure',
                 'row' => $failure->row(),
-                'attribute' => $failure->attribute(),
+                'attribute' => $failure->attribute() ?? 'unknown',
                 'errors' => $failure->errors(),
                 'values' => $failure->values(),
             ];
@@ -463,7 +503,8 @@ class CompaniesImport implements
             Log::warning('Fallo en validación de importación de empresas', [
                 'import_process_id' => $this->importProcessId,
                 'row_number' => $failure->row(),
-                'attribute' => $failure->attribute(),
+                // Original: 'attribute' => $failure->attribute(),
+                'attribute' => $failure->attribute() ?? 'unknown',
                 'errors' => $failure->errors(),
                 'values' => $failure->values(),
             ]);
@@ -477,7 +518,17 @@ class CompaniesImport implements
      */
     public function onError(Throwable $e)
     {
+        // Original error structure:
+        // $error = [
+        //     'error' => $e->getMessage(),
+        //     'file' => $e->getFile(),
+        //     'line' => $e->getLine(),
+        //     'trace' => $e->getTraceAsString()
+        // ];
+        
         $error = [
+            'type' => 'import_error',
+            'attribute' => 'general',
             'error' => $e->getMessage(),
             'file' => $e->getFile(),
             'line' => $e->getLine(),
