@@ -32,6 +32,11 @@ class OrderLine extends Model
         return $this->quantity * $this->unit_price;
     }
 
+    public function getTotalPriceWithTaxAttribute()
+    {
+        return $this->quantity * $this->unit_price_with_tax;
+    }
+
     /**
      * Calcula el precio unitario del producto según la lista de precios
      * de la empresa asociada al usuario que realizó el pedido.

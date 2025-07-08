@@ -61,7 +61,7 @@ class CompanyBranchesImport implements
                         'company_id' => $company->id,
                         'branch_code' => $row['codigo'],
                         'fantasy_name' => $row['nombre_de_fantasia'],
-                        'address' => $row['direccion'],
+                        'address' => !empty($row['direccion']) ? $row['direccion'] : null,
                         'shipping_address' => $row['direccion_de_despacho'] ?? null,
                         'contact_name' => $row['nombre_de_contacto'] ?? null,
                         'contact_last_name' => $row['apellido_de_contacto'] ?? null,
@@ -90,16 +90,28 @@ class CompanyBranchesImport implements
             'numero_de_registro_de_compania' => ['required', 'string', 'exists:companies,registration_number'],
             'codigo' => ['required', 'string', 'min:2', 'max:50'],
             'nombre_de_fantasia' => ['required', 'string', 'min:2', 'max:200'],
-            'direccion' => ['required', 'string', 'min:2', 'max:200'],
+            'direccion' => ['nullable', 'string', 'min:1', 'max:200'],
             'direccion_de_despacho' => ['nullable', 'string'],
             'nombre_de_contacto' => ['nullable', 'string'],
             'apellido_de_contacto' => ['nullable', 'string'],
             'telefono_de_contacto' => ['nullable', 'string'],
             // 'precio_pedido_minimo' => ['required', 'numeric', 'min:0'],
+            // 'precio_pedido_minimo' => [
+            //     'required',
+            //     'string',
+            //     'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
+            // ],
             'precio_pedido_minimo' => [
                 'required',
-                'string',
-                'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
+                function ($attribute, $value, $fail) {
+                    if (is_numeric($value)) {
+                        return;
+                    }
+                    
+                    if (is_string($value) && !preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
+                        $fail('El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)');
+                    }
+                }
             ],
         ];
     }
@@ -111,7 +123,6 @@ class CompanyBranchesImport implements
             'numero_de_registro_de_compania.exists' => 'La empresa no existe',
             'codigo.required' => 'El código de sucursal es requerido',
             'nombre_de_fantasia.required' => 'El nombre de fantasía es requerido',
-            'direccion.required' => 'La dirección es requerida',
             'precio_pedido_minimo.required' => 'El precio de pedido mínimo es requerido',
             'precio_pedido_minimo.regex' => 'El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)',
         ];
@@ -238,15 +249,27 @@ class CompanyBranchesImport implements
             '*.numero_de_registro_de_compania' => ['required', 'string', 'exists:companies,registration_number'],
             '*.codigo' => ['required', 'string', 'min:2', 'max:50'],
             '*.nombre_de_fantasia' => ['required', 'string', 'min:2', 'max:200'],
-            '*.direccion' => ['required', 'string', 'min:2', 'max:200'],
+            '*.direccion' => ['nullable', 'string', 'min:2', 'max:200'],
             '*.direccion_de_despacho' => ['nullable', 'string'],
             '*.nombre_de_contacto' => ['nullable', 'string'],
             '*.apellido_de_contacto' => ['nullable', 'string'],
             '*.telefono_de_contacto' => ['nullable', 'string'],
+            // '*.precio_pedido_minimo' => [
+            //     'required',
+            //     'string',
+            //     'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
+            // ],
             '*.precio_pedido_minimo' => [
                 'required',
-                'string',
-                'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
+                function ($attribute, $value, $fail) {
+                    if (is_numeric($value)) {
+                        return;
+                    }
+                    
+                    if (is_string($value) && !preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
+                        $fail('El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)');
+                    }
+                }
             ],
         ];
     }
@@ -264,7 +287,7 @@ class CompanyBranchesImport implements
             'company_id' => $company->id,
             'branch_code' => $row['codigo'],
             'fantasy_name' => $row['nombre_de_fantasia'],
-            'address' => $row['direccion'],
+            'address' => !empty($row['direccion']) ? $row['direccion'] : null,
             'shipping_address' => $row['direccion_de_despacho'] ?? null,
             'contact_name' => $row['nombre_de_contacto'] ?? null,
             'contact_last_name' => $row['apellido_de_contacto'] ?? null,
@@ -275,7 +298,8 @@ class CompanyBranchesImport implements
 
     /**
      * Transforma un precio con formato de visualización a entero
-     * Ejemplo: "$1,568.33" -> 156833
+     * Acepta tanto string como número
+     * Ejemplo: "$1,568.33" -> 156833, 1568.33 -> 156833
      */
     private function transformPrice($price): int
     {
@@ -283,6 +307,12 @@ class CompanyBranchesImport implements
             return 0;
         }
 
+        // Si es numérico, convertir directamente
+        if (is_numeric($price)) {
+            return (int)($price * 100);
+        }
+
+        // Si es string, procesar formato
         // Remover el símbolo de moneda y espacios
         $price = trim(str_replace('$', '', $price));
 

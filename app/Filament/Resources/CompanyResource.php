@@ -215,6 +215,10 @@ class CompanyResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('logo')
                     ->label(__('Imagen')),
+                Tables\Columns\TextColumn::make('tax_id')
+                    ->label(__('Rut'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('name')
                     ->label(__('Nombre'))
                     ->searchable()

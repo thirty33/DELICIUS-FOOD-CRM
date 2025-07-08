@@ -17,7 +17,7 @@ class MaxOrderAmountValidation extends OrderStatusValidation
         }
 
         $formatterPrice = PriceFormatter::format($user->branch->min_price_order);
-        if($user->branch->min_price_order > $order->total) {
+        if($user->branch->min_price_order > $order->total_with_tax) {
             throw new Exception("El monto del pedido mínimo es {$formatterPrice}");
         }
     }
