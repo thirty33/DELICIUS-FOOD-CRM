@@ -75,6 +75,15 @@ class ProductsImport implements
                     $ingredients = isset($productData['_ingredients']) ? $productData['_ingredients'] : [];
                     unset($productData['_ingredients']);
                     
+                    // Verificar si ya existe un producto con el mismo nombre pero diferente código
+                    $existingProductByName = Product::where('name', $productData['name'])
+                        ->where('code', '!=', $productData['code'])
+                        ->first();
+                    
+                    if ($existingProductByName) {
+                        throw new \Exception("Ya existe un producto con el nombre '{$productData['name']}' con código '{$existingProductByName->code}'");
+                    }
+
                     $product = Product::updateOrCreate(
                         [
                             'code' => $productData['code']
@@ -250,7 +259,7 @@ class ProductsImport implements
     {
         $error = [
             'row' => $index + 2,
-            'data' => $row,
+            'data' => $row->toArray(),
             'error' => $e->getMessage()
         ];
 

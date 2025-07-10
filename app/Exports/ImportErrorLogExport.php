@@ -21,13 +21,17 @@ class ImportErrorLogExport implements FromArray, WithHeadings, ShouldAutoSize, W
     {
         return collect($this->errorLog)->map(function ($error) {
             return [
-                'Fila' => $error['row'],
-                'Campo' => $error['attribute'],
-                'Errores' => implode(', ', $error['errors']),
-                'Valores' => collect($error['values'])
-                    ->filter()
-                    ->map(fn($value, $key) => "$key: $value")
-                    ->implode(', '),
+                'Fila' => $error['row'] ?? 'N/A',
+                'Campo' => $error['attribute'] ?? 'N/A',
+                'Errores' => isset($error['errors']) ? 
+                    (is_array($error['errors']) ? implode(', ', $error['errors']) : $error['errors']) : 
+                    ($error['error'] ?? 'Error desconocido'),
+                'Valores' => isset($error['values']) ? 
+                    collect($error['values'])
+                        ->filter()
+                        ->map(fn($value, $key) => "$key: $value")
+                        ->implode(', ') : 
+                    (isset($error['data']) ? json_encode($error['data']) : 'N/A'),
             ];
         })->toArray();
     }
