@@ -29,14 +29,7 @@ class CategoryController extends Controller
         $weekday = ucfirst(strtolower($publicationDate->isoFormat('dddd')));
 
         $weekdayInEnglish = Weekday::fromSpanish($weekday);
-
-        Log::info("Weekday value before conversion:", [
-            'menu->publication_date' => $menu->publication_date,
-            '$publicationDate' => $publicationDate,
-            'weekday' => $weekday,
-            '$weekdayInEnglish' => $weekdayInEnglish
-        ]);
-
+        
         $query = CategoryMenu::with([
             'category' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->whereHas('products', function ($priceListQuery) use ($user) {

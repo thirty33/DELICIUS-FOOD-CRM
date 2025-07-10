@@ -23,7 +23,17 @@ class AtLeastOneProductByCategory extends OrderStatusValidation
             }
 
             // Obtener las categorías del menú ordenadas por display_order
-            $categoryMenus = $currentMenu->categoryMenus()->orderedByDisplayOrder()->get();
+            // Filtrar solo las categorías que tienen productos en la lista de precios de la empresa del usuario
+            // $categoryMenus = $currentMenu->categoryMenus()->orderedByDisplayOrder()->get();
+            $categoryMenus = $currentMenu->categoryMenus()
+                ->whereHas('category.products.priceListLines', function ($query) use ($user) {
+                    $query->where('active', true)
+                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                            $priceListQuery->where('id', $user->company->price_list_id);
+                        });
+                })
+                ->orderedByDisplayOrder()
+                ->get();
 
             // Obtener las categorías de los productos en la orden
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
@@ -34,6 +44,7 @@ class AtLeastOneProductByCategory extends OrderStatusValidation
             });
 
             // Verificar que la orden incluya al menos un producto de cada categoría
+            // Solo se validan las categorías que tienen productos en la lista de precios de la empresa
             foreach ($categoryMenus as $categoryMenu) {
                 $category = $categoryMenu->category;
                 $hasProductInCategory = $categoriesInOrder->contains('category.id', $category->id);
