@@ -64,7 +64,7 @@ class ProductsImport implements
 
             foreach ($rows as $index => $row) {
                 try {
-                    // Buscar la categoría por nombre
+                    // Find category by name
                     $category = Category::where('name', $row['categoria'])->first();
 
                     if (!$category) {
@@ -74,15 +74,6 @@ class ProductsImport implements
                     $productData = $this->prepareProductData($row, $category);
                     $ingredients = isset($productData['_ingredients']) ? $productData['_ingredients'] : [];
                     unset($productData['_ingredients']);
-                    
-                    // Verificar si ya existe un producto con el mismo nombre pero diferente código
-                    $existingProductByName = Product::where('name', $productData['name'])
-                        ->where('code', '!=', $productData['code'])
-                        ->first();
-                    
-                    if ($existingProductByName) {
-                        throw new \Exception("Ya existe un producto con el nombre '{$productData['name']}' con código '{$existingProductByName->code}'");
-                    }
 
                     $product = Product::updateOrCreate(
                         [
@@ -115,14 +106,14 @@ class ProductsImport implements
         $data = [
             'code' => $row['codigo'],
             'name' => $row['nombre'],
-            'description' => $row['descripcion'],
-            'price' => $this->transformPrice($row['precio']),
+            'description' => $this->handleEmptyField($row['descripcion'] ?? null, 'No description'),
+            'price' => $this->handleEmptyPriceField($row['precio'] ?? null),
             'category_id' => $category->id,
             'measure_unit' => $row['unidad_de_medida'] ?? null,
             'original_filename' => $row['nombre_archivo_original'] ?? null,
-            'price_list' => isset($row['precio_lista']) ? $this->transformPrice($row['precio_lista']) : null,
-            'stock' => $row['stock'] ?? null,
-            'weight' => $row['peso'] ?? null,
+            'price_list' => $this->handleEmptyPriceField($row['precio_lista'] ?? null),
+            'stock' => $this->handleStockField($row['stock'] ?? null),
+            'weight' => $this->handleWeightField($row['peso'] ?? null),
             'allow_sales_without_stock' => $this->convertToBoolean($row['permitir_ventas_sin_stock'] ?? false),
             'active' => $this->convertToBoolean($row['activo'] ?? false)
         ];
@@ -134,24 +125,84 @@ class ProductsImport implements
         return $data;
     }
 
-    private function transformPrice($price): int
+    private function transformPrice($price): ?int
     {
-        if (empty($price)) {
-            return 0;
+        if (empty($price) || $price === '-') {
+            return null;
         }
 
-        // Remover el símbolo de moneda y espacios
+        // Remove currency symbol and spaces
         $price = trim(str_replace('$', '', $price));
 
-        // Remover las comas de los miles si existen
+        // Remove thousands commas if they exist
         $price = str_replace(',', '', $price);
 
-        // Si hay punto decimal, multiplicar por 100 para convertir a centavos
+        // If there's decimal point, multiply by 100 to convert to cents
         if (strpos($price, '.') !== false) {
             return (int)(floatval($price) * 100);
         }
 
         return (int)$price;
+    }
+
+    private function handleEmptyField($value, $default = null): ?string
+    {
+        if (empty($value) || $value === '-') {
+            return $default;
+        }
+        return $value;
+    }
+
+    private function handleEmptyPriceField($value): ?int
+    {
+        if (empty($value) || $value === '-') {
+            return null;
+        }
+        return $this->transformPrice($value);
+    }
+
+    private function handleEmptyIntegerField($value): ?int
+    {
+        if (empty($value) || $value === '-') {
+            return null;
+        }
+        return is_numeric($value) ? (int)$value : null;
+    }
+
+    private function handleEmptyNumericField($value): ?float
+    {
+        if (empty($value) || $value === '-') {
+            return null;
+        }
+        return is_numeric($value) ? (float)$value : null;
+    }
+
+    private function handleStockField($value): int
+    {
+        // If empty or '-', return 0
+        if (empty($value) || $value === '-') {
+            return 0;
+        }
+
+        // Clean value from spaces
+        $cleanValue = trim($value);
+
+        // Convert to integer (already validated in withValidator)
+        return (int)$cleanValue;
+    }
+
+    private function handleWeightField($value): float
+    {
+        // If empty or '-', return 0
+        if (empty($value) || $value === '-') {
+            return 0.0;
+        }
+
+        // Clean value from spaces
+        $cleanValue = trim($value);
+
+        // Convert to decimal number (already validated in withValidator)
+        return (float)$cleanValue;
     }
 
     private function convertToBoolean($value): bool
@@ -177,14 +228,14 @@ class ProductsImport implements
         return [
             '*.codigo' => ['required', 'string', 'min:2', 'max:50'],
             '*.nombre' => ['required', 'string', 'min:2', 'max:200'],
-            '*.descripcion' => ['required', 'string', 'min:2', 'max:200'],
-            '*.precio' => ['required', 'string', 'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'],
+            '*.descripcion' => ['nullable', 'string', 'max:200'],
+            '*.precio' => ['nullable', 'string', 'regex:/^(\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?|-)$/'],
             '*.categoria' => ['required', 'string', 'exists:categories,name'],
             '*.unidad_de_medida' => ['nullable', 'string'],
             '*.nombre_archivo_original' => ['nullable', 'string', 'max:255'],
-            '*.precio_lista' => ['nullable', 'string', 'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'],
-            '*.stock' => ['nullable', 'integer'],
-            '*.peso' => ['nullable', 'numeric'],
+            '*.precio_lista' => ['nullable', 'string', 'regex:/^(\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?|-)$/'],
+            '*.stock' => ['nullable', 'string'],
+            '*.peso' => ['nullable', 'string'],
             '*.permitir_ventas_sin_stock' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.ingredientes' => ['nullable', 'string']
@@ -204,14 +255,11 @@ class ProductsImport implements
             '*.nombre.min' => 'El nombre debe tener al menos 2 caracteres',
             '*.nombre.max' => 'El nombre no debe exceder los 200 caracteres',
 
-            '*.descripcion.required' => 'La descripción es requerida',
             '*.descripcion.string' => 'La descripción debe ser texto',
-            '*.descripcion.min' => 'La descripción debe tener al menos 2 caracteres',
             '*.descripcion.max' => 'La descripción no debe exceder los 200 caracteres',
 
-            '*.precio.required' => 'El precio es requerido',
             '*.precio.string' => 'El precio debe tener un formato válido',
-            '*.precio.regex' => 'El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)',
+            '*.precio.regex' => 'El precio debe tener un formato válido (ejemplo: $1,568.33, 1568.33 o "-" para vacío)',
 
             '*.categoria.required' => 'La categoría es requerida',
             '*.categoria.string' => 'La categoría debe ser texto',
@@ -220,11 +268,11 @@ class ProductsImport implements
             '*.unidad_de_medida.string' => 'La unidad de medida debe ser texto',
 
             '*.precio_lista.string' => 'El precio de lista debe tener un formato válido',
-            '*.precio_lista.regex' => 'El precio de lista debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)',
+            '*.precio_lista.regex' => 'El precio de lista debe tener un formato válido (ejemplo: $1,568.33, 1568.33 o "-" para vacío)',
 
-            '*.stock.integer' => 'El stock debe ser un número entero',
+            '*.stock.string' => 'El stock debe ser un valor válido',
 
-            '*.peso.numeric' => 'El peso debe ser un número',
+            '*.peso.string' => 'El peso debe ser un valor válido',
 
             '*.permitir_ventas_sin_stock.in' => 'El campo permitir ventas sin stock debe ser VERDADERO o FALSO',
 
@@ -232,6 +280,37 @@ class ProductsImport implements
             '*.nombre_archivo_original.string' => 'El nombre de archivo original debe ser texto',
             '*.nombre_archivo_original.max' => 'El nombre de archivo original no debe exceder los 255 caracteres',
         ];
+    }
+
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            $data = $validator->getData();
+            
+            foreach ($data as $index => $row) {
+                // Validate stock
+                if (isset($row['stock']) && !empty($row['stock']) && $row['stock'] !== '-') {
+                    $cleanStock = trim($row['stock']);
+                    if (!is_numeric($cleanStock)) {
+                        $validator->errors()->add(
+                            "{$index}.stock", 
+                            "El campo stock debe ser un número entero válido. Valor recibido: '{$row['stock']}'"
+                        );
+                    }
+                }
+                
+                // Validate weight
+                if (isset($row['peso']) && !empty($row['peso']) && $row['peso'] !== '-') {
+                    $cleanPeso = trim($row['peso']);
+                    if (!is_numeric($cleanPeso)) {
+                        $validator->errors()->add(
+                            "{$index}.peso", 
+                            "El campo peso debe ser un número válido. Valor recibido: '{$row['peso']}'"
+                        );
+                    }
+                }
+            }
+        });
     }
 
     public function chunkSize(): int

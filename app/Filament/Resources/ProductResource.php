@@ -78,7 +78,6 @@ class ProductResource extends Resource
                             ->required()
                             ->minLength(2)
                             ->maxLength(200)
-                            ->unique(static::getModel(), 'name', ignoreRecord: true)
                             ->label(__('Nombre'))
                             ->columns(1),
                         MoneyInput::make('price')

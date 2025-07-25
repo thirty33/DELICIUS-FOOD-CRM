@@ -122,7 +122,7 @@ class UserImport implements
     {
         return [
             '*.nombre' => ['required', 'string', 'max:200'],
-            '*.correo_electronico' => ['nullable', 'email', 'max:200'],
+            '*.correo_electronico' => ['nullable', 'string', 'max:200'],
             '*.tipo_de_usuario' => ['required', 'string', 'exists:roles,name'],
             '*.tipo_de_convenio' => ['nullable', 'string', 'exists:permissions,name'],
             '*.compania' => ['required', 'string', 'exists:companies,registration_number'],
@@ -166,7 +166,10 @@ class UserImport implements
             $rows = $validator->getData();
             
             foreach ($rows as $rowIndex => $row) {
-                if (empty($row['correo_electronico']) && empty($row['nombre_de_usuario'])) {
+                $cleanEmail = $this->cleanEmailField($row['correo_electronico'] ?? null);
+                
+                // Validate that either email or nickname is provided
+                if (empty($cleanEmail) && empty($row['nombre_de_usuario'])) {
                     $validator->errors()->add(
                         $rowIndex . '.correo_electronico', 
                         'Se debe proporcionar al menos un correo electrónico o un nombre de usuario.'
@@ -174,6 +177,14 @@ class UserImport implements
                     $validator->errors()->add(
                         $rowIndex . '.nombre_de_usuario', 
                         'Se debe proporcionar al menos un correo electrónico o un nombre de usuario.'
+                    );
+                }
+                
+                // Custom email validation: if not null after cleaning, must be valid email
+                if (!empty($cleanEmail) && !filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
+                    $validator->errors()->add(
+                        $rowIndex . '.correo_electronico',
+                        'El correo electrónico debe tener un formato válido.'
                     );
                 }
             }
@@ -205,10 +216,13 @@ class UserImport implements
                         'raw_data' => $row->toArray()
                     ]);
                     
+                    // Clean email field first
+                    $cleanEmail = $this->cleanEmailField($row['correo_electronico'] ?? null);
+                    
                     // Verificar existencia de usuario antes de procesar
                     $existingUser = null;
-                    if (!empty($row['correo_electronico'])) {
-                        $existingUser = User::where('email', $row['correo_electronico'])->first();
+                    if (!empty($cleanEmail)) {
+                        $existingUser = User::where('email', $cleanEmail)->first();
                     } elseif (!empty($row['nombre_de_usuario'])) {
                         $existingUser = User::where('nickname', $row['nombre_de_usuario'])->first();
                     }
@@ -232,7 +246,8 @@ class UserImport implements
                     $userData = $this->prepareUserData($row);
                     
                     Log::info('Datos preparados para actualización/creación', [
-                        'email' => $row['correo_electronico'] ?? 'null',
+                        'original_email' => $row['correo_electronico'] ?? 'null',
+                        'cleaned_email' => $cleanEmail ?? 'null',
                         'nickname' => $row['nombre_de_usuario'] ?? 'null',
                         'processed_data' => $userData,
                         'is_new_user' => !$existingUser
@@ -328,6 +343,28 @@ class UserImport implements
     }
 
     /**
+     * Clean email field by treating special values as empty
+     * 
+     * @param string|null $email
+     * @return string|null
+     */
+    private function cleanEmailField($email): ?string
+    {
+        if (empty($email)) {
+            return null;
+        }
+        
+        $email = trim($email);
+        $invalidEmails = ['SIN INFORMACION', 'A@A.CL', 'sin informacion', 'a@a.cl'];
+        
+        if (in_array(strtoupper($email), array_map('strtoupper', $invalidEmails))) {
+            return null;
+        }
+        
+        return $email;
+    }
+
+    /**
      * Prepare user data from a row
      * 
      * @param Collection $row
@@ -335,8 +372,12 @@ class UserImport implements
      */
     private function prepareUserData(Collection $row): array
     {
+        // Clean email field first
+        $cleanEmail = $this->cleanEmailField($row['correo_electronico'] ?? null);
+        
         Log::info('Preparando datos de usuario', [
-            'email' => $row['correo_electronico'] ?? 'null',
+            'original_email' => $row['correo_electronico'] ?? 'null',
+            'cleaned_email' => $cleanEmail ?? 'null',
             'nickname' => $row['nombre_de_usuario'] ?? 'null',
             'values' => $row->toArray()
         ]);
@@ -376,8 +417,8 @@ class UserImport implements
         ]);
 
         $existingUser = null;
-        if (!empty($row['correo_electronico'])) {
-            $existingUser = User::where('email', $row['correo_electronico'])->first();
+        if (!empty($cleanEmail)) {
+            $existingUser = User::where('email', $cleanEmail)->first();
         } elseif (!empty($row['nombre_de_usuario'])) {
             $existingUser = User::where('nickname', $row['nombre_de_usuario'])->first();
         }
@@ -413,9 +454,9 @@ class UserImport implements
             'validate_subcategory_rules' => $validateSubcategoryRules
         ];
 
-        // Agregar email si está presente
-        if (!empty($row['correo_electronico'])) {
-            $userData['email'] = $row['correo_electronico'];
+        // Agregar email si está presente (usando email limpio)
+        if (!empty($cleanEmail)) {
+            $userData['email'] = $cleanEmail;
         }
 
         // Agregar nickname si está presente
