@@ -81,8 +81,8 @@ class PriceListImport implements
                         $priceListData
                     );
 
-                    // Procesar números de registro de empresas si existen
-                    if (!empty($row['numeros_de_registro_de_empresas'])) {
+                    // Procesar números de registro de empresas si existen y no son '-'
+                    if (!empty($row['numeros_de_registro_de_empresas']) && $row['numeros_de_registro_de_empresas'] !== '-') {
                         $this->processCompanyRegistrationNumbers($row['numeros_de_registro_de_empresas'], $priceList->id, $index);
                     }
 
@@ -119,6 +119,11 @@ class PriceListImport implements
         $regNumbers = array_map('trim', explode(',', $registrationNumbers));
 
         foreach ($regNumbers as $regNumber) {
+            // Omitir si está vacío o es '-'
+            if (empty($regNumber) || $regNumber === '-') {
+                continue;
+            }
+            
             // Despachar un job separado para cada empresa
             ProcessCompany::dispatch(
                 $regNumber,
@@ -176,19 +181,10 @@ class PriceListImport implements
         return [
             '*.nombre_de_lista_de_precio' => ['required', 'string', 'min:2', 'max:200'],
             '*.descripcion' => ['nullable', 'string'],
-            '*.precio_minimo' => [
-                'nullable',
-                'string',
-                'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
-            ],
+            '*.precio_minimo' => ['nullable'],
             '*.numeros_de_registro_de_empresas' => ['nullable', 'string'],
             '*.codigo_de_producto' => ['nullable', 'string'],
-            '*.precio_unitario' => [
-                'nullable',
-                'required_with:*.codigo_de_producto',
-                'string',
-                'regex:/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/'
-            ],
+            '*.precio_unitario' => ['required'],
         ];
     }
 
@@ -424,6 +420,24 @@ class PriceListImport implements
         $validator->after(function ($validator) {
             $data = $validator->getData();
             foreach ($data as $index => $row) {
+                // Validación custom para precio_minimo
+                if (isset($row['precio_minimo'])) {
+                    $precioMinimo = $row['precio_minimo'];
+                    if (empty($precioMinimo) || $precioMinimo === '-') {
+                        // El transformPrice ya maneja valores vacíos retornando 0
+                        // No necesitamos modificar aquí, solo validar formato si no está vacío
+                    } elseif (!is_numeric($precioMinimo) && !empty($precioMinimo)) {
+                        // Si no está vacío y no es numérico, debe ser formato de precio válido
+                        $cleanPrice = trim(str_replace(['$', ','], '', $precioMinimo));
+                        if (!is_numeric($cleanPrice)) {
+                            $validator->errors()->add(
+                                "{$index}.precio_minimo",
+                                'El precio mínimo debe ser un número válido o estar vacío.'
+                            );
+                        }
+                    }
+                }
+
                 // Validación adicional para productos
                 if (isset($row['codigo_de_producto']) && !empty($row['codigo_de_producto'])) {
                     if (!isset($row['precio_unitario']) || empty($row['precio_unitario'])) {
@@ -444,16 +458,26 @@ class PriceListImport implements
                 }
 
                 // Validación adicional para números de registro de empresa
-                if (isset($row['numeros_de_registro_de_empresas']) && !empty($row['numeros_de_registro_de_empresas'])) {
-                    $regNumbers = array_map('trim', explode(',', $row['numeros_de_registro_de_empresas']));
-                    foreach ($regNumbers as $regNumber) {
-                        // Comprobar existencia sin cargar el modelo completo
-                        $exists = Company::where('registration_number', $regNumber)->exists();
-                        if (!$exists) {
-                            $validator->errors()->add(
-                                "{$index}.numeros_de_registro_de_empresas",
-                                "La empresa con número de registro '{$regNumber}' no existe."
-                            );
+                if (isset($row['numeros_de_registro_de_empresas'])) {
+                    $regNumbers = $row['numeros_de_registro_de_empresas'];
+                    
+                    // Si está vacío o es '-', no validar (se omitirá en el procesamiento)
+                    if (!empty($regNumbers) && $regNumbers !== '-') {
+                        $regNumbersList = array_map('trim', explode(',', $regNumbers));
+                        foreach ($regNumbersList as $regNumber) {
+                            // Saltar si es '-' individual
+                            if ($regNumber === '-' || empty($regNumber)) {
+                                continue;
+                            }
+                            
+                            // Comprobar existencia sin cargar el modelo completo
+                            $exists = Company::where('registration_number', $regNumber)->exists();
+                            if (!$exists) {
+                                $validator->errors()->add(
+                                    "{$index}.numeros_de_registro_de_empresas",
+                                    "La empresa con número de registro '{$regNumber}' no existe."
+                                );
+                            }
                         }
                     }
                 }

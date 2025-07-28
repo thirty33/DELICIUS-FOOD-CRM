@@ -34,7 +34,7 @@ class ProcessProduct implements ShouldQueue
     /**
      * El precio unitario del producto.
      *
-     * @var string
+     * @var string|float|int
      */
     private $unitPrice;
 
@@ -55,7 +55,7 @@ class ProcessProduct implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(string $productCode, int $priceListId, string $unitPrice, int $importProcessId, int $rowIndex)
+    public function __construct(string $productCode, int $priceListId, $unitPrice, int $importProcessId, int $rowIndex)
     {
         $this->productCode = $productCode;
         $this->priceListId = $priceListId;
@@ -106,7 +106,7 @@ class ProcessProduct implements ShouldQueue
 
     /**
      * Transforma un precio con formato de visualización a entero
-     * Ejemplo: "$1,568.33" -> 156833
+     * Ejemplo: "$1,568.33" -> 156833 o 2950.0 -> 295000
      */
     private function transformPrice($price): int
     {
@@ -114,7 +114,13 @@ class ProcessProduct implements ShouldQueue
             return 0;
         }
 
-        // Remover el símbolo de moneda y espacios
+        // Si ya es numérico (float o int)
+        if (is_numeric($price)) {
+            // Multiplicar por 100 para convertir a centavos
+            return (int)($price * 100);
+        }
+
+        // Si es string, procesar formato de moneda
         $price = trim(str_replace('$', '', $price));
 
         // Remover las comas de los miles si existen

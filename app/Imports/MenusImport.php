@@ -119,6 +119,24 @@ class MenusImport implements
     }
 
     /**
+     * Clean description field, treating '-' as empty
+     */
+    private function cleanDescriptionField($description): ?string
+    {
+        if (empty($description)) {
+            return null;
+        }
+
+        $description = trim($description);
+
+        if ($description === '-') {
+            return null;
+        }
+
+        return $description;
+    }
+
+    /**
      * Get validation rules for import
      * 
      * @return array
@@ -127,11 +145,11 @@ class MenusImport implements
     {
         return [
             '*.titulo' => ['required', 'string', 'min:2', 'max:255'],
-            '*.descripcion' => ['required', 'string', 'min:2', 'max:200'],
-            '*.fecha_de_despacho' => ['required', 'string'],
+            '*.descripcion' => ['nullable', 'string', 'max:200'],
+            '*.fecha_de_despacho' => ['required'],
             '*.tipo_de_usuario' => ['required', 'string', 'exists:roles,name'],
             '*.tipo_de_convenio' => ['required', 'string', 'exists:permissions,name'],
-            '*.fecha_hora_maxima_pedido' => ['required', 'string'],
+            '*.fecha_hora_maxima_pedido' => ['required'],
             '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no']
         ];
     }
@@ -147,8 +165,7 @@ class MenusImport implements
             '*.titulo.required' => 'El título es obligatorio.',
             '*.titulo.min' => 'El título debe tener al menos 2 caracteres.',
             '*.titulo.max' => 'El título no debe exceder los 255 caracteres.',
-            '*.descripcion.required' => 'La descripción es obligatoria.',
-            '*.descripcion.min' => 'La descripción debe tener al menos 2 caracteres.',
+            '*.descripcion.string' => 'La descripción debe ser texto.',
             '*.descripcion.max' => 'La descripción no debe exceder los 200 caracteres.',
             '*.fecha_de_despacho.required' => 'La fecha de despacho es obligatoria.',
             '*.tipo_de_usuario.required' => 'El tipo de usuario es obligatorio.',
@@ -187,18 +204,11 @@ class MenusImport implements
                 if (isset($row['fecha_de_despacho'], $row['tipo_de_usuario'], $row['tipo_de_convenio'], $row['fecha_hora_maxima_pedido'])) {
                     try {
                         // Process publication date
-                        $dateValue = $row['fecha_de_despacho'];
-                        if (substr($dateValue, 0, 1) === "'") {
-                            $dateValue = substr($dateValue, 1);
-                        }
-                        $publicationDate = Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
+                        $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
+                        $publicationDate = $parsedDate ? $parsedDate->format('Y-m-d') : null;
                         
                         // Process max order date
-                        $maxOrderDateValue = $row['fecha_hora_maxima_pedido'];
-                        if (substr($maxOrderDateValue, 0, 1) === "'") {
-                            $maxOrderDateValue = substr($maxOrderDateValue, 1);
-                        }
-                        $maxOrderDate = $this->parseWithMultipleFormats($maxOrderDateValue, $this->dateTimeFormats);
+                        $maxOrderDate = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
                         $maxOrderDateFormatted = $maxOrderDate ? $maxOrderDate->format('Y-m-d H:i:s') : null;
                         
                         // Get active status
@@ -233,23 +243,18 @@ class MenusImport implements
 
                 // Validar formato de fecha de despacho
                 if (!empty($row['fecha_de_despacho'])) {
-                    try {
-                        $dateValue = $row['fecha_de_despacho'];
-                        if (substr($dateValue, 0, 1) === "'") {
-                            $dateValue = substr($dateValue, 1);
-                        }
-                        Carbon::createFromFormat('d/m/Y', $dateValue);
-                    } catch (\Exception $e) {
+                    $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
+                    if (!$parsedDate) {
                         $validator->errors()->add(
                             "{$index}.fecha_de_despacho",
-                            'El formato de la fecha de despacho debe ser DD/MM/YYYY.'
+                            'El formato de la fecha de despacho debe ser DD/MM/YYYY o un número válido de Excel.'
                         );
                     }
                 }
 
                 // Validar formato de fecha y hora máxima de pedido
                 if (!empty($row['fecha_hora_maxima_pedido'])) {
-                    $dateTime = $this->parseWithMultipleFormats($row['fecha_hora_maxima_pedido'], $this->dateTimeFormats);
+                    $dateTime = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
 
                     if (!$dateTime) {
                         Log::warning('Error al validar fecha y hora máxima', [
@@ -258,7 +263,7 @@ class MenusImport implements
                         ]);
                         $validator->errors()->add(
                             "{$index}.fecha_hora_maxima_pedido",
-                            'El formato de la fecha y hora máxima de pedido debe ser DD/MM/YYYY HH:MM:SS o DD/MM/YYYY HH:MM.'
+                            'El formato de la fecha y hora máxima de pedido debe ser DD/MM/YYYY HH:MM:SS, DD/MM/YYYY HH:MM o un número válido de Excel.'
                         );
                     }
                 }
@@ -266,9 +271,111 @@ class MenusImport implements
         });
     }
 
-    private function parseWithMultipleFormats(string $dateString, array $formats): ?Carbon
+    /**
+     * Convert Excel serial number to Carbon date
+     * Excel counts days since January 1, 1900 (with a leap year bug)
+     */
+    private function convertExcelSerialToDate($serial): ?Carbon
     {
-        if (substr($dateString, 0, 1) === "'") {
+        if (!is_numeric($serial)) {
+            return null;
+        }
+        
+        try {
+            // Excel's epoch starts at 1900-01-01, but there's a leap year bug
+            // Excel thinks 1900 was a leap year (it wasn't)
+            $excelEpoch = Carbon::create(1900, 1, 1);
+            
+            // Adjust for Excel's leap year bug (day 60 = Feb 29, 1900 which didn't exist)
+            if ($serial >= 60) {
+                $serial -= 1;
+            }
+            
+            // Convert serial to date
+            return $excelEpoch->addDays($serial - 1);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parse date that can be either Excel serial number or formatted string
+     */
+    private function parseFlexibleDate($dateValue): ?Carbon
+    {
+        if (empty($dateValue)) {
+            return null;
+        }
+
+        // Remove leading quote if present
+        if (is_string($dateValue) && substr($dateValue, 0, 1) === "'") {
+            $dateValue = substr($dateValue, 1);
+        }
+
+        // Try Excel serial number first
+        if (is_numeric($dateValue)) {
+            $serialDate = $this->convertExcelSerialToDate($dateValue);
+            if ($serialDate) {
+                return $serialDate;
+            }
+        }
+
+        // Try string parsing if not numeric or serial conversion failed
+        if (is_string($dateValue)) {
+            try {
+                return Carbon::createFromFormat('d/m/Y', $dateValue);
+            } catch (\Exception $e) {
+                // Try other common formats
+                $formats = ['Y-m-d', 'd-m-Y', 'm/d/Y'];
+                foreach ($formats as $format) {
+                    try {
+                        return Carbon::createFromFormat($format, $dateValue);
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse datetime that can be either Excel serial number or formatted string
+     */
+    private function parseFlexibleDateTime($dateTimeValue): ?Carbon
+    {
+        if (empty($dateTimeValue)) {
+            return null;
+        }
+
+        // Remove leading quote if present
+        if (is_string($dateTimeValue) && substr($dateTimeValue, 0, 1) === "'") {
+            $dateTimeValue = substr($dateTimeValue, 1);
+        }
+
+        // Try Excel serial number first (includes time as decimal)
+        if (is_numeric($dateTimeValue)) {
+            $serialDate = $this->convertExcelSerialToDate(floor($dateTimeValue));
+            if ($serialDate) {
+                // Extract time from decimal part
+                $timeFraction = $dateTimeValue - floor($dateTimeValue);
+                $totalMinutes = $timeFraction * 24 * 60;
+                $hours = floor($totalMinutes / 60);
+                $minutes = floor($totalMinutes % 60);
+                $seconds = floor(($totalMinutes - floor($totalMinutes)) * 60);
+                
+                return $serialDate->setTime($hours, $minutes, $seconds);
+            }
+        }
+
+        // Try string parsing
+        return $this->parseWithMultipleFormats($dateTimeValue, $this->dateTimeFormats);
+    }
+
+    private function parseWithMultipleFormats($dateString, array $formats): ?Carbon
+    {
+        if (is_string($dateString) && substr($dateString, 0, 1) === "'") {
             $dateString = substr($dateString, 1);
         }
 
@@ -370,32 +477,20 @@ class MenusImport implements
         // Formatear fechas
         $publicationDate = null;
         if (!empty($row['fecha_de_despacho'])) {
-            try {
-                // Eliminar comilla simple al inicio si existe
-                $dateValue = $row['fecha_de_despacho'];
-                if (substr($dateValue, 0, 1) === "'") {
-                    $dateValue = substr($dateValue, 1);
-                }
-
-                $publicationDate = Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
-            } catch (\Exception $e) {
-                Log::error('Error al parsear fecha de despacho: ' . $e->getMessage(), [
+            $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
+            if ($parsedDate) {
+                $publicationDate = $parsedDate->format('Y-m-d');
+            } else {
+                Log::error('Error al parsear fecha de despacho', [
                     'value' => $row['fecha_de_despacho']
                 ]);
-                throw new \Exception('El formato de la fecha de despacho es incorrecto. Debe ser DD/MM/YYYY.');
+                throw new \Exception('El formato de la fecha de despacho es incorrecto. Debe ser DD/MM/YYYY o un número válido de Excel.');
             }
         }
 
         $maxOrderDate = null;
         if (!empty($row['fecha_hora_maxima_pedido'])) {
-
-            $dateTimeValue = $row['fecha_hora_maxima_pedido'];
-            if (substr($dateTimeValue, 0, 1) === "'") {
-                $dateTimeValue = substr($dateTimeValue, 1);
-            }
-
-
-            $dateTime = $this->parseWithMultipleFormats($dateTimeValue, $this->dateTimeFormats);
+            $dateTime = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
 
             if ($dateTime) {
                 // Convertir a formato estándar Y-m-d H:i:s, asegurando que tenga segundos
@@ -408,7 +503,7 @@ class MenusImport implements
                 Log::error('Error al parsear fecha y hora máxima de pedido', [
                     'value' => $row['fecha_hora_maxima_pedido']
                 ]);
-                throw new \Exception('El formato de la fecha y hora máxima de pedido es incorrecto. Debe ser DD/MM/YYYY HH:MM:SS o DD/MM/YYYY HH:MM.');
+                throw new \Exception('El formato de la fecha y hora máxima de pedido es incorrecto. Debe ser DD/MM/YYYY HH:MM:SS, DD/MM/YYYY HH:MM o un número válido de Excel.');
             }
         } else {
             throw new \Exception('La fecha y hora máxima de pedido es obligatoria.');
@@ -439,7 +534,7 @@ class MenusImport implements
 
         return [
             'title' => $row['titulo'],
-            'description' => $row['descripcion'],
+            'description' => $this->cleanDescriptionField($row['descripcion']),
             'publication_date' => $publicationDate,
             'role_id' => $roleId,
             'permissions_id' => $permissionId,

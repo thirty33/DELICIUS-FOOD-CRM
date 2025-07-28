@@ -112,11 +112,9 @@ class MenuResource extends Resource
                             ->default(true)
                             ->inline(false),
                         Forms\Components\Textarea::make('description')
-                            ->required()
                             ->minLength(2)
                             ->maxLength(200)
                             ->label(__('Descripción'))
-                            ->required()
                             ->columnSpanFull(),
                     ]),
             ]);

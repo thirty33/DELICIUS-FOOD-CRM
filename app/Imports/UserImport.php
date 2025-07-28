@@ -9,6 +9,8 @@ use App\Models\Role;
 use App\Models\Permission;
 use App\Models\ImportProcess;
 use App\Classes\ErrorManagment\ExportErrorHandler;
+use App\Enums\RoleName;
+use App\Enums\PermissionName;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -521,14 +523,26 @@ class UserImport implements
             'role_name' => $role->name
         ]);
 
+        // Determinar el tipo de convenio
+        $tipoConvenio = $row['tipo_de_convenio'] ?? null;
+        
+        // Si el rol es Café y no tiene tipo de convenio, asignar consolidado por defecto
+        if ($role->name === RoleName::CAFE->value && empty($tipoConvenio)) {
+            $tipoConvenio = PermissionName::CONSOLIDADO->value;
+            Log::info('Asignando permiso consolidado por defecto para rol Café', [
+                'user_id' => $user->id,
+                'role' => $role->name
+            ]);
+        }
+
         // Asignar permiso si está presente
-        if (!empty($row['tipo_de_convenio'])) {
-            $permission = Permission::where('name', $row['tipo_de_convenio'])->first();
+        if (!empty($tipoConvenio)) {
+            $permission = Permission::where('name', $tipoConvenio)->first();
             if (!$permission) {
                 Log::error('Permiso no encontrado', [
-                    'permission_name' => $row['tipo_de_convenio']
+                    'permission_name' => $tipoConvenio
                 ]);
-                throw new \Exception("Permiso {$row['tipo_de_convenio']} no encontrado.");
+                throw new \Exception("Permiso {$tipoConvenio} no encontrado.");
             }
             
             Log::info('Permiso encontrado', [
