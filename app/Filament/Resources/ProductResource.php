@@ -65,6 +65,7 @@ class ProductResource extends Resource
                     ->placeholder(__('Imagen del producto'))
                     ->columnSpanFull()
                     ->disk('s3')
+                    ->directory('product-images')
                     ->visibility('private'),
                 Forms\Components\Grid::make()
                     ->schema([
@@ -135,8 +136,8 @@ class ProductResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
-                    ->disk('s3')
-                    ->visibility('private')
+                    // ->disk('s3')
+                    // ->directory('product-images')
                     ->visibility('private')
                     ->label(__('Imagen')),
                 Tables\Columns\TextColumn::make('code')
@@ -235,7 +236,6 @@ class ProductResource extends Resource
                             Forms\Components\FileUpload::make('images')
                                 ->label('Imágenes')
                                 ->disk('s3')
-                                ->visibility('private')
                                 ->multiple()
                                 ->storeFileNamesIn('attachment_file_names')
                                 ->image()
