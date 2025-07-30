@@ -2,10 +2,10 @@
 
 namespace App\Http\Resources\API\V1;
 
-use App\Facades\ImageSigner;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
 
 class ProductResource extends JsonResource
 {
@@ -21,7 +21,7 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'price' => '$'.number_format($this->price / 100, 2, ',', '.'), 
-            'image' => $this->image ? ImageSigner::getSignedUrl($this->image, 365)['signed_url'] : null,
+            'image' => $this->getImageUrl(),
             'category_id' => $this->category_id,
             'code' => $this->code,
             'active' => $this->active,
@@ -34,5 +34,23 @@ class ProductResource extends JsonResource
             'ingredients' => IngredientResource::collection($this->whenLoaded('ingredients')),
             'category' => new CategoryResource($this->whenLoaded('category')),
         ];
+    }
+
+    /**
+     * Get the product image URL
+     * 
+     * @return string|null
+     */
+    private function getImageUrl(): ?string
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        if ($this->cloudfront_signed_url && $this->signed_url_expiration && Carbon::parse($this->signed_url_expiration)->isFuture()) {
+            return $this->cloudfront_signed_url;
+        }
+
+        return null;
     }
 }

@@ -59,15 +59,15 @@ class MenusImport implements
         $this->importProcessId = $importProcessId;
     }
 
-    // Formatos aceptados para fecha y hora máxima
+    // Accepted formats for maximum date and time
     private $dateTimeFormats = [
-        'd/m/Y H:i:s',  // Con segundos: 01/01/2025 14:30:00
-        'd/m/Y H:i'     // Sin segundos: 01/01/2025 14:30
+        'd/m/Y H:i:s',  // With seconds: 01/01/2025 14:30:00
+        'd/m/Y H:i'     // Without seconds: 01/01/2025 14:30
     ];
 
     public function chunkSize(): int
     {
-        return 100; // Aumentado para mejor rendimiento
+        return 100; // Increased for better performance
     }
 
     /**
@@ -192,7 +192,7 @@ class MenusImport implements
             ]);
 
             foreach ($data as $index => $row) {
-                // Verificar que fecha_hora_maxima_pedido esté presente
+                // Verify that fecha_hora_maxima_pedido is present
                 if (!isset($row['fecha_hora_maxima_pedido'])) {
                     $validator->errors()->add(
                         "{$index}.fecha_hora_maxima_pedido",
@@ -200,7 +200,7 @@ class MenusImport implements
                     );
                 }
 
-                // Validar la combinación única de fecha-rol-permiso-activo
+                // Validate unique combination of date-role-permission-active
                 if (isset($row['fecha_de_despacho'], $row['tipo_de_usuario'], $row['tipo_de_convenio'], $row['fecha_hora_maxima_pedido'])) {
                     try {
                         // Process publication date
@@ -241,7 +241,7 @@ class MenusImport implements
                     }
                 }
 
-                // Validar formato de fecha de despacho
+                // Validate dispatch date format
                 if (!empty($row['fecha_de_despacho'])) {
                     $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
                     if (!$parsedDate) {
@@ -252,7 +252,7 @@ class MenusImport implements
                     }
                 }
 
-                // Validar formato de fecha y hora máxima de pedido
+                // Validate maximum order date and time format
                 if (!empty($row['fecha_hora_maxima_pedido'])) {
                     $dateTime = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
 
@@ -402,7 +402,7 @@ class MenusImport implements
                 'count' => $rows->count()
             ]);
 
-            // Datos de muestra para debugging
+            // Sample data for debugging
             if ($rows->count() > 0) {
                 Log::debug('Muestra de datos:', [
                     'primera_fila' => $rows->first()->toArray(),
@@ -413,12 +413,12 @@ class MenusImport implements
             // Process each row
             foreach ($rows as $index => $row) {
                 try {
-                    // Verificar que fecha_hora_maxima_pedido esté presente
+                    // Verify that fecha_hora_maxima_pedido is present
                     if (!isset($row['fecha_hora_maxima_pedido'])) {
                         throw new \Exception('La fecha y hora máxima de pedido es obligatoria.');
                     }
 
-                    // Verificar que todos los campos requeridos estén presentes y no estén vacíos
+                    // Verify that all required fields are present and not empty
                     $requiredFields = ['titulo', 'descripcion', 'fecha_de_despacho', 'tipo_de_usuario', 'tipo_de_convenio', 'fecha_hora_maxima_pedido'];
                     foreach ($requiredFields as $field) {
                         if (!isset($row[$field]) || empty($row[$field])) {
@@ -428,7 +428,7 @@ class MenusImport implements
 
                     $menuData = $this->prepareMenuData($row);
 
-                    // Use updateOrCreate con title como llave identificatoria
+                    // Use updateOrCreate with title as identifying key
                     Menu::updateOrCreate(
                         ['title' => $menuData['title']],
                         $menuData
@@ -436,7 +436,7 @@ class MenusImport implements
 
                     Log::info('Menú creado/actualizado con éxito: ' . $menuData['title']);
                 } catch (\Exception $e) {
-                    // Usar el formato estándar de error a través de ExportErrorHandler
+                    // Use standard error format through ExportErrorHandler
                     ExportErrorHandler::handle(
                         $e,
                         $this->importProcessId,
@@ -451,7 +451,7 @@ class MenusImport implements
                 }
             }
         } catch (\Exception $e) {
-            // Usar el formato estándar de error a través de ExportErrorHandler
+            // Use standard error format through ExportErrorHandler
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
@@ -474,7 +474,7 @@ class MenusImport implements
      */
     private function prepareMenuData(Collection $row): array
     {
-        // Formatear fechas
+        // Format dates
         $publicationDate = null;
         if (!empty($row['fecha_de_despacho'])) {
             $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
@@ -493,7 +493,7 @@ class MenusImport implements
             $dateTime = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
 
             if ($dateTime) {
-                // Convertir a formato estándar Y-m-d H:i:s, asegurando que tenga segundos
+                // Convert to standard format Y-m-d H:i:s, ensuring it has seconds
                 $maxOrderDate = $dateTime->format('Y-m-d H:i:s');
                 Log::debug('Fecha y hora máxima parseada correctamente', [
                     'original' => $row['fecha_hora_maxima_pedido'],
@@ -509,7 +509,7 @@ class MenusImport implements
             throw new \Exception('La fecha y hora máxima de pedido es obligatoria.');
         }
 
-        // Buscar role_id basado en el nombre del rol
+        // Find role_id based on role name
         $roleId = null;
         if (!empty($row['tipo_de_usuario'])) {
             $role = Role::where('name', $row['tipo_de_usuario'])->first();
@@ -519,7 +519,7 @@ class MenusImport implements
             $roleId = $role->id;
         }
 
-        // Buscar permissions_id basado en el nombre del permiso
+        // Find permissions_id based on permission name
         $permissionId = null;
         if (!empty($row['tipo_de_convenio'])) {
             $permission = Permission::where('name', $row['tipo_de_convenio'])->first();
@@ -529,7 +529,7 @@ class MenusImport implements
             $permissionId = $permission->id;
         }
 
-        // Determinar valor activo
+        // Determine active value
         $active = $this->convertToBoolean($row['activo'] ?? true);
 
         return [
@@ -578,14 +578,14 @@ class MenusImport implements
                 'values' => $failure->values(),
             ];
 
-            // Obtener el proceso actual y sus errores existentes
+            // Get current process and its existing errors
             $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
             $existingErrors = $importProcess->error_log ?? [];
 
-            // Agregar el nuevo error al array existente
+            // Add new error to existing array
             $existingErrors[] = $error;
 
-            // Actualizar el error_log en el ImportProcess
+            // Update error_log in ImportProcess
             $importProcess->update([
                 'error_log' => $existingErrors,
                 'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
@@ -615,14 +615,14 @@ class MenusImport implements
             'trace' => $e->getTraceAsString()
         ];
 
-        // Obtener el proceso actual y sus errores existentes
+        // Get current process and its existing errors
         $importProcess = \App\Models\ImportProcess::find($this->importProcessId);
         $existingErrors = $importProcess->error_log ?? [];
 
-        // Agregar el nuevo error al array existente
+        // Add new error to existing array
         $existingErrors[] = $error;
 
-        // Actualizar el error_log en el ImportProcess
+        // Update error_log in ImportProcess
         $importProcess->update([
             'error_log' => $existingErrors,
             'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS

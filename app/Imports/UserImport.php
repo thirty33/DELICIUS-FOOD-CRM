@@ -255,7 +255,7 @@ class UserImport implements
                         'is_new_user' => !$existingUser
                     ]);
 
-                    // Crear o actualizar usuario usando el correo electrónico o nickname como clave única
+                    // Create or update user using email or nickname as unique key
                     $user = null;
                     if (!empty($userData['email'])) {
                         $user = User::updateOrCreate(
@@ -313,7 +313,7 @@ class UserImport implements
                         'is_new' => $user->wasRecentlyCreated
                     ]);
                 } catch (\Exception $e) {
-                    // Usar el formato estándar de error a través de ExportErrorHandler
+                    // Use standard error format through ExportErrorHandler
                     ExportErrorHandler::handle(
                         $e,
                         $this->importProcessId,
@@ -329,7 +329,7 @@ class UserImport implements
                 }
             }
         } catch (\Exception $e) {
-            // Usar el formato estándar de error a través de ExportErrorHandler
+            // Use standard error format through ExportErrorHandler
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
@@ -384,7 +384,7 @@ class UserImport implements
             'values' => $row->toArray()
         ]);
         
-        // Encontrar compañía por número de registro
+        // Find company by registration number
         $company = Company::where('registration_number', $row['compania'])->first();
         if (!$company) {
             Log::error('Compañía no encontrada', [
@@ -399,7 +399,7 @@ class UserImport implements
             'company_name' => $company->name
         ]);
 
-        // Encontrar sucursal por código de sucursal
+        // Find branch by branch code
         $branch = Branch::where('branch_code', $row['sucursal'])
             ->where('company_id', $company->id)
             ->first();
@@ -456,17 +456,17 @@ class UserImport implements
             'validate_subcategory_rules' => $validateSubcategoryRules
         ];
 
-        // Agregar email si está presente (usando email limpio)
+        // Add email if present (using clean email)
         if (!empty($cleanEmail)) {
             $userData['email'] = $cleanEmail;
         }
 
-        // Agregar nickname si está presente
+        // Add nickname if present
         if (!empty($row['nombre_de_usuario'])) {
             $userData['nickname'] = $row['nombre_de_usuario'];
         }
 
-        // Agregar contraseña si está presente
+        // Add password if present
         if (!empty($row['contrasena'])) {
             $userData['plain_password'] = $row['contrasena'];
             $userData['password'] = Hash::make($row['contrasena']);
@@ -526,7 +526,7 @@ class UserImport implements
         // Determinar el tipo de convenio
         $tipoConvenio = $row['tipo_de_convenio'] ?? null;
         
-        // Si el rol es Café y no tiene tipo de convenio, asignar consolidado por defecto
+        // If role is Cafe and has no agreement type, assign consolidated by default
         if ($role->name === RoleName::CAFE->value && empty($tipoConvenio)) {
             $tipoConvenio = PermissionName::CONSOLIDADO->value;
             Log::info('Asignando permiso consolidado por defecto para rol Café', [
@@ -535,7 +535,7 @@ class UserImport implements
             ]);
         }
 
-        // Asignar permiso si está presente
+        // Assign permission if present
         if (!empty($tipoConvenio)) {
             $permission = Permission::where('name', $tipoConvenio)->first();
             if (!$permission) {

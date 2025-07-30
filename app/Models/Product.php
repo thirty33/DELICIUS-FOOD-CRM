@@ -24,7 +24,9 @@ class Product extends Model
         'weight',
         'allow_sales_without_stock',
         'title_product',
-        'original_filename'
+        'original_filename',
+        'cloudfront_signed_url',
+        'signed_url_expiration'
     ];
 
     protected $casts = [

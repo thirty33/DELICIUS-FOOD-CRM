@@ -197,7 +197,7 @@ class CompaniesImport implements
             ]);
 
             foreach ($data as $index => $row) {
-                // Validar RUT único excepto para el registro actual
+                // Validate unique RUT except for current record
                 if (isset($row['rut'])) {
                     $exists = Company::where('tax_id', $row['rut'])
                         ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
@@ -211,9 +211,9 @@ class CompaniesImport implements
                     }
                 }
 
-                // Validación de email único eliminada
-                // Comentario: Se eliminó la validación de email único para permitir
-                // que el constraint de BD maneje los duplicados y genere errores más claros
+                // Unique email validation removed
+                // Comment: Unique email validation was removed to allow
+                // DB constraint to handle duplicates and generate clearer errors
                 
                 // Original validation code:
                 // if (isset($row['email'])) {
@@ -229,7 +229,7 @@ class CompaniesImport implements
                 //     }
                 // }
 
-                // Validar nombre único excepto para el registro actual
+                // Validate unique name except for current record
                 if (isset($row['razon_social'])) {
                     $exists = Company::where('name', $row['razon_social'])
                         ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
@@ -243,7 +243,7 @@ class CompaniesImport implements
                     }
                 }
 
-                // Validar nombre de fantasía único excepto para el registro actual
+                // Validate unique fantasy name except for current record
                 if (isset($row['nombre_de_fantasia'])) {
                     $exists = Company::where('fantasy_name', $row['nombre_de_fantasia'])
                         ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
@@ -296,9 +296,9 @@ class CompaniesImport implements
 
                     $companyData = $this->prepareCompanyData($row);
                     
-                    // Validación de email único eliminada
-                    // Comentario: Se eliminó la validación previa de email único
-                    // para permitir que el constraint de BD maneje los duplicados
+                    // Unique email validation removed
+                    // Comment: Prior unique email validation was removed
+                    // to allow DB constraint to handle duplicates
                     
                     Company::updateOrCreate(
                         [
@@ -391,7 +391,7 @@ class CompaniesImport implements
      */
     private function prepareCompanyData(Collection $row): array
     {
-        // Buscar el ID de la lista de precio
+        // Find the price list ID
         $priceListId = null;
         if (!empty($row['lista_de_precio'])) {
             $priceList = PriceList::where('name', $row['lista_de_precio'])->first();

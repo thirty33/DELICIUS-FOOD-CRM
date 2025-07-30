@@ -44,21 +44,38 @@ class ProductImageSignerDecorator
         $appTimezone = config('app.timezone', 'UTC');
 
         // Buscar productos que usen esta imagen
-        $products = Product::where('image', 'like', "%{$fileName}%")->get();
+        // Buscar coincidencia exacta primero, luego parcial si es necesario
+        $products = Product::where('image', $filePath)->get();
+        
+        if ($products->isEmpty()) {
+            // Si no hay coincidencia exacta, buscar por nombre de archivo
+            $products = Product::where('image', 'like', "%{$fileName}%")->get();
+        }
 
         // Si no hay productos asociados, simplemente delegar al servicio original
         if ($products->isEmpty()) {
             return $this->imageSigner->getSignedUrl($filePath, $expiryDays);
         }
 
-        // Verificar si algún producto ya tiene una URL firmada válida
+        // Check if any product already has a valid signed URL
         foreach ($products as $product) {
             if ($product->cloudfront_signed_url && $product->signed_url_expiration) {
-                // Convertir la fecha de expiración al timestamp considerando la zona horaria de la aplicación
+                // Verify that the product image matches the requested one
+                // This is important to avoid returning URLs from old images
+                if ($product->image !== $filePath && !str_contains($product->image, $fileName)) {
+                    Log::warning('Product image mismatch in CloudFront URL cache', [
+                        'product_id' => $product->id,
+                        'requested_file' => $filePath,
+                        'product_image' => $product->image
+                    ]);
+                    continue;
+                }
+                
+                // Convert expiration date to timestamp considering the application timezone
                 $expirationDateTime = Carbon::parse($product->signed_url_expiration, $appTimezone);
                 $expirationTimestamp = $expirationDateTime->timestamp;
 
-                // Obtener el timestamp actual considerando la zona horaria de la aplicación
+                // Get current timestamp considering the application timezone
                 $nowDateTime = Carbon::now($appTimezone);
                 $nowTimestamp = $nowDateTime->timestamp;
 
@@ -81,26 +98,40 @@ class ProductImageSignerDecorator
             }
         }
 
-        // Ningún producto tiene una URL válida, crear una nueva
+        // No product has a valid URL, create a new one
         $signedUrlData = $this->imageSigner->getSignedUrl($filePath, $expiryDays);
 
         // Actualizar todos los productos que usan esta imagen
         foreach ($products as $product) {
-            // Crear fecha de expiración usando Carbon con la zona horaria correcta
-            $expiresAt = Carbon::createFromTimestamp($signedUrlData['expires_timestamp'], $appTimezone);
+            // Solo actualizar si la imagen coincide
+            if ($product->image === $filePath || str_contains($product->image, $fileName)) {
+                // Create expiration date using Carbon with the correct timezone
+                $expiresAt = Carbon::createFromTimestamp($signedUrlData['expires_timestamp'], $appTimezone);
 
-            $product->cloudfront_signed_url = $signedUrlData['signed_url'];
-            $product->signed_url_expiration = $expiresAt;
+                $product->cloudfront_signed_url = $signedUrlData['signed_url'];
+                $product->signed_url_expiration = $expiresAt;
 
-            try {
-                $product->save();
-            } catch (\Exception $e) {
-                // Continuar con el siguiente producto si hay un error
-                continue;
+                try {
+                    // Usar saveQuietly para evitar disparar el observer
+                    $product->saveQuietly();
+                    
+                    Log::info('Updated CloudFront URL for product', [
+                        'product_id' => $product->id,
+                        'image' => $product->image,
+                        'expires_at' => $expiresAt->format('Y-m-d H:i:s')
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to update CloudFront URL for product', [
+                        'product_id' => $product->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    // Continuar con el siguiente producto si hay un error
+                    continue;
+                }
             }
         }
 
-        // Agregar información adicional al resultado
+        // Add additional information to the result
         $signedUrlData['from_cache'] = false;
         $signedUrlData['product_count'] = $products->count();
         $signedUrlData['product_ids'] = $products->pluck('id')->toArray();
