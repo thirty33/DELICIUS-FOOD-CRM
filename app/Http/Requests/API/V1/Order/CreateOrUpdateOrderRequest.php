@@ -28,17 +28,17 @@ class CreateOrUpdateOrderRequest extends FormRequest
     public function messages()
     {
         return [
-            'date.required' => 'The date field is required.',
-            'date.date_format' => 'The date must be in the format yyyy-mm-dd.',
-            'order_lines.required' => 'The order_lines field is required.',
-            'order_lines.array' => 'The order_lines must be an array.',
-            'order_lines.*.id.required' => 'The id field is required for each order line.',
-            'order_lines.*.id.integer' => 'The id field must be an integer.',
-            'order_lines.*.id.exists' => 'The specified order line does not exist.',
-            'order_lines.*.quantity.required' => 'The quantity field is required for each order line.',
-            'order_lines.*.quantity.integer' => 'The quantity field must be an integer.',
-            'order_lines.*.quantity.min' => 'The quantity field must be at least 1.',
-            'order_lines.*.partially_scheduled.boolean' => 'The partially_scheduled field must be a boolean.'
+            'date.required' => 'La fecha es requerida.',
+            'date.date_format' => 'La fecha debe estar en formato YYYY-MM-DD (año-mes-día).',
+            'order_lines.required' => 'Los productos del pedido son requeridos.',
+            'order_lines.array' => 'Los productos del pedido deben ser una lista válida.',
+            'order_lines.*.id.required' => 'El ID del producto es requerido para cada artículo del pedido.',
+            'order_lines.*.id.integer' => 'El ID del producto debe ser un número entero.',
+            'order_lines.*.id.exists' => 'El producto seleccionado no existe o no está disponible.',
+            'order_lines.*.quantity.required' => 'La cantidad es requerida para cada producto del pedido.',
+            'order_lines.*.quantity.integer' => 'La cantidad debe ser un número entero.',
+            'order_lines.*.quantity.min' => 'La cantidad mínima es 1 unidad por producto.',
+            'order_lines.*.partially_scheduled.boolean' => 'El campo de programación parcial debe ser verdadero o falso.'
         ];
     }
 
