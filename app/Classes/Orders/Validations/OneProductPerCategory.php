@@ -25,6 +25,7 @@ class OneProductPerCategory extends OrderStatusValidation
             // Filtrar solo las categorías que tienen productos en la lista de precios de la empresa del usuario
             // $categoryMenus = $currentMenu->categoryMenus()->orderedByDisplayOrder()->get();
             $categoryMenus = $currentMenu->categoryMenus()
+                ->where('is_active', true)
                 ->whereHas('category.products.priceListLines', function ($query) use ($user) {
                     $query->where('active', true)
                         ->whereHas('priceList', function ($priceListQuery) use ($user) {
