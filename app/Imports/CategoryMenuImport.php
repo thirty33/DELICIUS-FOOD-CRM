@@ -48,6 +48,7 @@ class CategoryMenuImport implements
         'mostrar_todos_los_productos' => 'show_all_products',
         'orden_de_visualizacion' => 'display_order',
         'categoria_obligatoria' => 'mandatory_category',
+        'activo' => 'is_active',
         'productos' => 'products'
     ];
 
@@ -122,6 +123,7 @@ class CategoryMenuImport implements
             '*.mostrar_todos_los_productos' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
             '*.orden_de_visualizacion' => ['nullable', 'integer', 'min:0'],
             '*.categoria_obligatoria' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
+            '*.activo' => ['nullable'],
             '*.productos' => ['nullable', 'string']
         ];
     }
@@ -142,6 +144,7 @@ class CategoryMenuImport implements
             '*.orden_de_visualizacion.integer' => 'El orden de visualización debe ser un número entero.',
             '*.orden_de_visualizacion.min' => 'El orden de visualización debe ser un número positivo.',
             '*.categoria_obligatoria.in' => 'El campo categoría obligatoria debe tener un valor válido (si/no, verdadero/falso, 1/0).',
+            '*.activo.in' => 'El campo activo debe ser VERDADERO, FALSO, 1, 0, true o false.',
         ];
     }
 
@@ -186,8 +189,15 @@ class CategoryMenuImport implements
                 //     }
                 // }
 
-                // Validar los productos especificados si no se muestran todos
+                // Determinar si el registro está activo
+                $isActive = true; // Default value
+                if (isset($row['activo']) && $row['activo'] !== null && $row['activo'] !== '') {
+                    $isActive = (strtoupper(trim($row['activo'])) === 'VERDADERO' || $row['activo'] == 1 || $row['activo'] === true);
+                }
+
+                // Validar los productos especificados si no se muestran todos y el registro está activo
                 if (
+                    $isActive &&
                     isset($row['productos']) && !empty($row['productos']) &&
                     isset($row['mostrar_todos_los_productos']) &&
                     !$this->convertToBoolean($row['mostrar_todos_los_productos'])
@@ -217,7 +227,9 @@ class CategoryMenuImport implements
                 }
 
                 // Si se muestra solo productos específicos, verificar que se hayan especificado productos
+                // Solo validar si el registro está activo
                 if (
+                    $isActive &&
                     isset($row['mostrar_todos_los_productos']) &&
                     !$this->convertToBoolean($row['mostrar_todos_los_productos']) &&
                     (!isset($row['productos']) || empty($row['productos']))
@@ -227,6 +239,19 @@ class CategoryMenuImport implements
                         "{$index}.productos",
                         'Debe especificar al menos un producto cuando no se muestran todos los productos.'
                     );
+                }
+
+                // Validate ACTIVO field accepts only VERDADERO, FALSO, 1, 0, true, false
+                if (isset($row['activo']) && $row['activo'] !== null && $row['activo'] !== '') {
+                    $activoValue = is_string($row['activo']) ? strtoupper(trim($row['activo'])) : $row['activo'];
+                    $validValues = ['VERDADERO', 'FALSO', '1', '0', 1, 0, true, false];
+                    
+                    if (!in_array($activoValue, $validValues) && !in_array($row['activo'], $validValues)) {
+                        $validator->errors()->add(
+                            "{$index}.activo",
+                            'El campo ACTIVO solo acepta los valores VERDADERO, FALSO, 1, 0, true o false.'
+                        );
+                    }
                 }
             }
         });
@@ -342,7 +367,10 @@ class CategoryMenuImport implements
             'display_order' => isset($row['orden_de_visualizacion']) && is_numeric($row['orden_de_visualizacion'])
                 ? (int)$row['orden_de_visualizacion']
                 : 100,
-            'mandatory_category' => $this->convertToBoolean($row['categoria_obligatoria'] ?? false)
+            'mandatory_category' => $this->convertToBoolean($row['categoria_obligatoria'] ?? false),
+            'is_active' => isset($row['activo']) && $row['activo'] !== null && $row['activo'] !== ''
+                ? (strtoupper(trim($row['activo'])) === 'VERDADERO' || $row['activo'] == 1 || $row['activo'] === true)
+                : true
         ];
 
         // Procesar productos si no mostrar todos los productos

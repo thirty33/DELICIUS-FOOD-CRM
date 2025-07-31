@@ -30,7 +30,8 @@ class CategoryMenu extends Pivot
         'category_id',
         'menu_id',
         'display_order',
-        'mandatory_category'
+        'mandatory_category',
+        'is_active'
     ];
 
     /**
@@ -40,6 +41,8 @@ class CategoryMenu extends Pivot
      */
     protected $casts = [
         'show_all_products' => 'boolean',
+        'mandatory_category' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     public function category(): BelongsTo

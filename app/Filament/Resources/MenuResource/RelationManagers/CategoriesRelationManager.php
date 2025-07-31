@@ -97,6 +97,10 @@ class CategoriesRelationManager extends RelationManager
                             ->label(__('Categoría obligatoria'))
                             ->default(false)
                             ->columns(1),
+                        Toggle::make('is_active')
+                            ->label(__('Activo'))
+                            ->default(true)
+                            ->columns(1),
                     ])
             ]);
     }
@@ -112,6 +116,8 @@ class CategoriesRelationManager extends RelationManager
                     ->disabled(true),
                 Tables\Columns\ToggleColumn::make('mandatory_category')
                     ->label(__('Categoría obligatoria')),
+                Tables\Columns\ToggleColumn::make('is_active')
+                    ->label(__('Activo')),
                 Tables\Columns\TextColumn::make('display_order')
                     ->label(__('Orden de visualización'))
                     ->sortable(),

@@ -91,6 +91,7 @@ class CategoryController extends Controller
                     ->select('category_id')
             )
             ->where('menu_id', $menu->id)
+            ->where('is_active', true)
             ->orderBy('category_menu.display_order', 'asc')
             ->paginate(5);
 
