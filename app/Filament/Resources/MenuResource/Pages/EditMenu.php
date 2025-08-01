@@ -10,6 +10,10 @@ use Filament\Notifications\Notification;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use Filament\Forms;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
+use App\Services\MenuCloneService;
 
 class EditMenu extends EditRecord
 {
@@ -18,6 +22,49 @@ class EditMenu extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('clone_menu')
+                ->label('Clonar')
+                ->color('primary')
+                ->icon('heroicon-o-document-duplicate')
+                ->form([
+                    Forms\Components\TextInput::make('title')
+                        ->label(__('Título'))
+                        ->required()
+                        ->maxLength(255),
+                    DatePicker::make('publication_date')
+                        ->label(__('Fecha de despacho'))
+                        ->required()
+                        ->native(false)
+                        ->displayFormat('M d, Y'),
+                    DateTimePicker::make('max_order_date')
+                        ->label(__('Fecha y hora máxima de pedido'))
+                        ->required()
+                        ->seconds(true)
+                        ->format('Y-m-d H:i:s')
+                        ->native(false),
+                ])
+                ->action(function (array $data) {
+                    try {
+                        $currentMenu = $this->record;
+                        
+                        $newMenu = MenuCloneService::cloneMenu($currentMenu, $data);
+
+                        Notification::make()
+                            ->title('Menú clonado exitosamente')
+                            ->body("Se ha creado el menú '{$data['title']}' basado en '{$currentMenu->title}'")
+                            ->success()
+                            ->send();
+
+                        return redirect()->to(MenuResource::getUrl('edit', ['record' => $newMenu]));
+                        
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Error al clonar menú')
+                            ->body('Ha ocurrido un error: ' . $e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
             Actions\DeleteAction::make(),
         ];
     }

@@ -93,7 +93,7 @@ class CategoryController extends Controller
             ->where('menu_id', $menu->id)
             ->where('is_active', true)
             ->orderBy('category_menu.display_order', 'asc')
-            ->paginate(5);
+            ->paginate(8);
 
         return ApiResponseService::success(
             CategoryMenuResource::collection($query)->additional([
