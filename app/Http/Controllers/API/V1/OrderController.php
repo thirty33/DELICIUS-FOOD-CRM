@@ -109,6 +109,7 @@ class OrderController extends Controller
     {
         $order = Order::with([
             'orderLines.product.category.subcategories',
+            'orderLines.product.ingredients',
         ])
             ->where('user_id', $request->user()->id)
             ->where('id', $id)
