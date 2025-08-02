@@ -162,37 +162,37 @@ class OneProductPerCategory extends OrderStatusValidation
         }
 
         // 2. Verificar las reglas de exclusión entre 'SANDWICH' y 'PAN', solo si están en el menú
-        $hasSandwichInMenu = $subcategoriesInMenu->contains('SANDWICH');
-        $hasPanInMenu = $subcategoriesInMenu->contains('PAN');
+        // $hasSandwichInMenu = $subcategoriesInMenu->contains('SANDWICH');
+        // $hasPanInMenu = $subcategoriesInMenu->contains('PAN');
 
-        if ($hasSandwichInMenu || $hasPanInMenu) {
-            $hasSandwichInOrder = $subcategoriesInOrder->contains('SANDWICH');
-            $hasPanInOrder = $subcategoriesInOrder->contains('PAN');
+        // if ($hasSandwichInMenu || $hasPanInMenu) {
+        //     $hasSandwichInOrder = $subcategoriesInOrder->contains('SANDWICH');
+        //     $hasPanInOrder = $subcategoriesInOrder->contains('PAN');
 
-            if ($hasSandwichInOrder && $hasPanInOrder) {
-                throw new Exception("No se permite combinar las subcategorías 'SANDWICH' y 'PAN' en la misma orden.");
-            }
+        //     if ($hasSandwichInOrder && $hasPanInOrder) {
+        //         throw new Exception("No se permite combinar las subcategorías 'SANDWICH' y 'PAN' en la misma orden.");
+        //     }
 
-            if (!$hasSandwichInOrder && !$hasPanInOrder) {
-                throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'SANDWICH' o 'PAN'.");
-            }
-        }
+        //     if (!$hasSandwichInOrder && !$hasPanInOrder) {
+        //         throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'SANDWICH' o 'PAN'.");
+        //     }
+        // }
 
-        // 3. Verificar las reglas de exclusión entre 'ENSALADA' y 'MINI-ENSALADA', solo si están en el menú
-        $hasEnsaladaInMenu = $subcategoriesInMenu->contains('ENSALADA');
-        $hasMiniEnsaladaInMenu = $subcategoriesInMenu->contains('MINI-ENSALADA');
+        // // 3. Verificar las reglas de exclusión entre 'ENSALADA' y 'MINI-ENSALADA', solo si están en el menú
+        // $hasEnsaladaInMenu = $subcategoriesInMenu->contains('ENSALADA');
+        // $hasMiniEnsaladaInMenu = $subcategoriesInMenu->contains('MINI-ENSALADA');
 
-        if ($hasEnsaladaInMenu || $hasMiniEnsaladaInMenu) {
-            $hasEnsaladaInOrder = $subcategoriesInOrder->contains('ENSALADA');
-            $hasMiniEnsaladaInOrder = $subcategoriesInOrder->contains('MINI-ENSALADA');
+        // if ($hasEnsaladaInMenu || $hasMiniEnsaladaInMenu) {
+        //     $hasEnsaladaInOrder = $subcategoriesInOrder->contains('ENSALADA');
+        //     $hasMiniEnsaladaInOrder = $subcategoriesInOrder->contains('MINI-ENSALADA');
 
-            if ($hasEnsaladaInOrder && $hasMiniEnsaladaInOrder) {
-                throw new Exception("No se permite combinar las subcategorías 'ENSALADA' y 'MINI-ENSALADA' en la misma orden.");
-            }
+        //     if ($hasEnsaladaInOrder && $hasMiniEnsaladaInOrder) {
+        //         throw new Exception("No se permite combinar las subcategorías 'ENSALADA' y 'MINI-ENSALADA' en la misma orden.");
+        //     }
 
-            if (!$hasEnsaladaInOrder && !$hasMiniEnsaladaInOrder) {
-                throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'ENSALADA' o 'MINI-ENSALADA'.");
-            }
-        }
+        //     if (!$hasEnsaladaInOrder && !$hasMiniEnsaladaInOrder) {
+        //         throw new Exception("La orden debe incluir al menos un producto de la subcategoría 'ENSALADA' o 'MINI-ENSALADA'.");
+        //     }
+        // }
     }
 }

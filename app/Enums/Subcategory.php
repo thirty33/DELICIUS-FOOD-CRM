@@ -4,7 +4,16 @@ namespace App\Enums;
 
 enum Subcategory: string
 {
-    case MAIN_DISH = 'PLATO DE FONDO'; // Valor y etiqueta
+    case PLATO_DE_FONDO = 'PLATO DE FONDO';
+    case ENTRADA = 'ENTRADA';
+    case CALIENTE = 'CALIENTE';
+    case HIPOCALORICO = 'HIPOCALORICO';
+    case FRIA = 'FRIA';
+    case SANDWICH = 'SANDWICH';
+    case POSTRE = 'POSTRE';
+    case BEBESTIBLE = 'BEBESTIBLE';
+    case PAN_DE_ACOMPANAMIENTO = 'PAN DE ACOMPAÑAMIENTO';
+    case CUBIERTOS = 'CUBIERTOS';
 
     /**
      * Obtiene la etiqueta (label) de la subcategoría.
@@ -12,7 +21,16 @@ enum Subcategory: string
     public function getLabel(): string
     {
         return match ($this) {
-            self::MAIN_DISH => 'Plato de fondo',
+            self::PLATO_DE_FONDO => 'Plato de fondo',
+            self::ENTRADA => 'Entrada',
+            self::CALIENTE => 'Caliente',
+            self::HIPOCALORICO => 'Hipocalórico',
+            self::FRIA => 'Fría',
+            self::SANDWICH => 'Sandwich',
+            self::POSTRE => 'Postre',
+            self::BEBESTIBLE => 'Bebestible',
+            self::PAN_DE_ACOMPANAMIENTO => 'Pan de acompañamiento',
+            self::CUBIERTOS => 'Cubiertos',
         };
     }
 
@@ -21,8 +39,18 @@ enum Subcategory: string
      */
     public static function getSelectOptions(): array
     {
-        return [
-            self::MAIN_DISH->value => self::MAIN_DISH->getLabel(),
-        ];
+        $options = [];
+        foreach (self::cases() as $case) {
+            $options[$case->value] = $case->getLabel();
+        }
+        return $options;
+    }
+
+    /**
+     * Obtiene todos los valores del enum como array.
+     */
+    public static function getValues(): array
+    {
+        return array_column(self::cases(), 'value');
     }
 }

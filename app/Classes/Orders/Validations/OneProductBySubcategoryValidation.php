@@ -7,14 +7,15 @@ use App\Classes\UserPermissions;
 use App\Models\User;
 use Carbon\Carbon;
 use Exception;
+use App\Enums\Subcategory;
 
 class OneProductBySubcategoryValidation extends OrderStatusValidation
 {
-    // Definir reglas de exclusión entre subcategorías
     protected $subcategoryExclusions = [
-        'PLATO DE FONDO' => ['PLATO DE FONDO'], // No puede haber otro producto con la misma subcategoría
-        'SANDWICH' => ['PAN'], // Si la categoría tiene 'SANDWICH', no puede tener 'PAN'
-        'ENSALADA' => ['MINI-ENSALADA'], // Si la categoría tiene 'ENSALADA', no puede tener 'MINI-ENSALADA'
+        Subcategory::PLATO_DE_FONDO->value => [Subcategory::PLATO_DE_FONDO->value],
+        Subcategory::ENTRADA->value => [Subcategory::ENTRADA->value],
+        Subcategory::FRIA->value => [Subcategory::HIPOCALORICO->value],
+        Subcategory::PAN_DE_ACOMPANAMIENTO->value => [Subcategory::SANDWICH->value],
     ];
 
     protected function check(Order $order, User $user, Carbon $date): void
