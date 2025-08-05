@@ -122,6 +122,9 @@ class ProductResource extends Resource
                 Forms\Components\Toggle::make('active')
                     ->label(__('Activo'))
                     ->default(false),
+                Forms\Components\Toggle::make('is_null_product')
+                    ->label(__('Producto Nulo'))
+                    ->default(false),
                 Forms\Components\Textarea::make('description')
                     ->required()
                     ->minLength(2)
@@ -155,6 +158,9 @@ class ProductResource extends Resource
                 Tables\Columns\TextColumn::make('category.name')
                     ->label(__('Categoría'))
                     ->searchable()
+                    ->sortable(),
+                Tables\Columns\ToggleColumn::make('is_null_product')
+                    ->label(__('Producto Nulo'))
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Creado'))

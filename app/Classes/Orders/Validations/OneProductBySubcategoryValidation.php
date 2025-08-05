@@ -9,8 +9,32 @@ use Carbon\Carbon;
 use Exception;
 use App\Enums\Subcategory;
 
+/**
+ * Validates subcategory exclusion rules to ensure menu balance.
+ * 
+ * This validation enforces specific combination rules between subcategories:
+ * - PLATO DE FONDO: Cannot have multiple main dishes
+ * - ENTRADA: Cannot have multiple appetizers  
+ * - FRIA vs HIPOCALORICO: Cold items cannot be combined with low-calorie options
+ * - PAN DE ACOMPAÑAMIENTO vs SANDWICH: Bread accompaniment cannot be combined with sandwiches
+ * 
+ * Only applies when validate_subcategory_rules is TRUE and for individual agreement users.
+ * Generates user-friendly messages explaining why certain combinations aren't allowed.
+ */
 class OneProductBySubcategoryValidation extends OrderStatusValidation
 {
+    /**
+     * Friendly names for subcategories to make error messages more user-friendly
+     */
+    private const FRIENDLY_SUBCATEGORY_NAMES = [
+        'PLATO DE FONDO' => 'plato principal',
+        'ENTRADA' => 'entrada',
+        'SANDWICH' => 'sandwich',
+        'PAN DE ACOMPANAMIENTO' => 'pan de acompañamiento',
+        'FRIA' => 'comida fría',
+        'HIPOCALORICO' => 'opción ligera'
+    ];
+
     protected $subcategoryExclusions = [
         Subcategory::PLATO_DE_FONDO->value => [Subcategory::PLATO_DE_FONDO->value],
         Subcategory::ENTRADA->value => [Subcategory::ENTRADA->value],
@@ -20,63 +44,59 @@ class OneProductBySubcategoryValidation extends OrderStatusValidation
 
     protected function check(Order $order, User $user, Carbon $date): void
     {   
-
         if(!$user->validate_subcategory_rules) {
             return;
         }
 
         if (UserPermissions::IsAgreementIndividual($user)) {
-            // Filtrar los orderLines cuyas categorías tengan al menos una subcategoría
             $filteredOrderLines = $order->orderLines->filter(function ($orderLine) {
                 return $orderLine->product->category->subcategories->isNotEmpty();
             });
 
-            // Si no hay orderLines con categorías que tengan subcategorías, no es necesario validar
             if ($filteredOrderLines->isEmpty()) {
                 return;
             }
 
-            // Obtener todas las categorías y subcategorías de los productos en los orderLines filtrados
             $productsWithSubcategories = $filteredOrderLines->map(function ($orderLine) {
                 return [
-                    'product_id' => $orderLine->product->id, // ID del producto
+                    'product_id' => $orderLine->product->id,
                     'category' => $orderLine->product->category,
                     'subcategories' => $orderLine->product->category->subcategories->pluck('name')->toArray(),
                     'product_name' => $orderLine->product->name,
+                    'is_null_product' => $orderLine->product->is_null_product,
                 ];
             });
 
-            // Verificar las reglas de exclusión entre productos
             $this->validateSubcategoryExclusions($productsWithSubcategories);
         }
     }
 
     /**
-     * Validar las exclusiones de subcategorías entre productos.
+     * Validate subcategory exclusions between products.
      *
      * @param \Illuminate\Support\Collection $products
      * @throws Exception
      */
     protected function validateSubcategoryExclusions($products): void
     {
-        // Recorrer cada producto y comparar con los demás productos
         foreach ($products as $index => $product) {
             foreach ($this->subcategoryExclusions as $subcategory => $excludedSubcategories) {
-                // Verificar si el producto tiene la subcategoría actual
                 if (in_array($subcategory, $product['subcategories'])) {
-                    // Buscar otros productos que tengan las subcategorías excluidas
                     foreach ($products as $otherIndex => $otherProduct) {
-                        // No comparar el producto consigo mismo
                         if ($otherIndex === $index) {
                             continue;
                         }
 
-                        // Verificar si el otro producto tiene alguna de las subcategorías excluidas
+                        // Skip validation if either product is null product (e.g., "SIN PLATO DE FONDO")
+                        // because null products represent absence of that type, not a real product
+                        if ($product['is_null_product'] || $otherProduct['is_null_product']) {
+                            continue;
+                        }
+
                         foreach ($excludedSubcategories as $excludedSubcategory) {
                             if (in_array($excludedSubcategory, $otherProduct['subcategories'])) {
                                 throw new Exception(
-                                    "No se permite combinar las subcategorías '{$subcategory}' y '{$excludedSubcategory}'. " .
-                                    "Productos conflictivos: '{$product['product_name']}' y '{$otherProduct['product_name']}'."
+                                    $this->generateSubcategoryConflictMessage($subcategory, $excludedSubcategory)
                                 );
                             }
                         }
@@ -84,5 +104,25 @@ class OneProductBySubcategoryValidation extends OrderStatusValidation
                 }
             }
         }
+    }
+
+    /**
+     * Get friendly name for a subcategory
+     */
+    private function getFriendlySubcategoryName(string $subcategory): string
+    {
+        return self::FRIENDLY_SUBCATEGORY_NAMES[$subcategory] ?? strtolower($subcategory);
+    }
+
+    /**
+     * Generate user-friendly message for subcategory conflicts
+     */
+    private function generateSubcategoryConflictMessage(string $subcategory1, string $subcategory2): string
+    {
+        $friendly1 = $this->getFriendlySubcategoryName($subcategory1);
+        $friendly2 = $this->getFriendlySubcategoryName($subcategory2);
+        
+        return "🍽️ Para mantener el balance de tu menú, no puedes combinar {$subcategory1} con {$subcategory2}.\n\n" .
+               "💡 Nuestros chefs recomiendan elegir solo uno de estos tipos para una mejor experiencia gastronómica.";
     }
 }

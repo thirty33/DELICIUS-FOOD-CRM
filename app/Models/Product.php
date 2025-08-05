@@ -26,12 +26,14 @@ class Product extends Model
         'title_product',
         'original_filename',
         'cloudfront_signed_url',
-        'signed_url_expiration'
+        'signed_url_expiration',
+        'is_null_product'
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
         'price_list' => 'decimal:2',
+        'is_null_product' => 'boolean',
     ];
 
     public function category(): BelongsTo
