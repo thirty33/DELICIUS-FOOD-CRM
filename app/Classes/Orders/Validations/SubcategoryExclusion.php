@@ -21,20 +21,9 @@ use App\Enums\Subcategory;
  * Only applies when validate_subcategory_rules is TRUE and for individual agreement users.
  * Generates user-friendly messages explaining why certain combinations aren't allowed.
  */
-class OneProductBySubcategoryValidation extends OrderStatusValidation
+class SubcategoryExclusion extends OrderStatusValidation
 {
-    /**
-     * Friendly names for subcategories to make error messages more user-friendly
-     */
-    private const FRIENDLY_SUBCATEGORY_NAMES = [
-        'PLATO DE FONDO' => 'plato principal',
-        'ENTRADA' => 'entrada',
-        'SANDWICH' => 'sandwich',
-        'PAN DE ACOMPANAMIENTO' => 'pan de acompañamiento',
-        'FRIA' => 'comida fría',
-        'HIPOCALORICO' => 'opción ligera'
-    ];
-
+    
     protected $subcategoryExclusions = [
         Subcategory::PLATO_DE_FONDO->value => [Subcategory::PLATO_DE_FONDO->value],
         Subcategory::ENTRADA->value => [Subcategory::ENTRADA->value],
@@ -105,24 +94,12 @@ class OneProductBySubcategoryValidation extends OrderStatusValidation
             }
         }
     }
-
-    /**
-     * Get friendly name for a subcategory
-     */
-    private function getFriendlySubcategoryName(string $subcategory): string
-    {
-        return self::FRIENDLY_SUBCATEGORY_NAMES[$subcategory] ?? strtolower($subcategory);
-    }
-
+    
     /**
      * Generate user-friendly message for subcategory conflicts
      */
     private function generateSubcategoryConflictMessage(string $subcategory1, string $subcategory2): string
     {
-        $friendly1 = $this->getFriendlySubcategoryName($subcategory1);
-        $friendly2 = $this->getFriendlySubcategoryName($subcategory2);
-        
-        return "🍽️ Para mantener el balance de tu menú, no puedes combinar {$subcategory1} con {$subcategory2}.\n\n" .
-               "💡 Nuestros chefs recomiendan elegir solo uno de estos tipos para una mejor experiencia gastronómica.";
+        return "No puedes combinar las subcategorías: {$subcategory1} con {$subcategory2}.\n\n";
     }
 }

@@ -7,10 +7,12 @@ use App\Classes\OrderHelper;
 use App\Classes\Orders\Validations\AtLeastOneProductByCategory;
 use App\Classes\Orders\Validations\DispatchRulesCategoriesValidation;
 use App\Classes\Orders\Validations\MenuExistsValidation;
-use App\Classes\Orders\Validations\OneProductPerCategory;
+use App\Classes\Orders\Validations\MenuCompositionValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
-use App\Classes\Orders\Validations\OneProductBySubcategoryValidation;
+use App\Classes\Orders\Validations\SubcategoryExclusion;
 use App\Classes\Orders\Validations\MandatoryCategoryValidation;
+use App\Classes\Orders\Validations\OneProductPerCategorySimple;
+use App\Classes\Orders\Validations\OneProductPerSubcategory;
 use App\Classes\UserPermissions;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
@@ -22,6 +24,7 @@ use App\Http\Resources\API\V1\OrderResource;
 use App\Models\Order;
 use App\Models\PriceListLine;
 use App\Http\Requests\API\V1\Order\OrderRequest;
+use Illuminate\Support\Facades\DB;
 use App\Http\Requests\API\V1\Order\CreateOrUpdateOrderRequest;
 use App\Http\Requests\API\V1\Order\OrderByIdRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
@@ -141,93 +144,106 @@ class OrderController extends Controller
 
     public function update(CreateOrUpdateOrderRequest $request, string $date): JsonResponse
     {
-
         try {
+            return DB::transaction(function () use ($request, $date) {
+                $date = data_get($request->validated(), 'date', '');
 
-            $date = data_get($request->validated(), 'date', '');
+                $carbonDate = Carbon::parse($date);
+                $user = $request->user();
+                $orderIsPartiallyScheduled = false;
 
-            $carbonDate = Carbon::parse($date);
-            $user = $request->user();
-            $orderIsPartiallyScheduled = false;
+                foreach ($request->order_lines as $orderLineData) {
+                    if (isset($orderLineData['partially_scheduled']) && $orderLineData['partially_scheduled']) {
 
-            foreach ($request->order_lines as $orderLineData) {
-                if (isset($orderLineData['partially_scheduled']) && $orderLineData['partially_scheduled']) {
+                        $orderIsPartiallyScheduled = true;
 
-                    $orderIsPartiallyScheduled = true;
-
-                    if (!UserPermissions::IsCafe($user)) {
-                        throw new Exception('User does not have the required CAFE role.');
+                        if (!UserPermissions::IsCafe($user)) {
+                            throw new Exception('User does not have the required CAFE role.');
+                        }
                     }
                 }
-            }
 
-            $order = $this->getOrder($user->id, $carbonDate);
+                $order = $this->getOrder($user->id, $carbonDate);
 
-            if ($order && $order->status === OrderStatus::PROCESSED->value) {
-                throw new Exception('La orden ya ha sido procesada');
-            }
+                if ($order && $order->status === OrderStatus::PROCESSED->value) {
+                    throw new Exception('La orden ya ha sido procesada');
+                }
 
-            if (!$order) {
-                $order = new Order();
-                $order->user_id = $user->id;
-                $order->dispatch_date = $carbonDate;
+                if (!$order) {
+                    $order = new Order();
+                    $order->user_id = $user->id;
+                    $order->dispatch_date = $carbonDate;
+                    $order->save();
+                }
+
+                $validationChain = new MenuExistsValidation();
+
+                $validationChain
+                    ->validate($order, $user, $carbonDate);
+
+                $companyPriceListId = $user->company->price_list_id;
+
+                foreach ($request->order_lines as $orderLineData) {
+
+                    $productId = $orderLineData['id'];
+                    $quantity = $orderLineData['quantity'];
+                    $partiallyScheduled = $orderLineData['partially_scheduled'] ?? false;
+
+                    $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
+
+                    // Validar reglas de categoría si partially_scheduled es true
+                    if ($partiallyScheduled || ($existingOrderLine && $existingOrderLine->partially_scheduled)) {
+                        $product = Product::find($productId);
+                        if ($product) {
+                            OrderHelper::validateCategoryLineRulesForProduct($product, $carbonDate, $user);
+                        }
+                    }
+
+                    // Verificar si el producto está en la lista de precios
+                    $productInPriceList = PriceListLine::where('price_list_id', $companyPriceListId)
+                        ->where('product_id', $productId);
+
+                    if (!$productInPriceList->exists()) {
+                        continue;
+                    }
+
+                    $order->orderLines()->updateOrCreate(
+                        ['product_id' => $productId],
+                        [
+                            'quantity' => $quantity,
+                            'unit_price' => $productInPriceList->first()->unit_price,
+                            'partially_scheduled' => $partiallyScheduled
+                        ]
+                    );
+                }
+
+                $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
+                $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
+
+                if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
+                    $order->status = OrderStatus::PENDING->value;
+                }
+
                 $order->save();
-            }
 
-            $validationChain = new MenuExistsValidation();
+                // Validate order composition after order lines are created/updated
+                // Refresh order to get updated order lines
+                $order = $order->fresh(['orderLines.product.category.subcategories']);
 
-            $validationChain
-                ->validate($order, $user, $carbonDate);
+                $validationChain2 = new DispatchRulesCategoriesValidation();
+                $validationChain2
+                    ->linkWith(new OneProductPerCategorySimple())
+                    ->linkWith(new OneProductPerSubcategory())
+                    ->linkWith(new SubcategoryExclusion());
+                    
+                $validationChain2
+                    ->validate($order, $user, $carbonDate);
 
-            $companyPriceListId = $user->company->price_list_id;
-
-            foreach ($request->order_lines as $orderLineData) {
-
-                $productId = $orderLineData['id'];
-                $quantity = $orderLineData['quantity'];
-                $partiallyScheduled = $orderLineData['partially_scheduled'] ?? false;
-
-                $existingOrderLine = $order->orderLines()->where('product_id', $productId)->first();
-
-                // Validar reglas de categoría si partially_scheduled es true
-                if ($partiallyScheduled || ($existingOrderLine && $existingOrderLine->partially_scheduled)) {
-                    $product = Product::find($productId);
-                    if ($product) {
-                        OrderHelper::validateCategoryLineRulesForProduct($product, $carbonDate, $user);
-                    }
-                }
-
-                // Verificar si el producto está en la lista de precios
-                $productInPriceList = PriceListLine::where('price_list_id', $companyPriceListId)
-                    ->where('product_id', $productId);
-
-                if (!$productInPriceList->exists()) {
-                    continue;
-                }
-
-                $order->orderLines()->updateOrCreate(
-                    ['product_id' => $productId],
-                    [
-                        'quantity' => $quantity,
-                        'unit_price' => $productInPriceList->first()->unit_price,
-                        'partially_scheduled' => $partiallyScheduled
-                    ]
+                return ApiResponseService::success(
+                    new OrderResource($this->getOrder($user->id, $carbonDate)),
+                    'Order updated successfully',
                 );
-            }
-
-            $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
-            $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
-
-            if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
-                $order->status = OrderStatus::PENDING->value;
-            }
-
-            $order->save();
-
-            return ApiResponseService::success(
-                new OrderResource($this->getOrder($user->id, $carbonDate)),
-                'Order updated successfully',
-            );
+            });
         } catch (Exception $e) {
             return ApiResponseService::unprocessableEntity('error', [
                 'message' => [$e->getMessage()],
@@ -321,9 +337,9 @@ class OrderController extends Controller
             $validationChain
                 ->linkWith(new DispatchRulesCategoriesValidation())
                 ->linkWith(new AtLeastOneProductByCategory())
-                ->linkWith(new OneProductPerCategory())
                 ->linkWith(new MaxOrderAmountValidation())
-                ->linkWith(new OneProductBySubcategoryValidation())
+                ->linkWith(new SubcategoryExclusion())
+                ->linkWith(new MenuCompositionValidation())
                 ->linkWith(new MandatoryCategoryValidation());
 
             $validationChain
@@ -402,7 +418,7 @@ class OrderController extends Controller
     {
         try {
             $user = $request->user();
-            
+
             // Find the order by ID and ensure it belongs to the authenticated user
             $order = Order::where('id', $id)
                 ->where('user_id', $user->id)

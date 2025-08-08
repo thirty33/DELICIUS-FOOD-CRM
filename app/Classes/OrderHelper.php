@@ -30,10 +30,10 @@ class OrderHelper
         } elseif ($daysDifference == $preparationDays) {
             $maximumOrderTime = Carbon::parse($categoryLine->maximum_order_time);
             if ($todayWithHour->greaterThan($maximumOrderTime)) {
-                throw new Exception("El producto '{$product->name}' no puede ser pedido después de las {$maximumOrderTime->format('H:i')}.");
+                throw new Exception("El producto '" . self::formatProductName($product->name) . "' no puede ser pedido después de las {$maximumOrderTime->format('H:i')}.");
             }
         } else {
-            throw new Exception("El producto '{$product->name}' no puede ser pedido para este día. Debe ser pedido con {$preparationDays} días de anticipación.");
+            throw new Exception("El producto '" . self::formatProductName($product->name) . "' no puede ser pedido para este día. Debe ser pedido con {$preparationDays} días de anticipación.");
         }
     }
 
@@ -64,7 +64,7 @@ class OrderHelper
         $categoryLine = self::getCategoryLineForDay($category, $dayOfWeek, $user);
 
         if (!$categoryLine) {
-            throw new Exception("El producto '{$product->name}' no está disponible para el día {$dayOfWeekInSpanish}.");
+            throw new Exception("El producto '" . self::formatProductName($product->name) . "' no está disponible para el día {$dayOfWeekInSpanish}.");
         }
     }
 
@@ -119,7 +119,7 @@ class OrderHelper
             $categoryLine = self::getCategoryLineForDay($category, $dayOfWeek, $user);
 
             if (!$categoryLine) {
-                throw new Exception("El producto '{$product->name}' no está disponible para el día {$dayOfWeekInSpanish}.");
+                throw new Exception("El producto '" . self::formatProductName($product->name) . "' no está disponible para el día {$dayOfWeekInSpanish}.");
             }
 
             $todayWithHour = Carbon::now();
@@ -133,10 +133,10 @@ class OrderHelper
                 $maximumOrderTime = Carbon::parse($categoryLine->maximum_order_time);
 
                 if ($todayWithHour->greaterThan($maximumOrderTime)) {
-                    throw new Exception("El producto '{$product->name}' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
+                    throw new Exception("El producto '" . self::formatProductName($product->name) . "' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
                 }
             } else {
-                throw new Exception("El producto '{$product->name}' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
+                throw new Exception("El producto '" . self::formatProductName($product->name) . "' no puede ser modificado. El tiempo de preparación del producto ya ha comenzado.");
             }
         }
     }
@@ -151,5 +151,17 @@ class OrderHelper
     {
         $carbonDate = Carbon::parse($date);
         return strtolower($carbonDate->englishDayOfWeek);
+    }
+
+    /**
+     * Formatea el nombre de un producto para mostrarlo en mensajes.
+     * Convierte de "ACM - CONSOME DE POLLO 300 GR" a "Acm - Consome de pollo 300 gr"
+     *
+     * @param string $productName
+     * @return string
+     */
+    public static function formatProductName(string $productName): string
+    {
+        return ucfirst(strtolower($productName));
     }
 }
