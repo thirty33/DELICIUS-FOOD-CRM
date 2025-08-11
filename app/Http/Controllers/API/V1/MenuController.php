@@ -3,19 +3,26 @@
 namespace App\Http\Controllers\API\V1;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 use App\Services\API\V1\ApiResponseService;
 use App\Http\Resources\API\V1\MenuResource;
 use App\Models\Menu;
+use App\Repositories\UserDelegationRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 
 class MenuController extends Controller
 {
-    public function index(): JsonResponse
-    {
+    protected $userDelegationRepository;
 
-        $user = auth()->user();
+    public function __construct(UserDelegationRepository $userDelegationRepository)
+    {
+        $this->userDelegationRepository = $userDelegationRepository;
+    }
+
+    public function index(DelegateUserRequest $request): JsonResponse
+    {
+        $user = $this->userDelegationRepository->getEffectiveUser($request);
         
         $userRoleIds = $user->roles->pluck('id')->toArray();
         $userPermissionIds = $user->permissions->pluck('id')->toArray();

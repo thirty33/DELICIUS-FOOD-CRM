@@ -31,6 +31,7 @@ class AuthSanctumService implements AuthServiceInterface
                 'token_type' => 'bearer',
                 'role' => optional(auth()->user()->roles->first())->name ?? null,
                 'permission' => optional(auth()->user()->permissions->first())->name ?? null,
+                'master_user' => auth()->user()->master_user ?? false,
             ]);
         }
 
@@ -49,6 +50,7 @@ class AuthSanctumService implements AuthServiceInterface
                 'token_type' => 'bearer',
                 'role' => optional(auth()->user()->roles->first())->name ?? null,
                 'permission' => optional(auth()->user()->permissions->first())->name ?? null,
+                'master_user' => auth()->user()->master_user ?? false,
             ]);
         }
 

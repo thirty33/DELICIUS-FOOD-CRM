@@ -262,6 +262,10 @@ class UserResource extends Resource
                 Toggle::make('validate_subcategory_rules')
                     ->label(__('Validar reglas de subcategoría'))
                     ->inline(false),
+                Toggle::make('master_user')
+                    ->label(__('Usuario Maestro'))
+                    ->inline(false)
+                    ->helperText(__('Permite al usuario acceder a funciones administrativas especiales')),
             ]);
     }
 
@@ -300,6 +304,12 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('branch.fantasy_name')
                     ->label(__('Sucursal'))
                     ->searchable(),
+                Tables\Columns\IconColumn::make('master_user')
+                    ->label(__('Usuario Maestro'))
+                    ->boolean()
+                    ->trueIcon('heroicon-o-shield-check')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')

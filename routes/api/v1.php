@@ -16,7 +16,8 @@ use App\Http\Controllers\API\V1\Auth\{
 use App\Http\Controllers\API\V1\{
     MenuController,
     CategoryController,
-    OrderController
+    OrderController,
+    UsersController
 };
 
 Route::prefix('auth')->group(function () {
@@ -57,6 +58,11 @@ Route::prefix('orders')->middleware(['auth:sanctum', ThrottleRequests::with(60, 
         ->name('orders.partially_schedule_order');
     Route::patch('update-user-comment/{id}', [OrderController::class, 'updateUserComment'])
         ->name('orders.update_user_comment');
+});
+
+Route::prefix('users')->middleware(['auth:sanctum', ThrottleRequests::with(60, 1)])->group(function () {
+    Route::get('subordinates', [UsersController::class, 'getSubordinateUsers'])
+        ->name('users.subordinates');
 });
 
 Route::prefix('signed-urls')->middleware(['auth:sanctum', ThrottleRequests::with(30, 1)])->group(function () {

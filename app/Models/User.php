@@ -43,7 +43,8 @@ class User extends Authenticatable implements FilamentUser
         'validate_min_price',
         'validate_subcategory_rules',
         'nickname',
-        'plain_password'
+        'plain_password',
+        'master_user'
     ];
 
     /**
@@ -66,6 +67,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'master_user' => 'boolean',
         ];
     }
 
