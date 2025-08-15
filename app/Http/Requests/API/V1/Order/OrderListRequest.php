@@ -24,8 +24,20 @@ class OrderListRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // Filtros existentes
             'order_status' => 'nullable|in:' . implode(',', OrderStatus::getValues()),
             'time_period' => 'nullable|in:' . implode(',', TimePeriod::getValues()),
+            
+            // Búsqueda
+            'user_search' => 'nullable|string|max:255',
+            'branch_search' => 'nullable|string|max:255',
+            
+            // Ordenamiento
+            'sort_column' => 'nullable|string|in:id,dispatch_date,status,total,created_at,updated_at',
+            'sort_direction' => 'nullable|string|in:asc,desc',
+            
+            // Paginación
+            'per_page' => 'nullable|integer|min:1|max:100',
         ];
     }
 
@@ -37,8 +49,24 @@ class OrderListRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'order_status.in' => 'El campo order_status debe ser uno de los siguientes valores: ' . implode(', ', OrderStatus::getValues()),
-            'time_period.in' => 'El campo time_period debe ser uno de los siguientes valores: this_week, this_month, last_3_months, last_6_months, this_year.',
+            // Mensajes para filtros existentes
+            'order_status.in' => 'El estado de la orden debe ser uno de los siguientes valores: ' . implode(', ', OrderStatus::getValues()),
+            'time_period.in' => 'El período de tiempo debe ser uno de los siguientes valores: this_week, this_month, last_3_months, last_6_months, this_year.',
+            
+            // Mensajes para búsqueda
+            'user_search.string' => 'El término de búsqueda de usuario debe ser un texto.',
+            'user_search.max' => 'El término de búsqueda de usuario no puede exceder los 255 caracteres.',
+            'branch_search.string' => 'El término de búsqueda de sucursal debe ser un texto.',
+            'branch_search.max' => 'El término de búsqueda de sucursal no puede exceder los 255 caracteres.',
+            
+            // Mensajes para ordenamiento
+            'sort_column.in' => 'La columna de ordenamiento debe ser una de las siguientes: id, dispatch_date, status, total, created_at, updated_at.',
+            'sort_direction.in' => 'La dirección de ordenamiento debe ser "asc" o "desc".',
+            
+            // Mensajes para paginación
+            'per_page.integer' => 'El número de elementos por página debe ser un número entero.',
+            'per_page.min' => 'El número de elementos por página debe ser al menos 1.',
+            'per_page.max' => 'El número de elementos por página no puede exceder 100.',
         ];
     }
 }

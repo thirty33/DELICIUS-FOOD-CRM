@@ -4,16 +4,19 @@ namespace App\Http\Requests\API\V1\Category;
 
 use App\Enums\RoleName;
 use App\Models\Menu;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Request;
+use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 
-class CategoryMenuRequest extends FormRequest
+class CategoryMenuRequest extends DelegateUserRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
-    public function authorize(Request $request): bool
+    public function authorize(): bool
     {
+        // Execute parent authorization (delegate user validation)
+        // This will throw HttpResponseException if validation fails
+        parent::authorize();
+        
         $user = auth()->user();
         $menuId = $this->route('menu')->id;
 

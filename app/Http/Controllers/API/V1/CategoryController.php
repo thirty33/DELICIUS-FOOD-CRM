@@ -17,13 +17,21 @@ use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use App\Enums\Weekday;
 use Illuminate\Support\Facades\Log;
+use App\Repositories\UserDelegationRepository;
 
 class CategoryController extends Controller
 {
+    protected UserDelegationRepository $userDelegationRepository;
+    
+    public function __construct(UserDelegationRepository $userDelegationRepository)
+    {
+        $this->userDelegationRepository = $userDelegationRepository;
+    }
+    
     public function index(CategoryMenuRequest $request, Menu $menu): JsonResponse
     {
         $request = $request->validated();
-        $user = auth()->user();
+        $user = $this->userDelegationRepository->getEffectiveUser(request());
 
         $publicationDate = Carbon::parse($menu->publication_date);
         $weekday = ucfirst(strtolower($publicationDate->isoFormat('dddd')));

@@ -146,3 +146,4 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - API endpoints use role-based authorization
 - Admin panel has comprehensive permission system
 - Image URLs are signed for security
+- explica que es lo que vas a hacer, no me des código sin explicación

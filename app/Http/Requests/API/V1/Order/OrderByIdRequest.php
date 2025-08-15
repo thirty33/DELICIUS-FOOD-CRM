@@ -2,15 +2,19 @@
 
 namespace App\Http\Requests\API\V1\Order;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 
-class OrderByIdRequest extends FormRequest
+class OrderByIdRequest extends DelegateUserRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
+        // Execute parent authorization (delegate user validation)
+        // This will throw HttpResponseException if validation fails
+        parent::authorize();
+        
         return true;
     }
 
@@ -21,9 +25,10 @@ class OrderByIdRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        // Merge parent rules with our specific rules
+        return array_merge(parent::rules(), [
             'order_id' => 'sometimes|integer|exists:orders,id'
-        ];
+        ]);
     }
 
     /**
@@ -40,5 +45,18 @@ class OrderByIdRequest extends FormRequest
                 'order_id' => $this->route('id')
             ]);
         }
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array
+     */
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'order_id.integer' => 'The order ID must be an integer.',
+            'order_id.exists' => 'The selected order does not exist.',
+        ]);
     }
 }

@@ -2,17 +2,18 @@
 
 namespace App\Http\Requests\API\V1\Order;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 use App\Models\Menu;
 
-class UpdateStatusRequest extends FormRequest
+class UpdateStatusRequest extends DelegateUserRequest
 {
-    public function rules()
+    public function rules(): array
     {
-        return [
+        // Merge parent rules with our specific rules
+        return array_merge(parent::rules(), [
             'date' => $this->route('date') ? 'date_format:Y-m-d' : 'required|date_format:Y-m-d',
             'status' => 'required|string',
-        ];
+        ]);
     }
 
     protected function prepareForValidation()
@@ -22,16 +23,20 @@ class UpdateStatusRequest extends FormRequest
         ]);
     }
 
-    public function messages()
+    public function messages(): array
     {
-        return [
+        return array_merge(parent::messages(), [
             'status.required' => 'The status field is required.',
             'status.string' => 'The status field must be a string.',
-        ];
+        ]);
     }
 
-    public function authorize()
+    public function authorize(): bool
     {
+        // Execute parent authorization (delegate user validation)
+        // This will throw HttpResponseException if validation fails
+        parent::authorize();
+        
         // Obtener la fecha del request
         $date = $this->input('date');
 

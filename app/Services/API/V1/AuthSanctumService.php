@@ -32,6 +32,8 @@ class AuthSanctumService implements AuthServiceInterface
                 'role' => optional(auth()->user()->roles->first())->name ?? null,
                 'permission' => optional(auth()->user()->permissions->first())->name ?? null,
                 'master_user' => auth()->user()->master_user ?? false,
+                'nickname' => auth()->user()->nickname ?? '',
+                'name' => auth()->user()->name ?? '',
             ]);
         }
 
@@ -51,6 +53,8 @@ class AuthSanctumService implements AuthServiceInterface
                 'role' => optional(auth()->user()->roles->first())->name ?? null,
                 'permission' => optional(auth()->user()->permissions->first())->name ?? null,
                 'master_user' => auth()->user()->master_user ?? false,
+                'nickname' => auth()->user()->nickname ?? '',
+                'name' => auth()->user()->name ?? '',
             ]);
         }
 

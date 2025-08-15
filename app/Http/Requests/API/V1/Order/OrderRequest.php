@@ -2,15 +2,16 @@
 
 namespace App\Http\Requests\API\V1\Order;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 
-class OrderRequest extends FormRequest
+class OrderRequest extends DelegateUserRequest
 {
-    public function rules()
+    public function rules(): array
     {
-        return [
+        // Merge parent rules with our specific rules
+        return array_merge(parent::rules(), [
             'date' => $this->route('date') ? 'date_format:Y-m-d' : 'required|date_format:Y-m-d'
-        ];
+        ]);
     }
     
     protected function prepareForValidation()
@@ -20,16 +21,20 @@ class OrderRequest extends FormRequest
         ]);
     }
 
-    public function messages()
+    public function messages(): array
     {
-        return [
+        return array_merge(parent::messages(), [
             'date.required' => 'The date field is required.',
             'date.date_format' => 'The date must be in the format yyyy-mm-dd.',
-        ];
+        ]);
     }
 
-    public function authorize()
+    public function authorize(): bool
     {
+        // Execute parent authorization (delegate user validation)
+        // This will throw HttpResponseException if validation fails
+        parent::authorize();
+        
         return true;
     }
 }

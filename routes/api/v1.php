@@ -25,7 +25,7 @@ Route::prefix('auth')->group(function () {
     Route::middleware([ThrottleRequests::with(10, 1)])->post('login', LoginController::class)
         ->name('login');
 
-    Route::group(['middleware' => ['auth:sanctum', ThrottleRequests::with(5, 1)]], function () {
+    Route::group(['middleware' => ['auth:sanctum']], function () {
         Route::post('logout', LogoutController::class)
             ->name('logout');
     });

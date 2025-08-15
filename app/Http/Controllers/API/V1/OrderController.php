@@ -16,6 +16,9 @@ use App\Classes\Orders\Validations\OneProductPerSubcategory;
 use App\Classes\UserPermissions;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
+use App\Enums\Filters\OrderFilters;
+use App\Filters\FilterValue;
+use Illuminate\Pipeline\Pipeline;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -35,45 +38,45 @@ use App\Models\Menu;
 use App\Models\Product;
 use App\Models\User;
 use Exception;
+use App\Repositories\UserDelegationRepository;
 
 class OrderController extends Controller
 {
+    protected UserDelegationRepository $userDelegationRepository;
+    
+    public function __construct(UserDelegationRepository $userDelegationRepository)
+    {
+        $this->userDelegationRepository = $userDelegationRepository;
+    }
 
     public function index(OrderListRequest $request): JsonResponse
     {
         $user = $request->user();
+        
+        $filters = [
+            OrderFilters::Company->create(new FilterValue([
+                'user' => $user,
+                'master_user' => $user->master_user,
+                'company_id' => $user->company_id
+            ])),
+            OrderFilters::User->create(new FilterValue($user->master_user ? null : $user->id)),
+            OrderFilters::TimePeriod->create(new FilterValue($request->input('time_period'))),
+            OrderFilters::OrderStatus->create(new FilterValue($request->input('order_status'))),
+            OrderFilters::UserSearch->create(new FilterValue($request->input('user_search'))),
+            OrderFilters::BranchSearch->create(new FilterValue($request->input('branch_search'))),
+            OrderFilters::Sort->create(new FilterValue([
+                'column' => $request->input('sort_column', 'dispatch_date'),
+                'direction' => $request->input('sort_direction', 'desc')
+            ])),
+        ];
 
-        $ordersQuery = Order::where('user_id', $user->id);
+        $ordersQuery = app(Pipeline::class)
+            ->send(Order::query()->with(['user.branch']))
+            ->through($filters)
+            ->thenReturn();
 
-        if ($request->has('time_period')) {
-
-            $timePeriod = $request->input('time_period');
-            $now = Carbon::now();
-
-            switch ($timePeriod) {
-                case 'this_week':
-                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfWeek(), $now->endOfWeek()]);
-                    break;
-                case 'this_month':
-                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfMonth(), $now->endOfMonth()]);
-                    break;
-                case 'last_3_months':
-                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->subMonths(3)->startOfMonth(), $now->endOfMonth()]);
-                    break;
-                case 'last_6_months':
-                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->subMonths(6)->startOfMonth(), $now->endOfMonth()]);
-                    break;
-                case 'this_year':
-                    $ordersQuery->whereBetween('dispatch_date', [$now->copy()->startOfYear(), $now->endOfYear()]);
-                    break;
-            }
-        }
-
-        if ($request->has('order_status')) {
-            $ordersQuery->where('status', $request->input('order_status'));
-        }
-
-        $orders = $ordersQuery->orderBy('dispatch_date', 'desc')->paginate(10);
+        $perPage = $request->input('per_page', 10);
+        $orders = $ordersQuery->paginate($perPage);
 
         return ApiResponseService::success(
             (new OrderResourceCollection($orders))->withMenu(),
@@ -88,11 +91,13 @@ class OrderController extends Controller
         $day = $carbonDate->day;
         $month = $carbonDate->month;
         $year = $carbonDate->year;
+        
+        $user = $this->userDelegationRepository->getEffectiveUser($request);
 
         $order = Order::with([
             'orderLines.product.category.subcategories',
         ])
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->whereDay('dispatch_date', '=', $day)
             ->whereMonth('dispatch_date', '=', $month)
             ->whereYear('dispatch_date', '=', $year)
@@ -110,11 +115,13 @@ class OrderController extends Controller
 
     public function showById(OrderByIdRequest $request, string $id): JsonResponse
     {
+        $user = $this->userDelegationRepository->getEffectiveUser($request);
+        
         $order = Order::with([
             'orderLines.product.category.subcategories',
             'orderLines.product.ingredients',
         ])
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->where('id', $id)
             ->first();
 
@@ -149,7 +156,7 @@ class OrderController extends Controller
                 $date = data_get($request->validated(), 'date', '');
 
                 $carbonDate = Carbon::parse($date);
-                $user = $request->user();
+                $user = $this->userDelegationRepository->getEffectiveUser($request);
                 $orderIsPartiallyScheduled = false;
 
                 foreach ($request->order_lines as $orderLineData) {
@@ -259,7 +266,7 @@ class OrderController extends Controller
 
             $carbonDate = Carbon::parse($date);
 
-            $user = $request->user();
+            $user = $this->userDelegationRepository->getEffectiveUser($request);
 
             $order = $this->getOrder($user->id, $carbonDate);
 
@@ -316,7 +323,7 @@ class OrderController extends Controller
 
             $carbonDate = Carbon::parse($date);
 
-            $user = $request->user();
+            $user = $this->userDelegationRepository->getEffectiveUser($request);
 
             $order = $this->getOrder($user->id, $carbonDate);
 
@@ -417,9 +424,9 @@ class OrderController extends Controller
     public function updateUserComment(UpdateOrderUserCommentRequest $request, string $id): JsonResponse
     {
         try {
-            $user = $request->user();
+            $user = $this->userDelegationRepository->getEffectiveUser($request);
 
-            // Find the order by ID and ensure it belongs to the authenticated user
+            // Find the order by ID and ensure it belongs to the effective user
             $order = Order::where('id', $id)
                 ->where('user_id', $user->id)
                 ->first();

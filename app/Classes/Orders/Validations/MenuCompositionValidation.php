@@ -10,7 +10,6 @@ use App\Classes\OrderHelper;
 use App\Enums\Subcategory;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Validates order composition rules for individual agreement users.
@@ -37,7 +36,6 @@ class MenuCompositionValidation extends OrderStatusValidation
 
     protected function check(Order $order, User $user, Carbon $date): void
     {
-        Log::debug("Validando orden $order->id para el usuario $user->id");
         if (UserPermissions::IsAgreementIndividual($user)) {
             $currentMenu = MenuHelper::getCurrentMenuQuery($date, $user)->first();
 
@@ -117,9 +115,6 @@ class MenuCompositionValidation extends OrderStatusValidation
         }
 
         if (!empty($missingSubcategories)) {
-            Log::info('generateMissingItemsMessage llamado desde validateCategoriesWithSubcategories', [
-                'missing_subcategories' => $missingSubcategories
-            ]);
             $message = $this->generateMissingItemsMessage($missingSubcategories);
             throw new Exception($message);
         }
@@ -153,9 +148,6 @@ class MenuCompositionValidation extends OrderStatusValidation
         }
 
         if (!empty($missingCategories)) {
-            Log::info('generateMissingItemsMessage llamado desde validateCategoriesWithoutSubcategories', [
-                'missing_categories' => $missingCategories
-            ]);
             $message = $this->generateMissingItemsMessage($missingCategories);
             throw new Exception($message);
         }
@@ -222,9 +214,6 @@ class MenuCompositionValidation extends OrderStatusValidation
         }
 
         if (!empty($missingCategories)) {
-            Log::info('generateMissingItemsMessage llamado desde validateSimplifiedCategoryRules', [
-                'missing_categories' => $missingCategories
-            ]);
             $message = $this->generateMissingItemsMessage($missingCategories);
             throw new Exception($message);
         }
@@ -240,7 +229,7 @@ class MenuCompositionValidation extends OrderStatusValidation
         
         $formattedItems = [];
         foreach ($missingItems as $item) {
-            $formattedItems[] = ucfirst(strtolower($item));
+            $formattedItems[] = ucfirst(mb_strtolower($item, 'UTF-8'));
         }
         
         $message .= implode(', ', $formattedItems) . ".";
