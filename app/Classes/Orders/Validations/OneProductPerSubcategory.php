@@ -30,16 +30,16 @@ class OneProductPerSubcategory extends OrderStatusValidation
                 throw new Exception("No se encontró un menú activo para la fecha");
             }
 
-            $categoryMenus = $currentMenu->categoryMenus()
-                ->where('is_active', true)
-                ->whereHas('category.products.priceListLines', function ($query) use ($user) {
-                    $query->where('active', true)
-                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
-                })
-                ->orderedByDisplayOrder()
-                ->get();
+            // $categoryMenus = $currentMenu->categoryMenus()
+            //     ->where('is_active', true)
+            //     ->whereHas('category.products.priceListLines', function ($query) use ($user) {
+            //         $query->where('active', true)
+            //             ->whereHas('priceList', function ($priceListQuery) use ($user) {
+            //                 $priceListQuery->where('id', $user->company->price_list_id);
+            //             });
+            //     })
+            //     ->orderedByDisplayOrder()
+            //     ->get();
 
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
                 return [

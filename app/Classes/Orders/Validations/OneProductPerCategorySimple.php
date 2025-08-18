@@ -51,10 +51,14 @@ class OneProductPerCategorySimple extends OrderStatusValidation
                 return $item['category']->id;
             });
 
-            // Validate one product per category for all categories
+            // Validate one product per category ONLY for categories without subcategories
             foreach ($categoryMenus as $categoryMenu) {
                 $category = $categoryMenu->category;
-                $this->validateOneProductPerCategory($category, $groupedByCategory);
+                
+                // Only validate categories that DON'T have subcategories
+                if (!$category->hasSubcategories()) {
+                    $this->validateOneProductPerCategory($category, $groupedByCategory);
+                }
             }
         }
     }

@@ -242,11 +242,7 @@ class MenuCompositionValidation extends OrderStatusValidation
      */
     private function generateTooManyProductsMessage(string $categoryName, array $productNames): string
     {
-        $products = implode(', ', $productNames);
-        
-        return "🚫 Solo puedes elegir un producto de {$categoryName}.\n\n" .
-               "Actualmente tienes seleccionados: {$products}\n\n" .
-               "💡 Consejo: Mantén tu menú balanceado eligiendo solo una opción por tipo de comida.";
+        return "🚫 Solo puedes elegir un producto de {$categoryName}.\n\n";
     }
 
 }

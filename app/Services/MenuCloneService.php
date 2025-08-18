@@ -8,6 +8,16 @@ class MenuCloneService
 {
     public static function cloneMenu(Menu $originalMenu, array $newData): Menu
     {
+        // Verificar si ya existe un menú con la misma combinación
+        $existingMenu = Menu::where('publication_date', $newData['publication_date'])
+            ->where('role_id', $originalMenu->role_id)
+            ->where('permissions_id', $originalMenu->permissions_id)
+            ->first();
+        
+        if ($existingMenu) {
+            throw new \Exception('Ya existe este menú con la misma fecha de despacho, tipo de usuario y tipo de convenio.');
+        }
+        
         $newMenu = Menu::create([
             'title' => $newData['title'],
             'publication_date' => $newData['publication_date'],
