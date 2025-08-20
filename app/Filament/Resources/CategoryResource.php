@@ -6,6 +6,7 @@ use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Filament\Resources\CategoryResource\Pages;
 use App\Filament\Resources\CategoryResource\RelationManagers;
 use App\Models\Category;
+use App\Models\CategoryGroup;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -81,7 +82,33 @@ class CategoryResource extends Resource
                         modifyQueryUsing: fn($query) => $query->distinct()
                     )
                     ->multiple()
-                    ->label(__('Subcategorías'))
+                    ->label(__('Subcategorías')),
+                Forms\Components\Select::make('categoryGroups')
+                    ->relationship('categoryGroups', 'name')
+                    ->multiple()
+                    ->searchable()
+                    ->preload()
+                    ->createOptionForm([
+                        Forms\Components\TextInput::make('name')
+                            ->label(__('Nombre del agrupador'))
+                            ->required()
+                            ->minLength(2)
+                            ->maxLength(100)
+                            ->unique('category_groups', 'name')
+                            ->placeholder('ej: ensaladas, principales, postres'),
+                        Forms\Components\Textarea::make('description')
+                            ->label(__('Descripción'))
+                            ->rows(2)
+                            ->maxLength(500)
+                            ->placeholder('Descripción opcional del agrupador')
+                    ])
+                    ->createOptionUsing(function (array $data) {
+                        $categoryGroup = CategoryGroup::create($data);
+                        return $categoryGroup->id;
+                    })
+                    ->label(__('Agrupadores'))
+                    ->helperText(__('Selecciona agrupadores existentes o crea nuevos escribiendo el nombre y presionando Enter'))
+                    ->columnSpanFull()
             ]);
     }
 
@@ -100,6 +127,11 @@ class CategoryResource extends Resource
                 Tables\Columns\TextColumn::make('subcategories.name')
                     ->label(__('Subcategorías'))
                     ->badge(),
+                Tables\Columns\TextColumn::make('categoryGroups.name')
+                    ->label(__('Agrupadores'))
+                    ->badge()
+                    ->color('success')
+                    ->separator(','),
             ])
             ->filters([])
             ->headerActions([

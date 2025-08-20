@@ -4,6 +4,7 @@ namespace App\Http\Requests\API\V1\Category;
 
 use App\Enums\RoleName;
 use App\Models\Menu;
+use App\Models\CategoryGroup;
 use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
 
 class CategoryMenuRequest extends DelegateUserRequest
@@ -45,7 +46,16 @@ class CategoryMenuRequest extends DelegateUserRequest
     public function rules(): array
     {
         return [
-            // 'menuId' => 'required|integer|min:1'
+            'priority_group' => [
+                'nullable',
+                'string',
+                'max:100',
+                function ($attribute, $value, $fail) {
+                    if ($value && !CategoryGroup::where('name', $value)->exists()) {
+                        $fail(__('El grupo de categoría especificado no existe.'));
+                    }
+                },
+            ],
         ];
     }
 
@@ -57,9 +67,8 @@ class CategoryMenuRequest extends DelegateUserRequest
     public function messages(): array
     {
         return [
-            // 'menuId.required' => 'El ID del menú es obligatorio.',
-            // 'menuId.integer' => 'El ID del menú debe ser un número entero.',
-            // 'menuId.min' => 'El ID del menú debe ser un número positivo mayor a cero.'
+            'priority_group.string' => __('El grupo de prioridad debe ser un texto.'),
+            'priority_group.max' => __('El grupo de prioridad no puede exceder :max caracteres.'),
         ];
     }
 }

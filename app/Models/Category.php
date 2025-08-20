@@ -76,5 +76,16 @@ class Category extends Model
     {
         return $this->hasMany(CategoryUserLine::class);
     }
+
+    /**
+     * Get the category groups that belong to this category.
+     *
+     * @return BelongsToMany
+     */
+    public function categoryGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(CategoryGroup::class, 'category_category_group')
+            ->withTimestamps();
+    }
     
 }
