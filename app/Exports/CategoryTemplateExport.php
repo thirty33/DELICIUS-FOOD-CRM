@@ -14,7 +14,8 @@ class CategoryTemplateExport implements FromArray, WithStyles, ShouldAutoSize
         'nombre' => 'Nombre',
         'descripcion' => 'Descripción',
         'activo' => 'Activo',
-        'subcategorias' => 'Subcategorías'
+        'subcategorias' => 'Subcategorías',
+        'palabras_clave' => 'Palabras clave'
     ];
 
     public function array(): array

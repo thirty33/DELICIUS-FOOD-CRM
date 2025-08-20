@@ -37,7 +37,8 @@ class CategoryExport implements
         'nombre' => 'Nombre',
         'descripcion' => 'Descripción',
         'activo' => 'Activo',
-        'subcategorias' => 'Subcategorías'
+        'subcategorias' => 'Subcategorías',
+        'palabras_clave' => 'Palabras clave'
     ];
 
     private $exportProcessId;
@@ -52,7 +53,7 @@ class CategoryExport implements
     public function query()
     {
         return Category::whereIn('id', $this->categoryIds)
-            ->with('subcategories');
+            ->with(['subcategories', 'categoryGroups']);
     }
 
     public function chunkSize(): int
@@ -67,7 +68,8 @@ class CategoryExport implements
                 'nombre' => $category->name,
                 'descripcion' => $category->description,
                 'activo' => $category->is_active ? '1' : '0',
-                'subcategorias' => $category->subcategories->pluck('name')->implode(', ')
+                'subcategorias' => $category->subcategories->pluck('name')->implode(', '),
+                'palabras_clave' => $category->categoryGroups->pluck('name')->implode(', ')
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando categoría para exportación', [

@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Category;
+use App\Models\CategoryGroup;
 use App\Models\ImportProcess;
 use App\Models\Subcategory;
 use Illuminate\Support\Collection;
@@ -40,6 +41,7 @@ class CategoryImport implements
         'descripcion' => 'description',
         'activo' => 'is_active',
         'subcategorias' => 'subcategories',
+        'palabras_clave' => 'category_groups',
     ];
 
     public function __construct(int $importProcessId)
@@ -74,6 +76,11 @@ class CategoryImport implements
                         }
 
                         $category->subcategories()->sync($subcategoryIds);
+                    }
+
+                    // Procesar palabras clave (category groups) si existen
+                    if (!empty($row['palabras_clave'])) {
+                        $this->processCategoryGroups($category, $row['palabras_clave']);
                     }
                 } catch (\Exception $e) {
                     $this->handleRowError($e, $index, $row);
@@ -111,6 +118,31 @@ class CategoryImport implements
         return false;
     }
 
+    private function processCategoryGroups(Category $category, string $keywordsString): void
+    {
+        $keywordNames = explode(',', $keywordsString);
+        $categoryGroupIds = [];
+
+        foreach ($keywordNames as $name) {
+            $name = trim($name);
+            
+            if (empty($name)) {
+                continue; // Omitir nombres vacíos
+            }
+
+            // Buscar si el CategoryGroup ya existe, si no, crearlo
+            $categoryGroup = CategoryGroup::firstOrCreate(
+                ['name' => $name],
+                ['description' => null]
+            );
+
+            $categoryGroupIds[] = $categoryGroup->id;
+        }
+
+        // Sincronizar (reemplazar completamente) los CategoryGroups asociados
+        $category->categoryGroups()->sync($categoryGroupIds);
+    }
+
     public function rules(): array
     {
         return [
@@ -118,6 +150,7 @@ class CategoryImport implements
             '*.descripcion' => ['nullable', 'string'],
             '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.subcategorias' => ['nullable', 'string'],
+            '*.palabras_clave' => ['nullable', 'string'],
         ];
     }
 
@@ -235,6 +268,7 @@ class CategoryImport implements
         $validator->after(function ($validator) {
             $data = $validator->getData();
             foreach ($data as $index => $row) {
+                // Validar categoría duplicada
                 if (isset($row['nombre'])) {
                     $exists = Category::where('name', $row['nombre'])->exists();
                     if ($exists) {
@@ -243,6 +277,35 @@ class CategoryImport implements
                         //     'La categoría ya existe.'
                         // );
                         continue;
+                    }
+                }
+
+                // Validar palabras clave
+                if (isset($row['palabras_clave']) && !empty($row['palabras_clave'])) {
+                    $keywordNames = explode(',', $row['palabras_clave']);
+                    
+                    foreach ($keywordNames as $keyword) {
+                        $keyword = trim($keyword);
+                        
+                        if (empty($keyword)) {
+                            continue;
+                        }
+                        
+                        // Validar longitud del nombre
+                        if (strlen($keyword) > 100) {
+                            $validator->errors()->add(
+                                "{$index}.palabras_clave",
+                                "La palabra clave '{$keyword}' excede los 100 caracteres permitidos."
+                            );
+                        }
+                        
+                        // Validar caracteres especiales
+                        if (!preg_match('/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/', $keyword)) {
+                            $validator->errors()->add(
+                                "{$index}.palabras_clave",
+                                "La palabra clave '{$keyword}' contiene caracteres no permitidos."
+                            );
+                        }
                     }
                 }
             }
