@@ -40,6 +40,7 @@ class User extends Authenticatable implements FilamentUser
         'company_id',
         'branch_id',
         'allow_late_orders',
+        'allow_weekend_orders',
         'validate_min_price',
         'validate_subcategory_rules',
         'nickname',

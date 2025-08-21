@@ -256,6 +256,11 @@ class UserResource extends Resource
                 Toggle::make('allow_late_orders')
                     ->label(__('Validar fecha y reglas de despacho'))
                     ->inline(false),
+                Toggle::make('allow_weekend_orders')
+                    ->label(__('Permitir pedidos en fin de semana'))
+                    ->helperText(__('Permite al usuario realizar pedidos en sábados y domingos'))
+                    ->inline(false)
+                    ->default(true),
                 Toggle::make('validate_min_price')
                     ->label(__('Validar precio mímimo'))
                     ->inline(false),

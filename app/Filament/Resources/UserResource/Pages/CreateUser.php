@@ -5,10 +5,13 @@ namespace App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Filament\Forms;
+use Filament\Forms\Form;
 
 class CreateUser extends CreateRecord
 {
     protected static string $resource = UserResource::class;
+
 
     // Método antes de crear el formulario
     protected function mutateFormDataBeforeCreate(array $data): array

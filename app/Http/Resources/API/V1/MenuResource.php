@@ -20,6 +20,7 @@ class MenuResource extends JsonResource
             'title' => $this->title,
             'description' => $this->description,
             'publication_date' => $this->publication_date,
+            'has_order' => (int) ($this->has_order ?? 0),
         ];
     }
 }
