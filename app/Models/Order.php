@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Classes\Menus\MenuHelper;
+use App\Repositories\DispatchRuleRepository;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,17 +23,22 @@ class Order extends Model
         'dispatch_date',
         'alternative_address',
         'order_number',
-        'user_comment'
+        'user_comment',
+        'dispatch_cost'
     ];
 
     protected $casts = [
         'user_comment' => 'string',
+        'dispatch_cost' => 'integer',
     ];
 
     protected $appends = [
         'price_list_min',
         'total',
-        'total_with_tax'
+        'total_with_tax',
+        'dispatch_cost_with_tax',
+        'grand_total',
+        'tax_amount'
     ];
 
     /**
@@ -73,6 +79,14 @@ class Order extends Model
                     ]);
                 }
             }
+        });
+
+        static::created(function ($order) {
+            $order->updateDispatchCost();
+        });
+
+        static::updated(function ($order) {
+            $order->updateDispatchCost();
         });
     }
 
@@ -129,6 +143,70 @@ class Order extends Model
                     $totalWithTax += $line->quantity * $line->unit_price_with_tax;
                 }
                 return $totalWithTax;
+            }
+        );
+    }
+
+    /**
+     * Update dispatch cost based on dispatch rules
+     */
+    public function updateDispatchCost(): void
+    {
+        try {
+            $repository = new DispatchRuleRepository();
+            $dispatchCost = $repository->calculateDispatchCost($this);
+            
+            $this->dispatch_cost = $dispatchCost;
+            $this->saveQuietly();
+        } catch (\Exception $e) {
+            Log::error('Error calculating dispatch cost for order:', [
+                'order_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Get dispatch cost with tax included
+     */
+    protected function DispatchCostWithTax(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                if ($this->dispatch_cost === null || $this->dispatch_cost === 0) {
+                    return 0;
+                }
+
+                $taxValue = Parameter::getValue(Parameter::TAX_VALUE, 0);
+                
+                return $this->dispatch_cost * (1 + $taxValue);
+            }
+        );
+    }
+
+    /**
+     * Get grand total (products with tax + dispatch with tax)
+     */
+    protected function GrandTotal(): Attribute
+    {
+        return Attribute::make(
+            get: fn() => $this->total_with_tax + $this->dispatch_cost_with_tax
+        );
+    }
+
+    /**
+     * Get tax amount (IVA calculated from products and dispatch)
+     */
+    protected function TaxAmount(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                $taxValue = Parameter::getValue(Parameter::TAX_VALUE, 0);
+                
+                $productsTaxAmount = $this->total * $taxValue;
+                $dispatchTaxAmount = $this->dispatch_cost * $taxValue;
+                
+                return $productsTaxAmount + $dispatchTaxAmount;
             }
         );
     }

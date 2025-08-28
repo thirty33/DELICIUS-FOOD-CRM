@@ -147,3 +147,4 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - Admin panel has comprehensive permission system
 - Image URLs are signed for security
 - explica que es lo que vas a hacer, no me des código sin explicación
+- no crees comentarios en el código en español

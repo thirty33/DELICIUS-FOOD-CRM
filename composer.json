@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.2",
         "aws/aws-sdk-php": "^3.339",
+        "barryvdh/laravel-dompdf": "^3.1",
         "codeat3/blade-carbon-icons": "^2.29",
         "codeat3/blade-eos-icons": "^1.14",
         "codeat3/blade-iconpark": "^1.6",

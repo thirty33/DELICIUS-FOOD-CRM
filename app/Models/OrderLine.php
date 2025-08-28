@@ -154,5 +154,23 @@ class OrderLine extends Model
                 $orderLine->unit_price_with_tax = self::calculateUnitPriceWithTax($orderLine->unit_price);
             }
         });
+
+        static::created(function (OrderLine $orderLine) {
+            if ($orderLine->order) {
+                $orderLine->order->updateDispatchCost();
+            }
+        });
+
+        static::updated(function (OrderLine $orderLine) {
+            if ($orderLine->order) {
+                $orderLine->order->updateDispatchCost();
+            }
+        });
+
+        static::deleted(function (OrderLine $orderLine) {
+            if ($orderLine->order) {
+                $orderLine->order->updateDispatchCost();
+            }
+        });
     }
 }

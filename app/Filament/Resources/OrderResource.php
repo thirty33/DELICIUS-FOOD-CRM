@@ -110,6 +110,29 @@ class OrderResource extends Resource
                             ->minValue(0)
                             ->decimals(2)
                             ->disabled(),
+                        MoneyInput::make('dispatch_cost')
+                            ->label(__('Costo de despacho'))
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2)
+                            ->disabled(),
+                        MoneyInput::make('tax_amount')
+                            ->label(__('IVA'))
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2)
+                            ->disabled()
+                            ->helperText(__('Impuesto sobre productos y despacho')),
+                        MoneyInput::make('grand_total')
+                            ->label(__('Total Final'))
+                            ->currency('USD')
+                            ->locale('en_US')
+                            ->minValue(0)
+                            ->decimals(2)
+                            ->disabled()
+                            ->helperText(__('Total + Despacho + impuestos')),
                         Forms\Components\Select::make('status')
                             ->label(__('Estado'))
                             ->options(OrderStatus::getSelectOptions())
@@ -175,6 +198,11 @@ class OrderResource extends Resource
                     ->label(__('Total'))
                     ->currency('USD')
                     ->locale('en_US'),
+                MoneyColumn::make('dispatch_cost')
+                    ->label(__('Costo de despacho'))
+                    ->currency('USD')
+                    ->locale('en_US')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('total_products')
                     ->label(__('Total productos'))
                     ->state(fn(Model $order) => $order->orderLines->sum('quantity')),
