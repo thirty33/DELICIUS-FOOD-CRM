@@ -42,9 +42,13 @@ class RangesRelationManager extends RelationManager
                         fn (Get $get, ?Model $record): Closure => function (string $attribute, $value, Closure $fail) use ($get, $record) {
                             // Validation 3 and 4: Range overlap and exclusive boundaries
                             $maxAmount = $get('max_amount');
-                            // Convert values to cents for validation
-                            $valueInCents = $value !== null ? (int) ($value * 100) : null;
-                            $maxInCents = $maxAmount !== null ? (int) ($maxAmount * 100) : null;
+                            // Convert values to cents for validation - handle comma-formatted numbers
+                            $cleanValue = $value !== null ? str_replace(',', '', $value) : null;
+                            $cleanMaxAmount = $maxAmount !== null ? str_replace(',', '', $maxAmount) : null;
+                            $valueInCents = ($cleanValue !== null && is_numeric($cleanValue)) ? (int) ($cleanValue * 100) : null;
+                            $maxInCents = ($cleanMaxAmount !== null && is_numeric($cleanMaxAmount)) ? (int) ($cleanMaxAmount * 100) : null;
+                            
+                            
                             $this->validateRangeOverlap($valueInCents, $maxInCents, $record, $fail);
                         }
                     ]),
@@ -60,9 +64,11 @@ class RangesRelationManager extends RelationManager
                         // Validation 1: min_amount < max_amount
                         fn (Get $get): Closure => function (string $attribute, $value, Closure $fail) use ($get) {
                             $minAmount = $get('min_amount');
-                            // MoneyInput converts values to cents (integers)
-                            $valueInCents = $value !== null ? (int) ($value * 100) : null;
-                            $minInCents = $minAmount !== null ? (int) ($minAmount * 100) : null;
+                            // MoneyInput converts values to cents (integers) - handle comma-formatted numbers
+                            $cleanValue = $value !== null ? str_replace(',', '', $value) : null;
+                            $cleanMinAmount = $minAmount !== null ? str_replace(',', '', $minAmount) : null;
+                            $valueInCents = ($cleanValue !== null && is_numeric($cleanValue)) ? (int) ($cleanValue * 100) : null;
+                            $minInCents = ($cleanMinAmount !== null && is_numeric($cleanMinAmount)) ? (int) ($cleanMinAmount * 100) : null;
                             
                             if ($valueInCents !== null && $minInCents !== null && $valueInCents <= $minInCents) {
                                 $fail('El monto máximo debe ser mayor al monto mínimo.');
@@ -86,9 +92,13 @@ class RangesRelationManager extends RelationManager
                         // Validation 3 and 4: Range overlap and exclusive boundaries
                         fn (Get $get, ?Model $record): Closure => function (string $attribute, $value, Closure $fail) use ($get, $record) {
                             $minAmount = $get('min_amount');
-                            // Convert values to cents for validation
-                            $minInCents = $minAmount !== null ? (int) ($minAmount * 100) : null;
-                            $valueInCents = $value !== null ? (int) ($value * 100) : null;
+                            // Convert values to cents for validation - handle comma-formatted numbers
+                            $cleanValue = $value !== null ? str_replace(',', '', $value) : null;
+                            $cleanMinAmount = $minAmount !== null ? str_replace(',', '', $minAmount) : null;
+                            $minInCents = ($cleanMinAmount !== null && is_numeric($cleanMinAmount)) ? (int) ($cleanMinAmount * 100) : null;
+                            $valueInCents = ($cleanValue !== null && is_numeric($cleanValue)) ? (int) ($cleanValue * 100) : null;
+                            
+                            
                             $this->validateRangeOverlap($minInCents, $valueInCents, $record, $fail);
                         }
                     ]),
@@ -162,6 +172,7 @@ class RangesRelationManager extends RelationManager
         
         $existingRanges = $query->orderBy('min_amount')->get();
         
+        
         foreach ($existingRanges as $existingRange) {
             $existingMin = $existingRange->min_amount; // Already in cents from DB
             $existingMax = $existingRange->max_amount; // Already in cents from DB
@@ -169,6 +180,7 @@ class RangesRelationManager extends RelationManager
             // Convert to display format (dollars) for error messages
             $existingMinDisplay = $existingMin / 100;
             $existingMaxDisplay = $existingMax ? ($existingMax / 100) : null;
+            
             
             // Validation 3: Detect overlap
             // A range overlaps if: new_min < existing_max AND new_max > existing_min
@@ -182,13 +194,13 @@ class RangesRelationManager extends RelationManager
             } else {
                 // Check normal overlap
                 if ($existingMax === null) {
-                    // Existing range has no limit
-                    if ($maxAmount > $existingMin) {
+                    // Existing range has no limit - only overlap if new range max is >= existing min
+                    if ($maxAmount >= $existingMin) {
                         $fail("El rango se solapa con el rango existente [\${$existingMinDisplay} - sin límite]");
                         return;
                     }
                 } else {
-                    // Both ranges have limits
+                    // Both ranges have limits - overlap if ranges actually intersect (not just touch)
                     if ($minAmount < $existingMax && $maxAmount > $existingMin) {
                         $fail("El rango se solapa con el rango existente [\${$existingMinDisplay} - \${$existingMaxDisplay}]");
                         return;

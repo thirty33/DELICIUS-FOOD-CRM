@@ -41,9 +41,9 @@ class OrderLineExport implements
     use Exportable;
 
     /**
-     * Headers modificados para mostrar textos amigables al usuario pero mantener compatibilidad
-     * con las claves que espera el sistema importador.
-     * Las claves son los nombres internos que usa el sistema y los valores son los textos visibles.
+     * Headers modified to display user-friendly texts while maintaining compatibility
+     * with the keys expected by the import system.
+     * Keys are the internal names used by the system and values are the visible texts.
      */
     private $headers = [
         'id_orden' => 'ID Orden',
@@ -127,11 +127,14 @@ class OrderLineExport implements
                 // Save previous order group info
                 if ($orderStartRow > 0) {
                     $endRow = ($row === $lastRow && $orderId === $currentOrderId) ? $row : $row - 1;
+                    $transportValue = $sheet->getCell('S' . $orderStartRow)->getValue();
+                    
+                    
                     $orderGroups[] = [
                         'order_id' => $currentOrderId,
                         'start' => $orderStartRow,
                         'end' => $endRow,
-                        'transport_value' => $sheet->getCell('S' . $orderStartRow)->getValue()
+                        'transport_value' => $transportValue
                     ];
                 }
                 
@@ -143,18 +146,26 @@ class OrderLineExport implements
 
         // Apply merges and styles to transport price column (S)
         foreach ($orderGroups as $group) {
-            if ($group['start'] < $group['end'] && $group['transport_value'] !== null && $group['transport_value'] !== '') {
-                // Merge cells for this order group
-                $sheet->mergeCells("S{$group['start']}:S{$group['end']}");
-                
-                // Apply alignment and styling
-                $sheet->getStyle("S{$group['start']}:S{$group['end']}")
-                    ->getAlignment()
-                    ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
-                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            
+            // Apply styling to all transport price cells with any numeric value (including 0)
+            // Check for numeric values or the string "0.00"
+            if (is_numeric($group['transport_value']) || $group['transport_value'] === '0.00') {
+                // If multiple rows, apply merge
+                if ($group['start'] < $group['end']) {
+                    $sheet->mergeCells("S{$group['start']}:S{$group['end']}");
                     
-                // Apply special styling for transport price
-                $this->applyTransportPriceStyle($sheet, "S{$group['start']}:S{$group['end']}");
+                    // Apply alignment for merged cells
+                    $sheet->getStyle("S{$group['start']}:S{$group['end']}")
+                        ->getAlignment()
+                        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
+                        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                }
+                
+                // Apply styling to the range (single cell or merged)
+                $range = $group['start'] < $group['end'] ? "S{$group['start']}:S{$group['end']}" : "S{$group['start']}";
+                
+                
+                $this->applyTransportPriceStyle($sheet, $range);
             }
         }
     }
@@ -202,7 +213,7 @@ class OrderLineExport implements
                 return [];
             }
 
-            // Formatear las fechas usando el mismo formato que MenuDataExport
+            // Format dates using the same format as MenuDataExport
             $fechaOrden = '';
             if ($order && $order->created_at) {
                 $fechaOrden = $order->created_at->format('d/m/Y');
@@ -213,13 +224,13 @@ class OrderLineExport implements
                 $fechaDespacho = Carbon::parse($order->dispatch_date)->format('d/m/Y');
             }
 
-            // Obtener el estado formateado del pedido
+            // Get formatted order status
             $estadoOrden = null;
             if ($order && $order->status) {
                 try {
                     $estadoOrden = OrderStatus::from($order->status)->getLabel();
                 } catch (\ValueError $e) {
-                    Log::warning('Estado de orden desconocido', [
+                    Log::warning('Unknown order status', [
                         'order_id' => $order->id,
                         'status' => $order->status
                     ]);
@@ -227,21 +238,22 @@ class OrderLineExport implements
                 }
             }
 
-            // Código de pedido sin comilla (formato numérico)
+            // Order code without quotes (numeric format)
             $codigoPedido = ($order && $order->order_number) ? $order->order_number : null;
-            // Código de producto sin comilla (formato numérico)
+            // Product code without quotes (numeric format)
             $codigoProducto = ($product && $product->code) ? $product->code : null;
             
-            // Calcular precios totales
+            // Calculate total prices
             $precioTotalNeto = $orderLine->quantity * $orderLine->unit_price;
             $precioTotalConImpuesto = $orderLine->quantity * $orderLine->unit_price_with_tax;
 
-            // Verificar si es la primera línea de una nueva orden
+            // Check if this is the first line of a new order
             $isFirstInOrder = ($this->lastOrderId !== $order->id);
             if ($isFirstInOrder) {
                 $this->lastOrderId = $order->id;
                 // Count items for this order in current export
                 $this->orderItemCounts[$order->id] = $this->countItemsInExport($order->id);
+                
                 
                 // Save info for rowspan (will be updated in AfterSheet)
                 if ($this->orderItemCounts[$order->id] > 1) {
@@ -252,7 +264,25 @@ class OrderLineExport implements
                 }
             }
 
-            // Mapeamos los datos usando las mismas claves que espera el importador
+            // Calculate transport price value
+            // Special handling for zero values to ensure they're written to Excel
+            $transportPriceValue = '';
+            if ($isFirstInOrder) {
+                if ($order->dispatch_cost !== null) {
+                    $calculatedValue = $order->dispatch_cost / 100;
+                    // FORCE writing zero as a numeric string to prevent filtering
+                    if ($calculatedValue == 0) {
+                        $transportPriceValue = '0.00';  // String zero to ensure it's written
+                    } else {
+                        $transportPriceValue = number_format($calculatedValue, 2, '.', '');  // Format as string with 2 decimals
+                    }
+                } else {
+                    $transportPriceValue = '0.00';  // String zero for null dispatch_cost
+                }
+            }
+            
+            
+            // Map data using the same keys expected by the importer
             return [
                 'id_orden' => $order ? $order->id : null,
                 'codigo_de_pedido' => $codigoPedido,
@@ -272,10 +302,10 @@ class OrderLineExport implements
                 'precio_total_neto' => $precioTotalNeto / 100,
                 'precio_total_con_impuesto' => $precioTotalConImpuesto / 100,
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0',
-                'precio_transporte' => $isFirstInOrder ? ($order->dispatch_cost ? $order->dispatch_cost / 100 : 0) : ''
+                'precio_transporte' => $transportPriceValue
             ];
         } catch (\Exception $e) {
-            Log::error('Error mapeando línea de orden para exportación', [
+            Log::error('Error mapping order line for export', [
                 'export_process_id' => $this->exportProcessId,
                 'order_line_id' => $orderLine->id,
                 'error' => $e->getMessage()
@@ -393,7 +423,7 @@ class OrderLineExport implements
             'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
         ]);
 
-        Log::error('Error en exportación de Order Lines', [
+        Log::error('Error in Order Lines export', [
             'export_process_id' => $this->exportProcessId,
             'error' => $e->getMessage(),
             'file' => $e->getFile(),
