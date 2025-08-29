@@ -37,6 +37,7 @@ class CategoryMenuDataExport implements
         'mostrar_todos_los_productos' => 'Mostrar Todos los Productos',
         'orden_de_visualizacion' => 'Orden de Visualización',
         'categoria_obligatoria' => 'Categoría Obligatoria',
+        'activo' => 'Activo',
         'productos' => 'Productos'
     ];
 
@@ -74,6 +75,7 @@ class CategoryMenuDataExport implements
                 'mostrar_todos_los_productos' => $categoryMenu->show_all_products ? '1' : '0',
                 'orden_de_visualizacion' => $categoryMenu->display_order,
                 'categoria_obligatoria' => $categoryMenu->mandatory_category ? '1' : '0',
+                'activo' => $categoryMenu->is_active ? '1' : '0',
                 'productos' => $productList
             ];
         } catch (\Exception $e) {

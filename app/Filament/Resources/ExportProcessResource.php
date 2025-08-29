@@ -139,7 +139,16 @@ class ExportProcessResource extends Resource
                         return Storage::disk('s3')->download($fileName);
                     }),
             ])
-            ->bulkActions([]);
+            ->bulkActions([])
+            ->headerActions([
+                Tables\Actions\Action::make('reload')
+                    ->label('Recargar')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->action(function () {
+                        return redirect()->back();
+                    })
+            ]);
     }
 
     public static function getPages(): array

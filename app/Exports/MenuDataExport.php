@@ -71,11 +71,11 @@ class MenuDataExport implements
         try {
             return [
                 'titulo' => $menu->title,
-                'descripcion' => $menu->description,
-                'fecha_de_despacho' => $menu->publication_date ? "'" . Carbon::parse($menu->publication_date)->format('d/m/Y') : null,
+                'descripcion' => $menu->description ?: '-', // Export '-' instead of null/empty
+                'fecha_de_despacho' => $menu->publication_date ? Carbon::parse($menu->publication_date)->format('d/m/Y') : null,
                 'tipo_de_usuario' => $menu->rol ? $menu->rol->name : null,
                 'tipo_de_convenio' => $menu->permission ? $menu->permission->name : null,
-                'fecha_hora_maxima_pedido' => $menu->max_order_date ? "'" . Carbon::parse($menu->max_order_date)->format('d/m/Y H:i:s') : null, // Añadimos comilla al inicio
+                'fecha_hora_maxima_pedido' => $menu->max_order_date ? Carbon::parse($menu->max_order_date)->format('d/m/Y H:i:s') : null,
                 'activo' => $menu->active ? '1' : '0',
             ];
         } catch (\Exception $e) {
@@ -115,8 +115,7 @@ class MenuDataExport implements
     public function columnFormats(): array
     {
         return [
-            'C' => NumberFormat::FORMAT_TEXT, // Cambiar a formato texto para fecha_de_despacho
-            'F' => NumberFormat::FORMAT_TEXT, // Para fecha_hora_maxima_pedido
+            // No need for special text format since we're not adding quotes anymore
         ];
     }
 

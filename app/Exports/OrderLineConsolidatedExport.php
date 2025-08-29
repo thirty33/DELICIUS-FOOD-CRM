@@ -42,7 +42,6 @@ class OrderLineConsolidatedExport implements
         'categoria' => 'Categoría',
         'codigo_producto' => 'Código de Producto',
         'nombre_producto' => 'Nombre del Producto',
-        'descripcion_producto' => 'Descripción del Producto',
         'cafe_consolidado' => 'CAFÉ CONSOLIDADO',
         'cafe_individual' => 'CAFÉ INDIVIDUAL',
         'convenio_consolidado' => 'CONVENIO CONSOLIDADO',
@@ -172,7 +171,6 @@ class OrderLineConsolidatedExport implements
                     'order_lines.product_id',
                     'order_lines.quantity',
                     'products.code as product_code',
-                    'products.description as product_description',
                     'products.name as product_name',
                     'products.category_id',
                     'categories.name as category_name',
@@ -226,7 +224,6 @@ class OrderLineConsolidatedExport implements
 
                 $firstLine = $productLines->first();
                 $productCode = $firstLine->product_code;
-                $productDescription = $firstLine->product_description;
                 $categoryName = $firstLine->category_name ?? 'Sin Categoría';
                 $productName = $firstLine->product_name;
                 $categoryId = $firstLine->category_id;
@@ -236,7 +233,6 @@ class OrderLineConsolidatedExport implements
                     'category_name' => $categoryName,
                     'category_id' => $categoryId,
                     'product_code' => $productCode,
-                    'product_description' => $productDescription,
                     'product_name' => $productName,
                     'cafe_consolidado' => 0,
                     'cafe_individual' => 0,
@@ -365,11 +361,10 @@ class OrderLineConsolidatedExport implements
                 'categoria' => $productData['category_name'],
                 'codigo_producto' => $productData['product_code'],
                 'nombre_producto' => $productData['product_name'],
-                'descripcion_producto' => $productData['product_description'],
                 'cafe_consolidado' => $productData['cafe_consolidado'],
                 'cafe_individual' => $productData['cafe_individual'],
                 'convenio_consolidado' => $productData['convenio_consolidado'],
-                'convenio_individual' => $productData['convenio_individual'],
+                'convenio_individual' => $productData['convenio_individual']
             ];
 
             // Añadir datos de empresas excluidas

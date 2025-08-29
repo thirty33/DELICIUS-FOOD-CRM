@@ -49,19 +49,21 @@ class OrderLinesImport implements
     /**
      * Mapa de cabeceras entre archivo Excel y sistema interno.
      * Las CLAVES son las cabeceras en el archivo Excel y los VALORES son los campos internos.
+     * Orden actualizado para coincidir con OrderLineExport.
      */
     private $headingMap = [
+        'id_orden' => 'order_id',
         'codigo_de_pedido' => 'order_number',
         'estado' => 'status',
         'fecha_de_orden' => 'created_at',
         'fecha_de_despacho' => 'dispatch_date',
-        'usuario' => 'user_email',
-        'cliente' => 'client_name',
         'empresa' => 'company_name',
         'nombre_fantasia' => 'fantasy_name',
+        'cliente' => 'client_name',
+        'usuario' => 'user_email',
+        'categoria_producto' => 'category_name',
         'codigo_de_producto' => 'product_code',
         'nombre_producto' => 'product_name',
-        'categoria_producto' => 'category_name',
         'cantidad' => 'quantity',
         'precio_neto' => 'unit_price',
         'precio_con_impuesto' => 'unit_price_with_tax',
@@ -140,6 +142,34 @@ class OrderLinesImport implements
     }
 
     /**
+     * Find user by email or nickname
+     */
+    private function findUserByEmailOrNickname($value): ?User
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        return User::where('email', $value)
+            ->orWhere('nickname', $value)
+            ->first();
+    }
+
+    /**
+     * Find order by ID and order number combination
+     */
+    private function findOrderByIdAndNumber($id, $orderNumber): ?Order
+    {
+        if (empty($id) || empty($orderNumber)) {
+            return null;
+        }
+
+        return Order::where('id', $id)
+            ->where('order_number', $orderNumber)
+            ->first();
+    }
+
+    /**
      * Get validation rules for import
      * 
      * @return array
@@ -147,14 +177,15 @@ class OrderLinesImport implements
     private function getValidationRules(): array
     {
         return [
-            '*.codigo_de_pedido' => ['nullable', 'string', 'max:15'], // Aumentado a 15 para incluir comilla
+            '*.id_orden' => ['nullable', 'integer'],
+            '*.codigo_de_pedido' => ['nullable'],
             '*.estado' => ['required', 'string'],
             '*.fecha_de_orden' => ['required', 'string'],
             '*.fecha_de_despacho' => ['required', 'string'],
-            '*.usuario' => ['required', 'string', 'email'],
+            '*.usuario' => ['required', 'string'],
             '*.codigo_de_producto' => ['required', 'string'],
             '*.cantidad' => ['required', 'integer', 'min:1'],
-            '*.precio_neto' => ['nullable', 'string'],
+            '*.precio_neto' => ['nullable', 'numeric'],
             '*.parcialmente_programado' => ['nullable', 'in:0,1,true,false,si,no,yes,no']
         ];
     }
@@ -167,17 +198,17 @@ class OrderLinesImport implements
     private function getValidationMessages(): array
     {
         return [
-            '*.codigo_de_pedido.string' => 'El código de pedido debe ser un texto.',
-            '*.codigo_de_pedido.max' => 'El código de pedido no debe exceder 15 caracteres.',
+            '*.id_orden.integer' => 'El ID de orden debe ser un número entero.',
             '*.estado.required' => 'El estado del pedido es obligatorio.',
             '*.fecha_de_orden.required' => 'La fecha de orden es obligatoria.',
             '*.fecha_de_despacho.required' => 'La fecha de despacho es obligatoria.',
             '*.usuario.required' => 'El usuario es obligatorio.',
-            '*.usuario.email' => 'El usuario debe ser un correo electrónico válido.',
+            '*.usuario.string' => 'El usuario debe ser un texto (email o nickname).',
             '*.codigo_de_producto.required' => 'El código de producto es obligatorio.',
             '*.cantidad.required' => 'La cantidad es obligatoria.',
             '*.cantidad.integer' => 'La cantidad debe ser un número entero.',
             '*.cantidad.min' => 'La cantidad debe ser al menos 1.',
+            '*.precio_neto.numeric' => 'El precio neto debe ser un número.',
             '*.parcialmente_programado.in' => 'El campo parcialmente programado debe tener un valor válido (0, 1, true, false, si, no).',
         ];
     }
@@ -201,8 +232,7 @@ class OrderLinesImport implements
                 // Validar el formato de fechas
                 if (!empty($row['fecha_de_orden'])) {
                     try {
-                        $dateValue = $this->cleanQuotedValue($row['fecha_de_orden']);
-                        Carbon::createFromFormat('d/m/Y', $dateValue);
+                        Carbon::createFromFormat('d/m/Y', $row['fecha_de_orden']);
                     } catch (\Exception $e) {
                         $validator->errors()->add(
                             "{$index}.fecha_de_orden",
@@ -213,8 +243,7 @@ class OrderLinesImport implements
 
                 if (!empty($row['fecha_de_despacho'])) {
                     try {
-                        $dateValue = $this->cleanQuotedValue($row['fecha_de_despacho']);
-                        Carbon::createFromFormat('d/m/Y', $dateValue);
+                        Carbon::createFromFormat('d/m/Y', $row['fecha_de_despacho']);
                     } catch (\Exception $e) {
                         $validator->errors()->add(
                             "{$index}.fecha_de_despacho",
@@ -223,20 +252,20 @@ class OrderLinesImport implements
                     }
                 }
 
-                // Validar que el usuario exista
+                // Validar que el usuario exista (por email o nickname)
                 if (!empty($row['usuario'])) {
-                    $userExists = User::where('email', $row['usuario'])->exists();
+                    $userExists = $this->findUserByEmailOrNickname($row['usuario']);
                     if (!$userExists) {
                         $validator->errors()->add(
                             "{$index}.usuario",
-                            'El usuario con el correo electrónico especificado no existe.'
+                            'El usuario especificado no existe (buscado por email o nickname).'
                         );
                     }
                 }
 
-                // Validar que el código de producto exista (limpiando comilla inicial)
+                // Validar que el código de producto exista
                 if (!empty($row['codigo_de_producto'])) {
-                    $productCode = $this->cleanQuotedValue($row['codigo_de_producto']);
+                    $productCode = $row['codigo_de_producto'];
                     $productExists = Product::where('code', $productCode)->exists();
                     if (!$productExists) {
                         $validator->errors()->add(
@@ -310,48 +339,80 @@ class OrderLinesImport implements
     private function processOrderRows($orderNumber, Collection $rows)
     {
         try {
-            // Si no hay código de pedido, crear uno nuevo
-            if (empty($orderNumber)) {
+            // Usar el primer registro para obtener datos de la orden
+            $firstRow = $rows->first();
+            $idOrden = $firstRow['id_orden'] ?? null;
+
+            // Determinar si existe la combinación id + código
+            $existingOrder = $this->findOrderByIdAndNumber($idOrden, $orderNumber);
+
+            // Si ambos campos están vacíos, crear orden completamente nueva
+            if (empty($idOrden) && empty($orderNumber)) {
                 $this->createNewOrder($rows);
                 return;
             }
 
-            // Usar el primer registro para actualizar la orden
-            $firstRow = $rows->first();
+            // Si la combinación id + código existe, modificar la orden existente
+            if ($existingOrder) {
+                $processKey = "{$idOrden}_{$orderNumber}";
+                
+                // Si este pedido ya fue procesado, verificar si hay cambios
+                if (isset($this->processedOrders[$processKey])) {
+                    $processedData = $this->processedOrders[$processKey];
 
-            // Si este pedido ya fue procesado, verificar si hay cambios en los campos de la orden
-            if (isset($this->processedOrders[$orderNumber])) {
-                $processedData = $this->processedOrders[$orderNumber];
+                    // Verificar si hay cambios en los campos de la orden
+                    $orderDataChanged =
+                        $processedData['status'] !== $firstRow['estado'] ||
+                        $processedData['created_at'] !== $firstRow['fecha_de_orden'] ||
+                        $processedData['dispatch_date'] !== $firstRow['fecha_de_despacho'] ||
+                        $processedData['user_email'] !== $firstRow['usuario'];
 
-                // Verificar si hay cambios en los campos de la orden
-                $orderDataChanged =
-                    $processedData['status'] !== $firstRow['estado'] ||
-                    $processedData['created_at'] !== $firstRow['fecha_de_orden'] ||
-                    $processedData['dispatch_date'] !== $firstRow['fecha_de_despacho'] ||
-                    $processedData['user_email'] !== $firstRow['usuario'];
-
-                // Si no hay cambios, solo procesar las líneas de pedido
-                if (!$orderDataChanged) {
-                    $this->processOrderLines($processedData['order_id'], $rows);
-                    return;
+                    // Si no hay cambios, solo procesar las líneas de pedido
+                    if (!$orderDataChanged) {
+                        $this->processOrderLines($processedData['order_id'], $rows);
+                        return;
+                    }
                 }
-            }
-
-            // Verificar si la orden existe por el order_number
-            $order = Order::where('order_number', $orderNumber)->first();
-            if (!$order) {
-                // Si no existe la orden con ese order_number, crear una nueva
-                $this->createNewOrderWithNumber($orderNumber, $rows);
+                
+                // Actualizar orden existente
+                $this->updateExistingOrder($existingOrder, $rows);
                 return;
             }
+
+            // En cualquier otro caso (solo uno de los campos coincide, o ninguno), crear nueva orden
+            $this->createNewOrder($rows);
+        } catch (\Exception $e) {
+            ExportErrorHandler::handle(
+                $e,
+                $this->importProcessId,
+                'order_' . $orderNumber,
+                'ImportProcess'
+            );
+
+            Log::error("Error procesando pedido {$orderNumber}", [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Update existing order with new data
+     * 
+     * @param Order $order
+     * @param Collection $rows
+     */
+    private function updateExistingOrder(Order $order, Collection $rows)
+    {
+        try {
+            $firstRow = $rows->first();
 
             // Convertir el estado a su valor numérico correspondiente
             $status = $this->convertStatusToValue($firstRow['estado']);
 
-            // Obtener ID del usuario por email
-            $user = User::where('email', $firstRow['usuario'])->first();
+            // Obtener ID del usuario por email o nickname
+            $user = $this->findUserByEmailOrNickname($firstRow['usuario']);
             if (!$user) {
-                throw new \Exception("El usuario con correo {$firstRow['usuario']} no existe.");
+                throw new \Exception("El usuario especificado no existe: {$firstRow['usuario']}");
             }
 
             // Formatear fechas
@@ -365,14 +426,15 @@ class OrderLinesImport implements
                 'dispatch_date' => $dispatchDate
             ]);
 
-            // Si la fecha de creación es diferente, actualizar manualmente (no se puede por mass assignment)
+            // Si la fecha de creación es diferente, actualizar manualmente
             if ($order->created_at->format('Y-m-d') !== Carbon::parse($createdAt)->format('Y-m-d')) {
                 $order->created_at = $createdAt;
                 $order->save();
             }
 
             // Guardar los datos procesados para comparaciones futuras
-            $this->processedOrders[$orderNumber] = [
+            $processKey = "{$order->id}_{$order->order_number}";
+            $this->processedOrders[$processKey] = [
                 'order_id' => $order->id,
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
@@ -391,11 +453,12 @@ class OrderLinesImport implements
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
-                'order_' . $orderNumber,
+                'update_order_' . $order->id,
                 'ImportProcess'
             );
 
-            Log::error("Error procesando pedido {$orderNumber}", [
+            Log::error("Error actualizando pedido existente", [
+                'order_id' => $order->id,
                 'error' => $e->getMessage()
             ]);
         }
@@ -415,10 +478,10 @@ class OrderLinesImport implements
             // Convertir el estado a su valor numérico correspondiente
             $status = $this->convertStatusToValue($firstRow['estado']);
 
-            // Obtener ID del usuario por email
-            $user = User::where('email', $firstRow['usuario'])->first();
+            // Obtener ID del usuario por email o nickname
+            $user = $this->findUserByEmailOrNickname($firstRow['usuario']);
             if (!$user) {
-                throw new \Exception("El usuario con correo {$firstRow['usuario']} no existe.");
+                throw new \Exception("El usuario especificado no existe: {$firstRow['usuario']}");
             }
 
             // Formatear fechas
@@ -478,10 +541,10 @@ class OrderLinesImport implements
             // Convertir el estado a su valor numérico correspondiente
             $status = $this->convertStatusToValue($firstRow['estado']);
 
-            // Obtener ID del usuario por email
-            $user = User::where('email', $firstRow['usuario'])->first();
+            // Obtener ID del usuario por email o nickname
+            $user = $this->findUserByEmailOrNickname($firstRow['usuario']);
             if (!$user) {
-                throw new \Exception("El usuario con correo {$firstRow['usuario']} no existe.");
+                throw new \Exception("El usuario especificado no existe: {$firstRow['usuario']}");
             }
 
             // Formatear fechas
@@ -540,8 +603,8 @@ class OrderLinesImport implements
 
             // Crear nuevas líneas de pedido
             foreach ($rows as $row) {
-                // Limpiar comilla inicial del código de producto
-                $productCode = $this->cleanQuotedValue($row['codigo_de_producto']);
+                // Obtener código de producto sin limpiar comillas
+                $productCode = $row['codigo_de_producto'];
 
                 // Obtener el producto por código
                 $product = Product::where('code', $productCode)->first();
@@ -609,9 +672,6 @@ class OrderLinesImport implements
      */
     private function formatDate($dateValue)
     {
-        // Eliminar comilla simple al inicio si existe
-        $dateValue = $this->cleanQuotedValue($dateValue);
-
         return Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
     }
 

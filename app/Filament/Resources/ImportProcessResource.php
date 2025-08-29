@@ -134,6 +134,15 @@ class ImportProcessResource extends Resource
 
                     }),
             ])
+            ->headerActions([
+                Tables\Actions\Action::make('reload')
+                    ->label('Recargar')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->action(function () {
+                        return redirect()->back();
+                    })
+            ])
             ->bulkActions([])
             ->modifyQueryUsing(function (Builder $query) {
                 return $query->select('id', 'created_at', 'type', 'status', 'file_url', 'file_error_url');
