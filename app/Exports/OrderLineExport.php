@@ -143,7 +143,7 @@ class OrderLineExport implements
 
         // Apply merges and styles to transport price column (S)
         foreach ($orderGroups as $group) {
-            if ($group['start'] < $group['end'] && !empty($group['transport_value']) && $group['transport_value'] !== '') {
+            if ($group['start'] < $group['end'] && $group['transport_value'] !== null && $group['transport_value'] !== '') {
                 // Merge cells for this order group
                 $sheet->mergeCells("S{$group['start']}:S{$group['end']}");
                 
