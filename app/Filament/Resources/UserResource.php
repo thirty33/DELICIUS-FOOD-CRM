@@ -108,7 +108,7 @@ class UserResource extends Resource
                 Forms\Components\Select::make('company_id')
                     ->relationship('company', 'name')
                     ->required()
-                    ->label(__('Compañia'))
+                    ->label(__('Empresa'))
                     ->columns(1)
                     ->searchable()
                     ->live(),

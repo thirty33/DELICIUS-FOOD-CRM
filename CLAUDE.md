@@ -148,3 +148,5 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - Image URLs are signed for security
 - explica que es lo que vas a hacer, no me des código sin explicación
 - no crees comentarios en el código en español
+- corre todos los comandos de php y relacionados que necesites con sail
+- no asignes textos por defecto a variables a menos que se te indique

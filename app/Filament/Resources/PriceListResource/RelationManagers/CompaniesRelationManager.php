@@ -17,12 +17,12 @@ class CompaniesRelationManager extends RelationManager
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
-        return __('Compañias asociadas a la lista :name', ['name' => $ownerRecord->name]);
+        return __('Empresas asociadas a la lista :name', ['name' => $ownerRecord->name]);
     }
 
     protected static function getRecordLabel(): ?string
     {
-        return __('Compañia');
+        return __('Empresa');
     }
 
     public function form(Form $form): Form
@@ -54,16 +54,19 @@ class CompaniesRelationManager extends RelationManager
             ])
             ->headerActions([
                 // Tables\Actions\CreateAction::make(),
-                Tables\Actions\AssociateAction::make(),
+                Tables\Actions\AssociateAction::make()
+                    ->label('Añadir'),
             ])
             ->actions([
                 // Tables\Actions\EditAction::make(),
-                Tables\Actions\DissociateAction::make(),
+                Tables\Actions\DissociateAction::make()
+                    ->label('Eliminar'),
                 // Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DissociateBulkAction::make(),
+                    Tables\Actions\DissociateBulkAction::make()
+                        ->label('Eliminar seleccionados'),
                     // Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
