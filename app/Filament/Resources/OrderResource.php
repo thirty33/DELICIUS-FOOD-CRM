@@ -34,6 +34,7 @@ use Illuminate\Support\Facades\Log;
 use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
 use App\Imports\OrderLinesImport;
 use App\Jobs\DeleteOrders;
+use App\Jobs\GenerateOrderVouchersJob;
 use App\Jobs\SendOrdersEmails;
 use App\Models\ImportProcess;
 use Filament\Actions\ActionGroup;
@@ -558,6 +559,58 @@ class OrderResource extends Resource
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al preparar el envío masivo de correos: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('generate_vouchers_pdf')
+                        ->label('Generar vouchers PDF')
+                        ->icon('heroicon-o-document-text')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Generar vouchers PDF')
+                        ->modalDescription('¿Está seguro que desea generar los vouchers PDF de los pedidos seleccionados?')
+                        ->modalSubmitActionLabel('Sí, generar vouchers')
+                        ->action(function (Collection $records) {
+                            try {
+                                if ($records->isEmpty()) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos seleccionados para generar vouchers',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orderIds = $records->pluck('id')->toArray();
+
+                                Log::info('Iniciando generación de vouchers PDF', [
+                                    'total_orders' => count($orderIds),
+                                    'order_ids' => $orderIds
+                                ]);
+
+                                GenerateOrderVouchersJob::dispatch($orderIds);
+
+                                self::makeNotification(
+                                    'Generación de vouchers iniciada',
+                                    'Los vouchers PDF se están generando. El proceso finalizará en breve.',
+                                    'success'
+                                )->send();
+
+                                Log::info('Job de generación de vouchers despachado exitosamente', [
+                                    'order_ids' => $orderIds
+                                ]);
+
+                            } catch (\Exception $e) {
+                                Log::error('Error al iniciar generación de vouchers PDF', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al iniciar la generación de vouchers: ' . $e->getMessage(),
                                     'danger'
                                 )->send();
                             }

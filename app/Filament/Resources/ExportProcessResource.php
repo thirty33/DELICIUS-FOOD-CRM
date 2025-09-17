@@ -52,6 +52,18 @@ class ExportProcessResource extends Resource
                     ->label('Tipo')
                     ->badge()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('description')
+                    ->label('Descripción')
+                    ->limit(50)
+                    ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
+                        $state = $column->getState();
+                        if (strlen($state) > 50) {
+                            return $state;
+                        }
+                        return null;
+                    })
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
@@ -112,7 +124,18 @@ class ExportProcessResource extends Resource
                         $filePath = parse_url($record->file_url, PHP_URL_PATH);
                         $filePath = ltrim($filePath, '/');
 
-                        return Storage::disk('s3')->download($filePath);
+                        // Generar nombre personalizado basado en tipo y descripción
+                        $originalFileName = basename($filePath);
+                        $extension = pathinfo($originalFileName, PATHINFO_EXTENSION);
+
+                        $customFileName = $record->type;
+                        if ($record->description) {
+                            $customFileName = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $record->description);
+                        }
+
+                        $downloadName = $customFileName . '_' . $record->created_at->format('Ymd_His') . '.' . $extension;
+
+                        return Storage::disk('s3')->download($filePath, $downloadName);
                     }),
                 Tables\Actions\Action::make('download_log')
                     ->label('Descargar Log')

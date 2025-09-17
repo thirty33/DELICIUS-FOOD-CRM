@@ -9,6 +9,7 @@ class ExportProcess extends Model
 {
     protected $fillable = [
         'type',
+        'description',
         'status',
         'error_log',
         'file_url',
@@ -32,6 +33,7 @@ class ExportProcess extends Model
     const TYPE_USERS = 'usuarios';
     const TYPE_ORDER_LINES = 'líneas de pedidos';
     const ORDER_CONSOLIDATED = 'consolidado de pedidos';
+    const TYPE_VOUCHERS = 'vouchers';
 
     // Constantes para los estados
     const STATUS_QUEUED = 'en cola';
@@ -57,6 +59,7 @@ class ExportProcess extends Model
             self::TYPE_USERS,
             self::TYPE_ORDER_LINES,
             self::ORDER_CONSOLIDATED,
+            self::TYPE_VOUCHERS,
         ];
     }
 
