@@ -6,7 +6,6 @@ use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Facades\ImageSigner;
 use App\Models\ExportProcess;
 use App\Models\Order;
-use App\Models\Parameter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -153,10 +152,10 @@ class GenerateOrderVouchersJob implements ShouldQueue
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 body {
                     font-family: Arial, sans-serif;
-                    font-size: 9px;
+                    font-size: 11px;
                     margin: 1mm;
                     width: 78mm;
-                    line-height: 1.2;
+                    line-height: 1.3;
                 }
                 .voucher-container {
                     margin-bottom: 3mm;
@@ -177,10 +176,10 @@ class GenerateOrderVouchersJob implements ShouldQueue
                     width: 100%;
                     border-collapse: collapse;
                     margin-bottom: 4mm;
-                    font-size: 9px;
+                    font-size: 11px;
                 }
                 .info-table td {
-                    padding: 2px 3px;
+                    padding: 3px 4px;
                     border: 1px solid #000;
                     vertical-align: top;
                     word-wrap: break-word;
@@ -194,25 +193,25 @@ class GenerateOrderVouchersJob implements ShouldQueue
                     width: 100%;
                     border-collapse: collapse;
                     margin-bottom: 4mm;
-                    font-size: 8px;
+                    font-size: 10px;
                 }
                 .products-table th {
-                    padding: 3px 2px;
+                    padding: 4px 3px;
                     border: 1px solid #000;
                     background-color: #f0f0f0;
                     font-weight: bold;
                     text-align: center;
-                    font-size: 8px;
+                    font-size: 10px;
                 }
                 .products-table .col-code { width: 15%; }
                 .products-table .col-product { width: 50%; }
                 .products-table .col-qty { width: 15%; }
                 .products-table .col-subtotal { width: 20%; }
                 .product-cell {
-                    padding: 3px 2px;
+                    padding: 4px 3px;
                     border: 1px solid #000;
                     vertical-align: top;
-                    font-size: 8px;
+                    font-size: 10px;
                     word-wrap: break-word;
                 }
                 .center { text-align: center; }
@@ -220,7 +219,7 @@ class GenerateOrderVouchersJob implements ShouldQueue
                 .totals {
                     text-align: right;
                     margin-top: 4mm;
-                    font-size: 10px;
+                    font-size: 12px;
                     font-weight: bold;
                 }
                 .totals div {
@@ -246,7 +245,6 @@ class GenerateOrderVouchersJob implements ShouldQueue
 
     private function generateSingleVoucherHtml(Order $order): string
     {
-        $orderDate = Carbon::parse($order->created_at)->format('d/m/Y');
         $dispatchDate = Carbon::parse($order->dispatch_date)->format('d/m/Y');
 
         $neto = $order->total / 100;
@@ -259,7 +257,7 @@ class GenerateOrderVouchersJob implements ShouldQueue
 
         $clientName = $company->name ?? 'N/A';
         $clientRut = $company->tax_id ?? 'N/A';
-        $clientGiro = $company->business_activity ?? 'N/A';
+        $branchFantasyName = $branch->fantasy_name ?? 'N/A';
         $address = $branch->shipping_address ?? $branch->address ?? 'N/A';
 
         $formattedNeto = number_format($neto, 0, ',', '.');
@@ -292,10 +290,6 @@ class GenerateOrderVouchersJob implements ShouldQueue
 
             <table class='info-table'>
                 <tr>
-                    <td class='label'>Fecha pedido</td>
-                    <td>{$orderDate}</td>
-                </tr>
-                <tr>
                     <td class='label'>Cliente</td>
                     <td>{$clientName}</td>
                 </tr>
@@ -304,8 +298,8 @@ class GenerateOrderVouchersJob implements ShouldQueue
                     <td>{$clientRut}</td>
                 </tr>
                 <tr>
-                    <td class='label'>Giro</td>
-                    <td>{$clientGiro}</td>
+                    <td class='label'>Sucursal</td>
+                    <td>{$branchFantasyName}</td>
                 </tr>
                 <tr>
                     <td class='label'>Despacho</td>
@@ -314,14 +308,6 @@ class GenerateOrderVouchersJob implements ShouldQueue
                 <tr>
                     <td class='label'>Fecha despacho</td>
                     <td>{$dispatchDate}</td>
-                </tr>
-                <tr>
-                    <td class='label'>Vendedor</td>
-                    <td>DELICIUS FOOD</td>
-                </tr>
-                <tr>
-                    <td class='label'>Documento</td>
-                    <td>Factura</td>
                 </tr>
             </table>
 
@@ -346,7 +332,6 @@ class GenerateOrderVouchersJob implements ShouldQueue
                 <div><strong>TOTAL: $ {$formattedTotal}</strong></div>
             </div>
 
-            " . ($order->user_comment ? "<div class='comment'>Comentario despacho: {$order->user_comment}</div>" : "") . "
         </div>";
 
         return $html;
