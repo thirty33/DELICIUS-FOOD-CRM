@@ -187,6 +187,11 @@ class ProductsImport implements
         // Clean value from spaces
         $cleanValue = trim($value);
 
+        // Remove leading apostrophe if present (from Excel text formatting)
+        if (str_starts_with($cleanValue, "'")) {
+            $cleanValue = substr($cleanValue, 1);
+        }
+
         // Convert to integer (already validated in withValidator)
         return (int)$cleanValue;
     }
@@ -200,6 +205,11 @@ class ProductsImport implements
 
         // Clean value from spaces
         $cleanValue = trim($value);
+
+        // Remove leading apostrophe if present (from Excel text formatting)
+        if (str_starts_with($cleanValue, "'")) {
+            $cleanValue = substr($cleanValue, 1);
+        }
 
         // Convert to decimal number (already validated in withValidator)
         return (float)$cleanValue;
@@ -291,20 +301,28 @@ class ProductsImport implements
                 // Validate stock
                 if (isset($row['stock']) && !empty($row['stock']) && $row['stock'] !== '-') {
                     $cleanStock = trim($row['stock']);
+                    // Remove leading apostrophe if present (from Excel text formatting)
+                    if (str_starts_with($cleanStock, "'")) {
+                        $cleanStock = substr($cleanStock, 1);
+                    }
                     if (!is_numeric($cleanStock)) {
                         $validator->errors()->add(
-                            "{$index}.stock", 
+                            "{$index}.stock",
                             "El campo stock debe ser un número entero válido. Valor recibido: '{$row['stock']}'"
                         );
                     }
                 }
-                
+
                 // Validate weight
                 if (isset($row['peso']) && !empty($row['peso']) && $row['peso'] !== '-') {
                     $cleanPeso = trim($row['peso']);
+                    // Remove leading apostrophe if present (from Excel text formatting)
+                    if (str_starts_with($cleanPeso, "'")) {
+                        $cleanPeso = substr($cleanPeso, 1);
+                    }
                     if (!is_numeric($cleanPeso)) {
                         $validator->errors()->add(
-                            "{$index}.peso", 
+                            "{$index}.peso",
                             "El campo peso debe ser un número válido. Valor recibido: '{$row['peso']}'"
                         );
                     }

@@ -12,9 +12,11 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Events\BeforeExport;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -27,6 +29,7 @@ class ProductsDataExport implements
     ShouldAutoSize,
     WithStyles,
     WithEvents,
+    WithColumnFormatting,
     ShouldQueue,
     WithChunkReading 
 {
@@ -80,8 +83,8 @@ class ProductsDataExport implements
                 'unidad_de_medida' => $product->measure_unit,
                 'nombre_archivo_original' => $product->original_filename,
                 'precio_lista' => $product->price_list ? '$' . number_format($product->price_list / 100, 2, '.', ',') : null,
-                'stock' => $product->stock,
-                'peso' => $product->weight,
+                'stock' => $product->stock !== null ? "'" . $product->stock : null,
+                'peso' => $product->weight !== null ? "'" . $product->weight : null,
                 'permitir_ventas_sin_stock' => $product->allow_sales_without_stock ? 'VERDADERO' : 'FALSO',
                 'activo' => $product->active ? 'VERDADERO' : 'FALSO',
                 'ingredientes' => $product->ingredients->pluck('descriptive_text')->implode(', ')
@@ -112,6 +115,14 @@ class ProductsDataExport implements
                     'startColor' => ['rgb' => 'E2EFDA']
                 ]
             ],
+        ];
+    }
+
+    public function columnFormats(): array
+    {
+        return [
+            'I' => NumberFormat::FORMAT_TEXT,  // Stock (column I)
+            'J' => NumberFormat::FORMAT_TEXT,  // Peso (column J)
         ];
     }
 
