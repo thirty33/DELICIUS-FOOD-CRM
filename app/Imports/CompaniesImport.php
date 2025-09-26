@@ -138,7 +138,7 @@ class CompaniesImport implements
             '*.email' => ['required', 'email', 'min:2', 'max:200'],
             '*.numero_de_telefono' => ['required', 'string', 'min:2', 'max:200'],
             '*.descripcion' => ['required', 'string', 'min:2', 'max:200'],
-            '*.lista_de_precio' => ['required', 'string'],
+            '*.lista_de_precio' => ['nullable', 'string'],
 
             // Optional fields
             '*.giro' => ['nullable', 'string'],
@@ -178,7 +178,7 @@ class CompaniesImport implements
             '*.email.email' => 'El email debe ser válido',
             '*.numero_de_telefono.required' => 'El número de teléfono es requerido',
             '*.descripcion.required' => 'La descripción es requerida',
-            '*.lista_de_precio.required' => 'La lista de precio es requerida',
+            '*.lista_de_precio.nullable' => 'La lista de precio debe ser texto o estar vacía',
             '*.lista_de_precio.string' => 'La lista de precio debe ser texto',
             '*.activo.in' => 'El campo activo debe ser verdadero o falso',
         ];
@@ -197,19 +197,7 @@ class CompaniesImport implements
             ]);
 
             foreach ($data as $index => $row) {
-                // Validate unique RUT except for current record
-                if (isset($row['rut'])) {
-                    $exists = Company::where('tax_id', $row['rut'])
-                        ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
-                        ->exists();
-
-                    if ($exists) {
-                        $validator->errors()->add(
-                            "{$index}.rut",
-                            'El RUT ya existe en otra empresa.'
-                        );
-                    }
-                }
+                // RUT uniqueness validation removed - duplicates now allowed
 
                 // Unique email validation removed
                 // Comment: Unique email validation was removed to allow
@@ -257,10 +245,10 @@ class CompaniesImport implements
                     }
                 }
 
-                // Validar que la lista de precio existe
-                if (isset($row['lista_de_precio'])) {
+                // Validar que la lista de precio existe (solo si se proporciona)
+                if (isset($row['lista_de_precio']) && !empty($row['lista_de_precio'])) {
                     $priceList = PriceList::where('name', $row['lista_de_precio'])->first();
-                    
+
                     if (!$priceList) {
                         $validator->errors()->add(
                             "{$index}.lista_de_precio",
@@ -391,9 +379,9 @@ class CompaniesImport implements
      */
     private function prepareCompanyData(Collection $row): array
     {
-        // Find the price list ID
+        // Find the price list ID (only if provided)
         $priceListId = null;
-        if (!empty($row['lista_de_precio'])) {
+        if (isset($row['lista_de_precio']) && !empty($row['lista_de_precio'])) {
             $priceList = PriceList::where('name', $row['lista_de_precio'])->first();
             if ($priceList) {
                 $priceListId = $priceList->id;
@@ -447,7 +435,7 @@ class CompaniesImport implements
             '*.email' => ['required', 'email', 'min:2', 'max:200'],
             '*.numero_de_telefono' => ['required', 'string', 'min:2', 'max:200'],
             '*.descripcion' => ['required', 'string', 'min:2', 'max:200'],
-            '*.lista_de_precio' => ['required', 'string'],
+            '*.lista_de_precio' => ['nullable', 'string'],
 
             // Optional fields
             '*.giro' => ['nullable', 'string'],
@@ -487,7 +475,7 @@ class CompaniesImport implements
             '*.email.email' => 'El email debe ser válido',
             '*.numero_de_telefono.required' => 'El número de teléfono es requerido',
             '*.descripcion.required' => 'La descripción es requerida',
-            '*.lista_de_precio.required' => 'La lista de precio es requerida',
+            '*.lista_de_precio.nullable' => 'La lista de precio debe ser texto o estar vacía',
             '*.lista_de_precio.string' => 'La lista de precio debe ser texto',
             '*.activo.in' => 'El campo activo debe ser verdadero o falso',
         ];

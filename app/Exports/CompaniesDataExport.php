@@ -57,7 +57,8 @@ class CompaniesDataExport implements
         'zip_code' => 'Código Postal',
         'payment_condition' => 'Condición de Pago',
         'description' => 'Descripción',
-        'active' => 'Activo'
+        'active' => 'Activo',
+        'lista_de_precio' => 'Lista de Precio'
     ];
 
     private $exportProcessId;
@@ -77,7 +78,7 @@ class CompaniesDataExport implements
     
     public function query()
     {
-        return Company::whereIn('id', $this->companyIds);
+        return Company::with('priceList')->whereIn('id', $this->companyIds);
     }
 
     public function registerEvents(): array
@@ -124,7 +125,8 @@ class CompaniesDataExport implements
             'zip_code' => $company->zip_code,
             'payment_condition' => $company->payment_condition,
             'description' => $company->description,
-            'active' => $company->active ? '1' : '0'
+            'active' => $company->active ? '1' : '0',
+            'lista_de_precio' => $company->priceList ? $company->priceList->name : null
         ];
     }
 

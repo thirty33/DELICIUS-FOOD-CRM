@@ -35,7 +35,8 @@ class CompanyTemplateExport implements FromArray, WithStyles, ShouldAutoSize
         'zip_code' => 'Código Postal',
         'payment_condition' => 'Condición de Pago',
         'description' => 'Descripción',
-        'active' => 'Activo'
+        'active' => 'Activo',
+        'lista_de_precio' => 'Lista de Precio'
     ];
 
     public function array(): array
