@@ -6,6 +6,7 @@ use App\Models\Menu;
 use App\Models\Role;
 use App\Models\Permission;
 use App\Models\ImportProcess;
+use App\Classes\Menus\MenuHelper;
 use App\Enums\RoleName;
 use App\Enums\PermissionName;
 use App\Classes\ErrorManagment\ExportErrorHandler;
@@ -219,12 +220,13 @@ class MenusImport implements
                         $permission = Permission::where('name', $row['tipo_de_convenio'])->first();
                 
                         if ($role && $permission && $maxOrderDate) {
-                            $duplicate = Menu::where('publication_date', $publicationDate)
-                                ->where('role_id', $role->id)
-                                ->where('permissions_id', $permission->id)
-                                ->where('active', $active)
-                                ->where('max_order_date', $maxOrderDateFormatted)
-                                ->exists();
+                            $duplicate = MenuHelper::checkDuplicateMenuForImport(
+                                $publicationDate,
+                                $role->id,
+                                $permission->id,
+                                $active,
+                                $maxOrderDateFormatted
+                            );
                 
                             if ($duplicate) {
                                 $validator->errors()->add(

@@ -3,7 +3,7 @@
 namespace App\Http\Requests\API\V1\Order;
 
 use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
-use App\Models\Menu;
+use App\Classes\Menus\MenuHelper;
 
 class CreateOrUpdateOrderRequest extends DelegateUserRequest
 {
@@ -64,10 +64,7 @@ class CreateOrUpdateOrderRequest extends DelegateUserRequest
         $permissionId = $firstPermission ? $firstPermission->id : null;
 
         // Verificar si existe un menú que cumpla con las condiciones
-        $menuExists = Menu::where('publication_date', $date)
-            ->where('role_id', $roleId)
-            ->where('permissions_id', $permissionId)
-            ->exists();
+        $menuExists = MenuHelper::menuExistsForOrderCreateUpdate($date, $roleId, $permissionId);
 
         // Si no existe un menú válido, denegar la autorización
         if (!$menuExists) {

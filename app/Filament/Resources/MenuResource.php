@@ -148,6 +148,11 @@ class MenuResource extends Resource
                 Tables\Columns\ToggleColumn::make('active')
                     ->label(__('Activo'))
                     ->sortable(),
+                Tables\Columns\TextColumn::make('companies.fantasy_name')
+                    ->label(__('Empresas asociadas'))
+                    ->badge()
+                    ->separator(', ')
+                    ->wrap(),
             ])
             ->filters([
                 DateRangeFilter::make('publication_date')
@@ -486,6 +491,7 @@ class MenuResource extends Resource
     {
         return [
             RelationManagers\CategoriesRelationManager::class,
+            RelationManagers\CompaniesRelationManager::class,
         ];
     }
 
@@ -498,48 +504,68 @@ class MenuResource extends Resource
         ];
     }
 
+    public static function getCloneActionForm(): array
+    {
+        return [
+            Forms\Components\TextInput::make('title')
+                ->label(__('Título'))
+                ->required()
+                ->maxLength(255),
+            DatePicker::make('publication_date')
+                ->label(__('Fecha de despacho'))
+                ->required()
+                ->native(false)
+                ->displayFormat('M d, Y'),
+            DateTimePicker::make('max_order_date')
+                ->label(__('Fecha y hora máxima de pedido'))
+                ->required()
+                ->seconds(true)
+                ->format('Y-m-d H:i:s')
+                ->native(false),
+            Forms\Components\Select::make('companies')
+                ->label(__('Empresas asociadas'))
+                ->options(\App\Models\Company::where('active', true)->pluck('name', 'id'))
+                ->multiple()
+                ->searchable(),
+        ];
+    }
+
+    public static function executeCloneAction(array $data, Menu $record): mixed
+    {
+        try {
+            $newMenu = MenuCloneService::cloneMenu($record, $data);
+
+            if (!empty($data['companies'])) {
+                $newMenu->companies()->sync($data['companies']);
+            }
+
+            Notification::make()
+                ->title('Menú clonado exitosamente')
+                ->body("Se ha creado el menú '{$data['title']}' basado en '{$record->title}'")
+                ->success()
+                ->send();
+
+            return redirect()->to(self::getUrl('edit', ['record' => $newMenu]));
+
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Error al clonar menú')
+                ->body('Ha ocurrido un error: ' . $e->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
+    }
+
     public static function getCloneAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('clone_menu')
             ->label('Clonar')
             ->color('primary')
             ->icon('heroicon-o-document-duplicate')
-            ->form([
-                Forms\Components\TextInput::make('title')
-                    ->label(__('Título'))
-                    ->required()
-                    ->maxLength(255),
-                DatePicker::make('publication_date')
-                    ->label(__('Fecha de despacho'))
-                    ->required()
-                    ->native(false)
-                    ->displayFormat('M d, Y'),
-                DateTimePicker::make('max_order_date')
-                    ->label(__('Fecha y hora máxima de pedido'))
-                    ->required()
-                    ->seconds(true)
-                    ->format('Y-m-d H:i:s')
-                    ->native(false),
-            ])
-            ->action(function (array $data, Menu $record) {
-                try {
-                    $newMenu = MenuCloneService::cloneMenu($record, $data);
-
-                    self::makeNotification(
-                        'Menú clonado exitosamente',
-                        "Se ha creado el menú '{$data['title']}' basado en '{$record->title}'"
-                    )->send();
-
-                    return redirect()->to(self::getUrl('edit', ['record' => $newMenu]));
-
-                } catch (\Exception $e) {
-                    self::makeNotification(
-                        'Error al clonar menú',
-                        'Ha ocurrido un error: ' . $e->getMessage(),
-                        'danger'
-                    )->send();
-                }
-            });
+            ->form(self::getCloneActionForm())
+            ->action(fn (array $data, Menu $record) => self::executeCloneAction($data, $record));
     }
 
     private static function makeNotification(string $title, string $body, string $color = 'success'): Notification

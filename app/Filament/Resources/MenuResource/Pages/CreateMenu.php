@@ -19,15 +19,22 @@ class CreateMenu extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         try {
-            // Verificar si ya existe un menú con la misma combinación de campos
-            $query = Menu::query()
-                ->where('publication_date', $data['publication_date'])
-                ->where('role_id', $data['rol'])
-                ->where('permissions_id', $data['permission'])
-                ->where('active', $data['active']);
+            \Log::info('CreateMenu: Starting duplicate check', [
+                'data' => $data
+            ]);
 
-            // Verificar duplicados
-            $duplicateMenu = $query->exists();
+            // Verificar duplicados usando MenuHelper
+            $duplicateMenu = \App\Classes\Menus\MenuHelper::checkDuplicateMenuForCreate(
+                $data['publication_date'],
+                $data['rol'],
+                $data['permission'],
+                $data['active'],
+                [] // Sin empresas por ahora en create
+            );
+
+            \Log::info('CreateMenu: Duplicate check completed', [
+                'duplicate_found' => $duplicateMenu
+            ]);
 
             if ($duplicateMenu) {
                 Notification::make()

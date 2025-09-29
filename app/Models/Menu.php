@@ -61,4 +61,9 @@ class Menu extends Model
     {
         return $this->belongsTo(Permission::class, 'permissions_id', 'id');
     }
+
+    public function companies(): BelongsToMany
+    {
+        return $this->belongsToMany(Company::class, 'company_menu');
+    }
 }

@@ -26,45 +26,8 @@ class EditMenu extends EditRecord
                 ->label('Clonar')
                 ->color('primary')
                 ->icon('heroicon-o-document-duplicate')
-                ->form([
-                    Forms\Components\TextInput::make('title')
-                        ->label(__('Título'))
-                        ->required()
-                        ->maxLength(255),
-                    DatePicker::make('publication_date')
-                        ->label(__('Fecha de despacho'))
-                        ->required()
-                        ->native(false)
-                        ->displayFormat('M d, Y'),
-                    DateTimePicker::make('max_order_date')
-                        ->label(__('Fecha y hora máxima de pedido'))
-                        ->required()
-                        ->seconds(true)
-                        ->format('Y-m-d H:i:s')
-                        ->native(false),
-                ])
-                ->action(function (array $data) {
-                    try {
-                        $currentMenu = $this->record;
-                        
-                        $newMenu = MenuCloneService::cloneMenu($currentMenu, $data);
-
-                        Notification::make()
-                            ->title('Menú clonado exitosamente')
-                            ->body("Se ha creado el menú '{$data['title']}' basado en '{$currentMenu->title}'")
-                            ->success()
-                            ->send();
-
-                        return redirect()->to(MenuResource::getUrl('edit', ['record' => $newMenu]));
-                        
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title('Error al clonar menú')
-                            ->body('Ha ocurrido un error: ' . $e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
+                ->form(MenuResource::getCloneActionForm())
+                ->action(fn (array $data) => MenuResource::executeCloneAction($data, $this->record)),
             Actions\DeleteAction::make(),
         ];
     }
@@ -72,16 +35,26 @@ class EditMenu extends EditRecord
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         try {
-            // Construir la consulta para búsqueda de duplicados
-            $query = Menu::query()
-                ->where('publication_date', $data['publication_date'])
-                ->where('role_id', $data['rol'])
-                ->where('permissions_id', $data['permission'])
-                ->where('active', $data['active'])
-                ->where('id', '!=', $record->id);
+            // Obtener empresas asociadas al menú actual
+            $companyIds = $record->companies()->pluck('companies.id')->toArray();
+            \Log::info('EditMenu: Got company IDs for menu', [
+                'menu_id' => $record->id,
+                'company_ids' => $companyIds
+            ]);
 
-            // Verificar duplicados
-            $duplicateMenu = $query->exists();
+            // Verificar duplicados usando MenuHelper
+            $duplicateMenu = \App\Classes\Menus\MenuHelper::checkDuplicateMenuForUpdate(
+                $data['publication_date'],
+                $data['rol'],
+                $data['permission'],
+                $data['active'],
+                $record->id,
+                $companyIds
+            );
+
+            \Log::info('EditMenu: Duplicate check completed', [
+                'duplicate_found' => $duplicateMenu
+            ]);
 
             if ($duplicateMenu) {
                 Notification::make()

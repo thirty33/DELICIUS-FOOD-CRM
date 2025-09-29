@@ -10,6 +10,7 @@ use App\Filters\Menu\RolePermissionFilter;
 use App\Filters\Menu\LateOrdersFilter;
 use App\Filters\Menu\SortFilter;
 use App\Filters\Menu\WeekendDispatchFilter;
+use App\Filters\Menu\CompanyAccessFilter;
 
 enum MenuFilters: string
 {
@@ -19,6 +20,7 @@ enum MenuFilters: string
     case LateOrders = 'late_orders';
     case Sort = 'sort';
     case WeekendDispatch = 'weekend_dispatch';
+    case CompanyAccess = 'company_access';
 
     public function create(FilterValue $filter): Filter
     {
@@ -29,6 +31,7 @@ enum MenuFilters: string
             self::LateOrders => new LateOrdersFilter(filter: $filter),
             self::Sort => new SortFilter(filter: $filter),
             self::WeekendDispatch => new WeekendDispatchFilter(filter: $filter),
+            self::CompanyAccess => new CompanyAccessFilter(filter: $filter),
         };
     }
 }

@@ -36,6 +36,7 @@ class MenuController extends Controller
                 MenuFilters::Active->create(new FilterValue(null)),
                 MenuFilters::PublicationDate->create(new FilterValue(['date' => Carbon::now()->startOfDay()])),
                 MenuFilters::RolePermission->create(new FilterValue(['user' => $user])),
+                MenuFilters::CompanyAccess->create(new FilterValue(['user' => $user])),
                 MenuFilters::LateOrders->create(new FilterValue(['user' => $user])),
                 MenuFilters::WeekendDispatch->create(new FilterValue(['allow_weekends' => $user->allow_weekend_orders])),
                 MenuFilters::Sort->create(new FilterValue(['field' => 'publication_date', 'direction' => 'asc'])),
