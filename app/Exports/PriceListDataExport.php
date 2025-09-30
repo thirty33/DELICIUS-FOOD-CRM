@@ -35,7 +35,7 @@ class PriceListDataExport implements
         'nombre_de_lista_de_precio' => 'Nombre de Lista de Precio',
         'precio_minimo' => 'Precio Mínimo',
         'descripcion' => 'Descripción',
-        'numeros_de_registro_de_empresas' => 'Números de Registro de Empresas',
+        'nombre_producto' => 'Nombre Producto',
         'codigo_de_producto' => 'Código de Producto',
         'precio_unitario' => 'Precio Unitario'
     ];
@@ -69,7 +69,7 @@ class PriceListDataExport implements
                     'nombre_de_lista_de_precio' => $priceList->name,
                     'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
                     'descripcion' => $priceList->description,
-                    'numeros_de_registro_de_empresas' => $priceList->companies->pluck('registration_number')->implode(', '),
+                    'nombre_producto' => null,
                     'codigo_de_producto' => null,
                     'precio_unitario' => null,
                 ];
@@ -82,7 +82,7 @@ class PriceListDataExport implements
                     'nombre_de_lista_de_precio' => $priceList->name,
                     'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
                     'descripcion' => $priceList->description,
-                    'numeros_de_registro_de_empresas' => $priceList->companies->pluck('registration_number')->implode(', '),
+                    'nombre_producto' => $line->product ? $line->product->name : null,
                     'codigo_de_producto' => $line->product ? $line->product->code : null,
                     'precio_unitario' => $line->unit_price ? '$' . number_format($line->unit_price / 100, 2, '.', ',') : null,
                 ];

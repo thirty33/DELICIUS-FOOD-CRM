@@ -13,7 +13,7 @@ class PriceListTemplateExport implements FromArray, WithStyles, ShouldAutoSize
         'nombre_de_lista_de_precio' => 'Nombre de Lista de Precio',
         'precio_minimo' => 'Precio Mínimo',
         'descripcion' => 'Descripción',
-        'numeros_de_registro_de_empresas' => 'Números de Registro de Empresas',
+        'nombre_producto' => 'Nombre Producto',
         'codigo_de_producto' => 'Código de Producto',
         'precio_unitario' => 'Precio Unitario'
     ];

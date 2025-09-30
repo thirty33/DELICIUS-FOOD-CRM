@@ -94,11 +94,6 @@ class ProcessProduct implements ShouldQueue
                 ]
             );
 
-            Log::info('Línea de precio actualizada con éxito', [
-                'product_code' => $this->productCode,
-                'price_list_id' => $this->priceListId,
-                'unit_price' => $transformedPrice
-            ]);
         } catch (\Exception $e) {
             $this->registerError("Error procesando línea de precio: " . $e->getMessage());
         }
