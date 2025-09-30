@@ -19,6 +19,7 @@ class SubordinateUserResource extends JsonResource
             'email' => $this->email,
             'branch_name' => $this->branch ? $this->branch->fantasy_name : null,
             'branch_address' => $this->branch ? $this->branch->address : null,
+            'available_menus' => MenuResource::collection($this->available_menus ?? []),
         ];
     }
 }

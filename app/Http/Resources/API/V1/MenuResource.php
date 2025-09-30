@@ -14,13 +14,16 @@ class MenuResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        return [
+        $data = [
             'id' => $this->id,
             'active' => $this->active,
             'title' => $this->title,
             'description' => $this->description,
             'publication_date' => $this->publication_date,
             'has_order' => (int) ($this->has_order ?? 0),
+            'order_id' => $this->order_id ?? null
         ];
+        
+        return $data;
     }
 }
