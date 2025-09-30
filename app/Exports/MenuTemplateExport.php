@@ -16,7 +16,8 @@ class MenuTemplateExport implements FromArray, WithStyles, ShouldAutoSize
         'tipo_de_usuario' => 'Tipo de Usuario',
         'tipo_de_convenio' => 'Tipo de Convenio',
         'fecha_hora_maxima_pedido' => 'Fecha Hora Máxima Pedido',
-        'activo' => 'Activo'
+        'activo' => 'Activo',
+        'empresas_asociadas' => 'Empresas Asociadas'
     ];
 
     public function array(): array

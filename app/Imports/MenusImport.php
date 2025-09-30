@@ -53,6 +53,7 @@ class MenusImport implements
         'tipo_de_convenio' => 'permissions_id',
         'fecha_hora_maxima_pedido' => 'max_order_date',
         'activo' => 'active',
+        'empresas_asociadas' => 'companies',
     ];
 
     public function __construct(int $importProcessId)
@@ -138,8 +139,32 @@ class MenusImport implements
     }
 
     /**
+     * Parse company registration numbers from string
+     */
+    private function parseCompanyRegistrationNumbers($companiesString): array
+    {
+        if (empty($companiesString)) {
+            return [];
+        }
+
+        $companiesString = trim($companiesString);
+
+        if ($companiesString === '-') {
+            return [];
+        }
+
+        // Split by comma and clean each registration number
+        $registrationNumbers = array_map('trim', explode(',', $companiesString));
+
+        // Remove empty values
+        return array_filter($registrationNumbers, function($value) {
+            return !empty($value) && $value !== '-';
+        });
+    }
+
+    /**
      * Get validation rules for import
-     * 
+     *
      * @return array
      */
     private function getValidationRules(): array
@@ -151,7 +176,8 @@ class MenusImport implements
             '*.tipo_de_usuario' => ['required', 'string', 'exists:roles,name'],
             '*.tipo_de_convenio' => ['required', 'string', 'exists:permissions,name'],
             '*.fecha_hora_maxima_pedido' => ['required'],
-            '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no']
+            '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
+            '*.empresas_asociadas' => ['nullable', 'string']
         ];
     }
 
@@ -201,37 +227,54 @@ class MenusImport implements
                     );
                 }
 
-                // Validate unique combination of date-role-permission-active
+                // Validate unique combination of date-role-permission-active-companies
                 if (isset($row['fecha_de_despacho'], $row['tipo_de_usuario'], $row['tipo_de_convenio'], $row['fecha_hora_maxima_pedido'])) {
                     try {
                         // Process publication date
                         $parsedDate = $this->parseFlexibleDate($row['fecha_de_despacho']);
                         $publicationDate = $parsedDate ? $parsedDate->format('Y-m-d') : null;
-                        
+
                         // Process max order date
                         $maxOrderDate = $this->parseFlexibleDateTime($row['fecha_hora_maxima_pedido']);
                         $maxOrderDateFormatted = $maxOrderDate ? $maxOrderDate->format('Y-m-d H:i:s') : null;
-                        
+
                         // Get active status
                         $active = $this->convertToBoolean($row['activo'] ?? true);
-                
+
                         // Find role and permission
                         $role = Role::where('name', $row['tipo_de_usuario'])->first();
                         $permission = Permission::where('name', $row['tipo_de_convenio'])->first();
-                
+
+                        // Get company IDs from registration numbers
+                        $companyIds = [];
+                        if (isset($row['empresas_asociadas'])) {
+                            $registrationNumbers = $this->parseCompanyRegistrationNumbers($row['empresas_asociadas']);
+                            if (!empty($registrationNumbers)) {
+                                $companyIds = \App\Models\Company::whereIn('registration_number', $registrationNumbers)
+                                    ->pluck('id')
+                                    ->toArray();
+                            }
+                        }
+
                         if ($role && $permission && $maxOrderDate) {
+                            // Find existing menu with the same title to get its ID (for updates)
+                            $existingMenu = Menu::where('title', $row['titulo'])->first();
+                            $excludeId = $existingMenu ? $existingMenu->id : null;
+
                             $duplicate = MenuHelper::checkDuplicateMenuForImport(
                                 $publicationDate,
                                 $role->id,
                                 $permission->id,
                                 $active,
-                                $maxOrderDateFormatted
+                                $maxOrderDateFormatted,
+                                $companyIds,
+                                $excludeId
                             );
-                
+
                             if ($duplicate) {
                                 $validator->errors()->add(
                                     "{$index}.combinacion",
-                                    'Ya existe un menú con la misma combinación de Fecha de despacho, Tipo de usuario, Tipo de Convenio, estado Activo y Fecha hora máxima de pedido.'
+                                    'Ya existe un menú con la misma combinación de Fecha de despacho, Tipo de usuario, Tipo de Convenio, estado Activo, Fecha hora máxima de pedido y empresas asociadas.'
                                 );
                             }
                         }
@@ -431,10 +474,13 @@ class MenusImport implements
                     $menuData = $this->prepareMenuData($row);
 
                     // Use updateOrCreate with title as identifying key
-                    Menu::updateOrCreate(
+                    $menu = Menu::updateOrCreate(
                         ['title' => $menuData['title']],
                         $menuData
                     );
+
+                    // Handle company associations
+                    $this->handleCompanyAssociations($menu, $row);
 
                     Log::info('Menú creado/actualizado con éxito: ' . $menuData['title']);
                 } catch (\Exception $e) {
@@ -543,6 +589,42 @@ class MenusImport implements
             'max_order_date' => $maxOrderDate,
             'active' => $active,
         ];
+    }
+
+    /**
+     * Handle company associations for a menu
+     *
+     * @param Menu $menu
+     * @param Collection $row
+     */
+    private function handleCompanyAssociations(Menu $menu, Collection $row): void
+    {
+        // Check if empresas_asociadas column exists
+        if (!isset($row['empresas_asociadas'])) {
+            return;
+        }
+
+        // Parse registration numbers
+        $registrationNumbers = $this->parseCompanyRegistrationNumbers($row['empresas_asociadas']);
+
+        if (empty($registrationNumbers)) {
+            // Clear any existing associations if no companies specified
+            $menu->companies()->detach();
+            return;
+        }
+
+        // Find companies by registration number
+        $companyIds = \App\Models\Company::whereIn('registration_number', $registrationNumbers)
+            ->pluck('id')
+            ->toArray();
+
+        if (!empty($companyIds)) {
+            // Sync company associations
+            $menu->companies()->sync($companyIds);
+        } else {
+            // Clear associations if no valid companies found
+            $menu->companies()->detach();
+        }
     }
 
     /**

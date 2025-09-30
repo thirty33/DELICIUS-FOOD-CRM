@@ -64,17 +64,30 @@ class MenuHelper
     }
 
     /**
-     * Check for duplicate menu in import process
+     * Check for duplicate menu in import process with company overlap check
      * Used in: MenusImport.php
      */
-    public static function checkDuplicateMenuForImport($publicationDate, $roleId, $permissionId, $active, $maxOrderDate)
+    public static function checkDuplicateMenuForImport($publicationDate, $roleId, $permissionId, $active, $maxOrderDate, $companyIds = [], $excludeId = null)
     {
-        return Menu::where('publication_date', $publicationDate)
+        $query = Menu::where('publication_date', $publicationDate)
             ->where('role_id', $roleId)
             ->where('permissions_id', $permissionId)
             ->where('active', $active)
-            ->where('max_order_date', $maxOrderDate)
-            ->exists();
+            ->where('max_order_date', $maxOrderDate);
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        if (!empty($companyIds)) {
+            $query->whereHas('companies', function ($subQuery) use ($companyIds) {
+                $subQuery->whereIn('companies.id', $companyIds);
+            });
+        } else {
+            $query->whereDoesntHave('companies');
+        }
+
+        return $query->exists();
     }
 
     /**

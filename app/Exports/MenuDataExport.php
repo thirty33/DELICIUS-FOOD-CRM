@@ -43,7 +43,8 @@ class MenuDataExport implements
         'tipo_de_usuario' => 'Tipo de Usuario',
         'tipo_de_convenio' => 'Tipo de Convenio',
         'fecha_hora_maxima_pedido' => 'Fecha Hora Máxima Pedido',
-        'activo' => 'Activo'
+        'activo' => 'Activo',
+        'empresas_asociadas' => 'Empresas Asociadas'
     ];
 
     private $exportProcessId;
@@ -57,7 +58,7 @@ class MenuDataExport implements
 
     public function query()
     {
-        return Menu::with(['rol', 'permission'])
+        return Menu::with(['rol', 'permission', 'companies'])
             ->whereIn('id', $this->menuIds);
     }
 
@@ -77,6 +78,9 @@ class MenuDataExport implements
                 'tipo_de_convenio' => $menu->permission ? $menu->permission->name : null,
                 'fecha_hora_maxima_pedido' => $menu->max_order_date ? Carbon::parse($menu->max_order_date)->format('d/m/Y H:i:s') : null,
                 'activo' => $menu->active ? '1' : '0',
+                'empresas_asociadas' => $menu->companies->isNotEmpty()
+                    ? $menu->companies->pluck('registration_number')->filter()->implode(', ')
+                    : '-',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando menú para exportación', [

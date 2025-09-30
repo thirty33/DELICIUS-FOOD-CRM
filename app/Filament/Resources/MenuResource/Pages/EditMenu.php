@@ -35,14 +35,10 @@ class EditMenu extends EditRecord
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         try {
-            // Obtener empresas asociadas al menú actual
+            // Get companies associated with current menu
             $companyIds = $record->companies()->pluck('companies.id')->toArray();
-            \Log::info('EditMenu: Got company IDs for menu', [
-                'menu_id' => $record->id,
-                'company_ids' => $companyIds
-            ]);
 
-            // Verificar duplicados usando MenuHelper
+            // Check for duplicates using MenuHelper
             $duplicateMenu = \App\Classes\Menus\MenuHelper::checkDuplicateMenuForUpdate(
                 $data['publication_date'],
                 $data['rol'],
@@ -51,10 +47,6 @@ class EditMenu extends EditRecord
                 $record->id,
                 $companyIds
             );
-
-            \Log::info('EditMenu: Duplicate check completed', [
-                'duplicate_found' => $duplicateMenu
-            ]);
 
             if ($duplicateMenu) {
                 Notification::make()
