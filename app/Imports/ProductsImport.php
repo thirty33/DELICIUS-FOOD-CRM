@@ -58,8 +58,7 @@ class ProductsImport implements
     public function collection(Collection $rows)
     {
         try {
-            Log::debug('Processing rows', ['rows' => $rows->toArray()]);
-
+            
             Validator::make($rows->toArray(), $this->rules(), $this->getValidationMessages())->validate();
 
             foreach ($rows as $index => $row) {
@@ -361,7 +360,6 @@ class ProductsImport implements
         ];
 
         $this->updateImportProcessError($error);
-        Log::error('Error processing row', $error);
     }
 
     private function handleImportError(\Exception $e)
@@ -372,7 +370,7 @@ class ProductsImport implements
         ];
 
         $this->updateImportProcessError($error);
-        Log::error('Error in import process', $error);
+        
     }
 
     private function updateImportProcessError(array $error)
@@ -398,7 +396,6 @@ class ProductsImport implements
             ];
 
             $this->updateImportProcessError($error);
-            Log::warning('Validation failure', $error);
         }
     }
 

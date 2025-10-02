@@ -69,7 +69,8 @@ class OrderLinesImport implements
         'precio_con_impuesto' => 'unit_price_with_tax',
         'precio_total_neto' => 'total_price_net',
         'precio_total_con_impuesto' => 'total_price_with_tax',
-        'parcialmente_programado' => 'partially_scheduled'
+        'parcialmente_programado' => 'partially_scheduled',
+        'precio_transporte' => 'dispatch_cost'
     ];
 
     public function __construct(int $importProcessId)
@@ -186,7 +187,8 @@ class OrderLinesImport implements
             '*.codigo_de_producto' => ['required', 'string'],
             '*.cantidad' => ['required', 'integer', 'min:1'],
             '*.precio_neto' => ['nullable', 'numeric'],
-            '*.parcialmente_programado' => ['nullable', 'in:0,1,true,false,si,no,yes,no']
+            '*.parcialmente_programado' => ['nullable', 'in:0,1,true,false,si,no,yes,no'],
+            '*.precio_transporte' => ['nullable', 'numeric', 'min:0']
         ];
     }
 
@@ -210,6 +212,8 @@ class OrderLinesImport implements
             '*.cantidad.min' => 'La cantidad debe ser al menos 1.',
             '*.precio_neto.numeric' => 'El precio neto debe ser un número.',
             '*.parcialmente_programado.in' => 'El campo parcialmente programado debe tener un valor válido (0, 1, true, false, si, no).',
+            '*.precio_transporte.numeric' => 'El precio de transporte debe ser un número.',
+            '*.precio_transporte.min' => 'El precio de transporte no puede ser negativo.',
         ];
     }
 
@@ -343,6 +347,14 @@ class OrderLinesImport implements
             $firstRow = $rows->first();
             $idOrden = $firstRow['id_orden'] ?? null;
 
+            Log::info('Procesando orden desde Excel', [
+                'order_number' => $orderNumber,
+                'id_orden' => $idOrden,
+                'precio_transporte' => $firstRow['precio_transporte'] ?? 'NO DEFINIDO',
+                'tipo_precio_transporte' => gettype($firstRow['precio_transporte'] ?? null),
+                'todas_las_claves' => is_array($firstRow) ? array_keys($firstRow) : $firstRow->keys()->toArray()
+            ]);
+
             // Determinar si existe la combinación id + código
             $existingOrder = $this->findOrderByIdAndNumber($idOrden, $orderNumber);
 
@@ -355,20 +367,37 @@ class OrderLinesImport implements
             // Si la combinación id + código existe, modificar la orden existente
             if ($existingOrder) {
                 $processKey = "{$idOrden}_{$orderNumber}";
-                
+
                 // Si este pedido ya fue procesado, verificar si hay cambios
                 if (isset($this->processedOrders[$processKey])) {
                     $processedData = $this->processedOrders[$processKey];
+
+                    Log::info('Verificando cambios en pedido ya procesado', [
+                        'order_id' => $existingOrder->id,
+                        'order_number' => $orderNumber,
+                        'precio_transporte_procesado' => $processedData['dispatch_cost'],
+                        'precio_transporte_actual' => $firstRow['precio_transporte'] ?? '0.00',
+                        'son_iguales' => $processedData['dispatch_cost'] === ($firstRow['precio_transporte'] ?? '0.00')
+                    ]);
 
                     // Verificar si hay cambios en los campos de la orden
                     $orderDataChanged =
                         $processedData['status'] !== $firstRow['estado'] ||
                         $processedData['created_at'] !== $firstRow['fecha_de_orden'] ||
                         $processedData['dispatch_date'] !== $firstRow['fecha_de_despacho'] ||
-                        $processedData['user_email'] !== $firstRow['usuario'];
+                        $processedData['user_email'] !== $firstRow['usuario'] ||
+                        $processedData['dispatch_cost'] !== ($firstRow['precio_transporte'] ?? '0.00');
+
+                    Log::info('Resultado verificación de cambios', [
+                        'order_id' => $existingOrder->id,
+                        'orderDataChanged' => $orderDataChanged
+                    ]);
 
                     // Si no hay cambios, solo procesar las líneas de pedido
                     if (!$orderDataChanged) {
+                        Log::info('No hay cambios en el pedido, solo procesando líneas', [
+                            'order_id' => $existingOrder->id
+                        ]);
                         $this->processOrderLines($processedData['order_id'], $rows);
                         return;
                     }
@@ -419,11 +448,31 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
+            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
+            $dispatchCost = 0;
+            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
+                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
+            }
+
+            Log::info('Actualizando orden existente', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
+                'dispatch_cost_calculado' => $dispatchCost,
+                'dispatch_cost_anterior' => $order->dispatch_cost
+            ]);
+
             // Actualizar la orden
             $order->update([
                 'status' => $status,
                 'user_id' => $user->id,
-                'dispatch_date' => $dispatchDate
+                'dispatch_date' => $dispatchDate,
+                'dispatch_cost' => $dispatchCost
+            ]);
+
+            Log::info('Orden actualizada', [
+                'order_id' => $order->id,
+                'dispatch_cost_nuevo' => $order->fresh()->dispatch_cost
             ]);
 
             // Si la fecha de creación es diferente, actualizar manualmente
@@ -439,7 +488,8 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario']
+                'user_email' => $firstRow['usuario'],
+                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
             ];
 
             // Procesar las líneas de pedido
@@ -488,13 +538,31 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
+            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
+            $dispatchCost = 0;
+            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
+                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
+            }
+
+            Log::info('Creando orden nueva con order_number', [
+                'order_number' => $orderNumber,
+                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
+                'dispatch_cost_calculado' => $dispatchCost
+            ]);
+
             // Crear la orden con el order_number específico
             $order = Order::create([
                 'order_number' => $orderNumber,
                 'status' => $status,
                 'user_id' => $user->id,
                 'dispatch_date' => $dispatchDate,
-                'created_at' => $createdAt
+                'created_at' => $createdAt,
+                'dispatch_cost' => $dispatchCost
+            ]);
+
+            Log::info('Orden creada con order_number', [
+                'order_id' => $order->id,
+                'dispatch_cost_guardado' => $order->dispatch_cost
             ]);
 
             // Guardar los datos procesados para comparaciones futuras
@@ -503,7 +571,8 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario']
+                'user_email' => $firstRow['usuario'],
+                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
             ];
 
             // Procesar las líneas de pedido
@@ -551,12 +620,30 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
+            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
+            $dispatchCost = 0;
+            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
+                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
+            }
+
+            Log::info('Creando orden nueva', [
+                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
+                'dispatch_cost_calculado' => $dispatchCost
+            ]);
+
             // Crear la orden (el order_number se generará automáticamente en el modelo)
             $order = Order::create([
                 'status' => $status,
                 'user_id' => $user->id,
                 'dispatch_date' => $dispatchDate,
-                'created_at' => $createdAt
+                'created_at' => $createdAt,
+                'dispatch_cost' => $dispatchCost
+            ]);
+
+            Log::info('Orden creada', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'dispatch_cost_guardado' => $order->dispatch_cost
             ]);
 
             // Guardar los datos procesados para comparaciones futuras usando el order_number como clave
@@ -565,7 +652,8 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario']
+                'user_email' => $firstRow['usuario'],
+                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
             ];
 
             // Procesar las líneas de pedido
@@ -598,6 +686,15 @@ class OrderLinesImport implements
     private function processOrderLines($orderId, Collection $rows)
     {
         try {
+            // Get the order to preserve dispatch_cost
+            $order = Order::find($orderId);
+            $preservedDispatchCost = $order->dispatch_cost;
+
+            Log::info('Procesando líneas de pedido', [
+                'order_id' => $orderId,
+                'dispatch_cost_a_preservar' => $preservedDispatchCost
+            ]);
+
             // Eliminar las líneas de pedido existentes
             OrderLine::where('order_id', $orderId)->delete();
 
@@ -627,9 +724,21 @@ class OrderLinesImport implements
                 ]);
             }
 
+            // Restore dispatch_cost after processing lines (events may have changed it)
+            $order->refresh();
+            if ($order->dispatch_cost !== $preservedDispatchCost) {
+                Log::warning('dispatch_cost fue modificado por eventos, restaurando valor', [
+                    'order_id' => $orderId,
+                    'valor_anterior' => $preservedDispatchCost,
+                    'valor_modificado' => $order->dispatch_cost
+                ]);
+                $order->update(['dispatch_cost' => $preservedDispatchCost]);
+            }
+
             Log::info("Líneas de pedido procesadas con éxito", [
                 'order_id' => $orderId,
-                'lines_count' => $rows->count()
+                'lines_count' => $rows->count(),
+                'dispatch_cost_final' => $order->fresh()->dispatch_cost
             ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(

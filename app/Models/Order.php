@@ -154,6 +154,16 @@ class Order extends Model
     public function updateDispatchCost(): void
     {
         try {
+            // Skip recalculation if dispatch_cost was manually set during creation (e.g., from import)
+            // Only skip if the order was just created AND has a non-zero dispatch_cost
+            if ($this->wasRecentlyCreated && $this->dispatch_cost > 0) {
+                Log::info('Skipping dispatch_cost recalculation - manually set value detected', [
+                    'order_id' => $this->id,
+                    'dispatch_cost' => $this->dispatch_cost
+                ]);
+                return;
+            }
+
             $repository = new DispatchRuleRepository;
             $dispatchCost = $repository->calculateDispatchCost($this);
 

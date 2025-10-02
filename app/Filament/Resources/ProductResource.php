@@ -137,6 +137,8 @@ class ProductResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultPaginationPageOption(25)
+            ->paginationPageOptions([25, 50, 100])
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
                     // ->disk('s3')

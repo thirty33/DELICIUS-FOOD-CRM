@@ -23,4 +23,14 @@ class ListProducts extends ListRecords
             // ProductResource\Widgets\ProductOverview::class,
         ];
     }
+
+    public function getDefaultTableRecordsPerPageSelectOption(): int
+    {
+        return 25;
+    }
+
+    public function getTableRecordsPerPageSelectOptions(): array
+    {
+        return [10, 25, 50, 100];
+    }
 }

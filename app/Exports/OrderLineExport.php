@@ -69,9 +69,6 @@ class OrderLineExport implements
 
     private $exportProcessId;
     private $orderLineIds;
-    private $lastOrderId = null;
-    private $orderItemCounts = [];
-    private $orderRowSpans = [];
 
     public function __construct(Collection $orderLineIds, int $exportProcessId)
     {
@@ -93,111 +90,6 @@ class OrderLineExport implements
         return 100;
     }
 
-    /**
-     * Count items for a specific order in the current export
-     */
-    private function countItemsInExport(int $orderId): int
-    {
-        $count = 0;
-        foreach ($this->orderLineIds as $lineId) {
-            $orderLine = OrderLine::find($lineId);
-            if ($orderLine && $orderLine->order_id == $orderId) {
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    /**
-     * Apply merge cells for transport price column
-     */
-    private function applyTransportPriceMerge(Worksheet $sheet, int $lastRow)
-    {
-        // Identify order groups and apply merge
-        $currentOrderId = '';
-        $orderStartRow = 0;
-        $orderGroups = [];
-
-        // Loop through all rows to identify order groups
-        for ($row = 2; $row <= $lastRow; $row++) {
-            $orderId = $sheet->getCell('A' . $row)->getValue(); // ID Orden column
-            
-            // If order changes or it's the last row
-            if ($orderId !== $currentOrderId || $row === $lastRow) {
-                // Save previous order group info
-                if ($orderStartRow > 0) {
-                    $endRow = ($row === $lastRow && $orderId === $currentOrderId) ? $row : $row - 1;
-                    $transportValue = $sheet->getCell('S' . $orderStartRow)->getValue();
-                    
-                    
-                    $orderGroups[] = [
-                        'order_id' => $currentOrderId,
-                        'start' => $orderStartRow,
-                        'end' => $endRow,
-                        'transport_value' => $transportValue
-                    ];
-                }
-                
-                // Start new order group
-                $currentOrderId = $orderId;
-                $orderStartRow = $row;
-            }
-        }
-
-        // Apply merges and styles to transport price column (S)
-        foreach ($orderGroups as $group) {
-            
-            // Apply styling to all transport price cells with any numeric value (including 0)
-            // Check for numeric values or the string "0.00"
-            if (is_numeric($group['transport_value']) || $group['transport_value'] === '0.00') {
-                // If multiple rows, apply merge
-                if ($group['start'] < $group['end']) {
-                    $sheet->mergeCells("S{$group['start']}:S{$group['end']}");
-                    
-                    // Apply alignment for merged cells
-                    $sheet->getStyle("S{$group['start']}:S{$group['end']}")
-                        ->getAlignment()
-                        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
-                        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
-                }
-                
-                // Apply styling to the range (single cell or merged)
-                $range = $group['start'] < $group['end'] ? "S{$group['start']}:S{$group['end']}" : "S{$group['start']}";
-                
-                
-                $this->applyTransportPriceStyle($sheet, $range);
-            }
-        }
-    }
-
-    /**
-     * Apply special visual styling for transport price cells
-     */
-    private function applyTransportPriceStyle(Worksheet $sheet, string $range)
-    {
-        $transportPriceStyle = [
-            'font' => [
-                'bold' => true,
-                'color' => ['rgb' => '2F5597']
-            ],
-            'fill' => [
-                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-                'startColor' => ['rgb' => 'E8F4F8'] // Light blue background
-            ],
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM,
-                    'color' => ['rgb' => '4472C4']
-                ]
-            ],
-            'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER
-            ]
-        ];
-
-        $sheet->getStyle($range)->applyFromArray($transportPriceStyle);
-    }
 
     public function map($orderLine): array
     {
@@ -247,38 +139,17 @@ class OrderLineExport implements
             $precioTotalNeto = $orderLine->quantity * $orderLine->unit_price;
             $precioTotalConImpuesto = $orderLine->quantity * $orderLine->unit_price_with_tax;
 
-            // Check if this is the first line of a new order
-            $isFirstInOrder = ($this->lastOrderId !== $order->id);
-            if ($isFirstInOrder) {
-                $this->lastOrderId = $order->id;
-                // Count items for this order in current export
-                $this->orderItemCounts[$order->id] = $this->countItemsInExport($order->id);
-                
-                
-                // Save info for rowspan (will be updated in AfterSheet)
-                if ($this->orderItemCounts[$order->id] > 1) {
-                    $this->orderRowSpans[$order->id] = [
-                        'start_row' => 0, // Will be updated in AfterSheet
-                        'count' => $this->orderItemCounts[$order->id]
-                    ];
-                }
-            }
-
-            // Calculate transport price value
-            // Special handling for zero values to ensure they're written to Excel
+            // Calculate transport price value for every line
             $transportPriceValue = '';
-            if ($isFirstInOrder) {
-                if ($order->dispatch_cost !== null) {
-                    $calculatedValue = $order->dispatch_cost / 100;
-                    // FORCE writing zero as a numeric string to prevent filtering
-                    if ($calculatedValue == 0) {
-                        $transportPriceValue = '0.00';  // String zero to ensure it's written
-                    } else {
-                        $transportPriceValue = number_format($calculatedValue, 2, '.', '');  // Format as string with 2 decimals
-                    }
+            if ($order->dispatch_cost !== null) {
+                $calculatedValue = $order->dispatch_cost / 100;
+                if ($calculatedValue == 0) {
+                    $transportPriceValue = '0.00';
                 } else {
-                    $transportPriceValue = '0.00';  // String zero for null dispatch_cost
+                    $transportPriceValue = number_format($calculatedValue, 2, '.', '');
                 }
+            } else {
+                $transportPriceValue = '0.00';
             }
             
             
@@ -379,10 +250,7 @@ class OrderLineExport implements
                     $sheet->removeRow($row + 1, $lastRow - $row);
                     $lastRow = $row; // Update lastRow after removal
                 }
-                
-                // Apply merge logic for transport price column (Column S)
-                $this->applyTransportPriceMerge($sheet, $lastRow);
-                
+
                 ExportProcess::where('id', $this->exportProcessId)
                     ->update(['status' => ExportProcess::STATUS_PROCESSED]);
             },
