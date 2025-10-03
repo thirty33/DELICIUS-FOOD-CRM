@@ -288,27 +288,22 @@ class UserResource extends Resource
                             ->orWhere('nickname', 'like', "%{$search}%");
                     })
                     ->description(fn(User $user) => $user->email ?: $user->nickname),
-                Tables\Columns\TextColumn::make('nickname')
-                    ->label(__('Nickname'))
-                    ->sortable()
-                    ->searchable()
-                    ->toggleable(),
                 Tables\Columns\TextColumn::make('roles.name')
                     ->label(__('Tipo de usuario'))
                     ->badge(),
                 Tables\Columns\TextColumn::make('permissions.name')
                     ->label(__('Tipo de Convenio'))
                     ->badge(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Creado'))
-                    ->sortable()
-                    ->date('d/m/Y H:i'),
-                Tables\Columns\TextColumn::make('company.name')
+                Tables\Columns\TextColumn::make('company.fantasy_name')
                     ->label(__('Empresa'))
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('branch.fantasy_name')
-                    ->label(__('Sucursal'))
-                    ->searchable(),
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('company', function (Builder $q) use ($search) {
+                            $q->where('fantasy_name', 'like', "%{$search}%");
+                        })->orWhereHas('branch', function (Builder $q) use ($search) {
+                            $q->where('fantasy_name', 'like', "%{$search}%");
+                        });
+                    })
+                    ->description(fn(User $user) => $user->branch?->fantasy_name),
                 Tables\Columns\IconColumn::make('master_user')
                     ->label(__('Usuario Maestro'))
                     ->boolean()
@@ -324,6 +319,12 @@ class UserResource extends Resource
                 Tables\Filters\SelectFilter::make('permissions')
                     ->relationship('permissions', 'name')
                     ->label(__('Tipo de Convenio')),
+                Tables\Filters\TernaryFilter::make('master_user')
+                    ->label(__('Usuario Maestro'))
+                    ->boolean()
+                    ->trueLabel(__('Solo usuarios maestros'))
+                    ->falseLabel(__('Solo usuarios no maestros'))
+                    ->native(false),
                 DateRangeFilter::make('created_at')
                     ->label(__('Fecha de creación')),
             ])

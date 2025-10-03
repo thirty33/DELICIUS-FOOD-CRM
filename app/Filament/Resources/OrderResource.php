@@ -178,10 +178,9 @@ class OrderResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->label(__('ID'))
                     ->sortable()
-                    ->searchable()
-                    ->prefix('#')
-                    ->suffix('#'),
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('order_number')
                     ->label(__('Número de Orden'))
                     ->searchable()
@@ -189,29 +188,25 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Cliente'))
                     ->sortable()
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('user', function (Builder $q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%")
+                              ->orWhere('email', 'like', "%{$search}%")
+                              ->orWhere('nickname', 'like', "%{$search}%");
+                        });
+                    })
                     ->description(fn(Order $order) => $order->user->email ?: $order->user->nickname),
                 Tables\Columns\TextColumn::make('user.company.fantasy_name')
                     ->label(__('Empresa'))
                     ->sortable()
-                    ->searchable(),
-                MoneyColumn::make('total_with_tax')
-                    ->label(__('Total'))
-                    ->currency('USD')
-                    ->locale('en_US'),
-                MoneyColumn::make('dispatch_cost')
-                    ->label(__('Costo de despacho'))
-                    ->currency('USD')
-                    ->locale('en_US')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('total_products')
-                    ->label(__('Total productos'))
-                    ->state(fn(Model $order) => $order->orderLines->sum('quantity')),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Fecha de pedido'))
-                    ->sortable()
-                    ->dateTime('d/m/Y H:i:s')
-                    ->searchable(),
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('user.company', function (Builder $q) use ($search) {
+                            $q->where('fantasy_name', 'like', "%{$search}%");
+                        })->orWhereHas('user.branch', function (Builder $q) use ($search) {
+                            $q->where('fantasy_name', 'like', "%{$search}%");
+                        });
+                    })
+                    ->description(fn(Order $order) => $order->user->branch?->fantasy_name),
                 Tables\Columns\TextColumn::make('status')
                     ->label(__('Estado'))
                     ->sortable()
@@ -222,6 +217,23 @@ class OrderResource extends Resource
                         OrderStatus::PROCESSED->value => 'success',
                         OrderStatus::CANCELED->value => 'danger',
                     }),
+                Tables\Columns\TextColumn::make('total_products')
+                    ->label(__('Total productos'))
+                    ->state(fn(Model $order) => $order->orderLines->sum('quantity')),
+                MoneyColumn::make('grand_total')
+                    ->label(__('Total'))
+                    ->currency('USD')
+                    ->locale('en_US'),
+                MoneyColumn::make('dispatch_cost')
+                    ->label(__('Costo de despacho'))
+                    ->currency('USD')
+                    ->locale('en_US')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label(__('Fecha de pedido'))
+                    ->sortable()
+                    ->dateTime('d/m/Y H:i:s')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('dispatch_date')
                     ->label(__('Fecha de despacho'))
                     ->sortable()

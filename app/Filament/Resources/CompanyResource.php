@@ -72,7 +72,6 @@ class CompanyResource extends Resource
                                     Forms\Components\TextInput::make('tax_id')
                                         ->required()
                                         ->label(__('RUT'))
-                                        ->unique(static::getModel(), 'tax_id', ignoreRecord: true)
                                         ->nullable()
                                         ->columns(1),
                                     Forms\Components\TextInput::make('name')
@@ -219,22 +218,27 @@ class CompanyResource extends Resource
                     ->label(__('Rut'))
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('company_code')
+                    ->label(__('Código'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('name')
                     ->label(__('Nombre'))
+                    ->searchable()
+                    ->sortable()
+                    ->description(fn(Company $company) => $company->fantasy_name),
+                Tables\Columns\TextColumn::make('phone_number')
+                    ->label(__('Teléfono'))
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('priceList.name')
+                    ->label(__('Lista de Precio'))
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('registration_number')
                     ->label(__('Número de registro'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Creado'))
-                    ->sortable()
-                    ->date('d/m/Y H:i'),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label(__('Actualizado'))
-                    ->sortable()
-                    ->date('d/m/Y H:i'),
                 Tables\Columns\ToggleColumn::make('active')
                     ->label(__('Activo'))
                     ->sortable(),
@@ -243,7 +247,12 @@ class CompanyResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                //
+                Tables\Filters\TernaryFilter::make('exclude_from_consolidated_report')
+                    ->label(__('Discriminar en reporte consolidado'))
+                    ->boolean()
+                    ->trueLabel(__('Solo empresas discriminadas'))
+                    ->falseLabel(__('Solo empresas no discriminadas'))
+                    ->native(false),
             ])
             ->headerActions([
                 Tables\Actions\ActionGroup::make([
