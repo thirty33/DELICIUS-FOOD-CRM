@@ -146,7 +146,17 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - API endpoints use role-based authorization
 - Admin panel has comprehensive permission system
 - Image URLs are signed for security
-- explica que es lo que vas a hacer, no me des código sin explicación
-- no crees comentarios en el código en español
-- corre todos los comandos de php y relacionados que necesites con sail
-- no asignes textos por defecto a variables a menos que se te indique
+
+## Development Guidelines
+
+### General Rules
+- Explain what you're going to do before providing code
+- Do not create code comments in Spanish (use English)
+- Run all PHP and related commands using `./vendor/bin/sail` (Laravel Sail)
+- Do not assign default text values to variables unless explicitly instructed
+
+### File Management Rules
+- **NEVER** save Python scripts (.py) in the project directory
+- **NEVER** save generated Excel files (.xlsx) in the project directory
+- **ALWAYS** save Python scripts and generated Excel files directly to `/mnt/c/Users/Usuario/Downloads/`
+- This applies to all test data generation, import templates, and similar files
