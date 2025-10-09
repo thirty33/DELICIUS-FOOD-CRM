@@ -8,6 +8,8 @@ use App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\Branch;
+use App\Models\BillingProcess;
+use App\Models\Integration;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -328,6 +330,65 @@ class OrderResource extends Resource
                                     'Ha ocurrido un error al preparar el envío del correo: ' . $e->getMessage(),
                                     'danger'
                                 )->send();
+                            }
+                        }),
+                    Tables\Actions\Action::make('facturar')
+                        ->label('Facturar')
+                        ->icon('heroicon-o-document-text')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Facturar Pedido')
+                        ->modalDescription('¿Estás seguro de que deseas crear un proceso de facturación para este pedido?')
+                        ->action(function (Order $record) {
+                            try {
+                                // Buscar la integración de facturación activa
+                                $integration = Integration::where('type', Integration::TYPE_BILLING)
+                                    ->where('active', true)
+                                    ->first();
+
+                                if (!$integration) {
+                                    self::makeNotification(
+                                        'Error',
+                                        'No hay ninguna integración de facturación activa configurada.',
+                                        'danger'
+                                    )->send();
+                                    return;
+                                }
+
+                                $billingProcess = BillingProcess::create([
+                                    'order_id' => $record->id,
+                                    'status' => BillingProcess::STATUS_PENDING,
+                                    'responsible_id' => auth()->id(),
+                                    'integration_id' => $integration->id,
+                                ]);
+
+                                self::makeNotification(
+                                    'Proceso de facturación creado',
+                                    'El proceso de facturación ha sido creado exitosamente.'
+                                )->send();
+
+                                Log::info('Proceso de facturación creado', [
+                                    'billing_process_id' => $billingProcess->id,
+                                    'order_id' => $record->id,
+                                    'responsible_id' => auth()->id(),
+                                    'integration_id' => $integration->id,
+                                ]);
+
+                                return redirect()->route('filament.admin.resources.billing-processes.edit', ['record' => $billingProcess->id]);
+                            } catch (\Exception $e) {
+                                Log::error('Error al crear proceso de facturación', [
+                                    'order_id' => $record->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al crear el proceso de facturación: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+
+                                throw $e;
                             }
                         }),
                 ])

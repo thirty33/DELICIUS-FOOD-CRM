@@ -20,9 +20,9 @@ class DispatchRuleResource extends Resource
     protected static ?string $model = DispatchRule::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-truck';
-    
+
     protected static ?int $navigationSort = 100;
-    
+
     public static function getNavigationGroup(): ?string
     {
         return __('Transporte');

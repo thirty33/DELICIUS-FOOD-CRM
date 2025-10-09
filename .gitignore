@@ -23,4 +23,5 @@ keys/
 Envoy.blade.php
 composer.lock
 storage/trusted-signer.pem
+docs/
 
