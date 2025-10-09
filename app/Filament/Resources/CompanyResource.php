@@ -79,7 +79,6 @@ class CompanyResource extends Resource
                                         ->required()
                                         ->minLength(2)
                                         ->maxLength(200)
-                                        ->unique(static::getModel(), 'name', ignoreRecord: true)
                                         ->label(__('Razón social'))
                                         ->columns(1),
                                     Forms\Components\TextInput::make('business_activity')
@@ -91,7 +90,6 @@ class CompanyResource extends Resource
                                         ->required()
                                         ->minLength(2)
                                         ->maxLength(200)
-                                        ->unique(static::getModel(), 'fantasy_name', ignoreRecord: true)
                                         ->label(__('Nombre de fantasía'))
                                         ->columns(1),
                                     Forms\Components\TextInput::make('registration_number')

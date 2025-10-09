@@ -202,48 +202,10 @@ class CompaniesImport implements
                 // Unique email validation removed
                 // Comment: Unique email validation was removed to allow
                 // DB constraint to handle duplicates and generate clearer errors
-                
-                // Original validation code:
-                // if (isset($row['email'])) {
-                //     $exists = Company::where('email', $row['email'])
-                //         ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
-                //         ->exists();
-                //
-                //     if ($exists) {
-                //         $validator->errors()->add(
-                //             "{$index}.email",
-                //             'El email ya existe en otra empresa.'
-                //         );
-                //     }
-                // }
 
-                // Validate unique name except for current record
-                if (isset($row['razon_social'])) {
-                    $exists = Company::where('name', $row['razon_social'])
-                        ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
-                        ->exists();
+                // Unique name (razon_social) validation removed - duplicates now allowed
 
-                    if ($exists) {
-                        $validator->errors()->add(
-                            "{$index}.razon_social",
-                            'El nombre ya existe en otra empresa.'
-                        );
-                    }
-                }
-
-                // Validate unique fantasy name except for current record
-                if (isset($row['nombre_de_fantasia'])) {
-                    $exists = Company::where('fantasy_name', $row['nombre_de_fantasia'])
-                        ->where('registration_number', '!=', $row['numero_de_registro'] ?? '')
-                        ->exists();
-
-                    if ($exists) {
-                        $validator->errors()->add(
-                            "{$index}.nombre_de_fantasia",
-                            'El nombre de fantasía ya existe en otra empresa.'
-                        );
-                    }
-                }
+                // Unique fantasy name validation removed - duplicates now allowed
 
                 // Validar que la lista de precio existe (solo si se proporciona)
                 if (isset($row['lista_de_precio']) && !empty($row['lista_de_precio'])) {
