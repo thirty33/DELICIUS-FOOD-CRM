@@ -11,23 +11,65 @@ class MenuHelper
 
     public static function getMenu($date, $user)
     {
+        // First, try to find a menu associated with the user's company
+        $companyMenuQuery = Menu::where('publication_date', $date)
+            ->where('role_id', UserPermissions::getRole($user)->id)
+            ->whereHas('companies', function ($subQuery) use ($user) {
+                $subQuery->where('companies.id', $user->company_id);
+            });
+
+        if (UserPermissions::getPermission($user)) {
+            $companyMenuQuery->where('permissions_id', UserPermissions::getPermission($user)->id);
+        }
+
+        // If a company-specific menu exists, return it
+        if ($companyMenuQuery->exists()) {
+            return $companyMenuQuery;
+        }
+
+        // If no company-specific menu found, fall back to general menus (without company association)
         $query = Menu::where('publication_date', $date)
-            ->where('role_id', UserPermissions::getRole($user)->id);
-        
+            ->where('role_id', UserPermissions::getRole($user)->id)
+            ->whereDoesntHave('companies');
+
         if (UserPermissions::getPermission($user)) {
             $query->where('permissions_id', UserPermissions::getPermission($user)->id);
         }
-        
+
         return $query;
     }
 
     public static function getCurrentMenuQuery($date, $user)
     {
+        // First, try to find a menu associated with the user's company
+        $companyMenuQuery = Menu::where('publication_date', $date)
+            ->where('role_id', UserPermissions::getRole($user)->id)
+            ->where('publication_date', '>=', Carbon::now()->startOfDay())
+            ->where('active', 1)
+            ->whereHas('companies', function ($subQuery) use ($user) {
+                $subQuery->where('companies.id', $user->company_id);
+            });
+
+        if (UserPermissions::getPermission($user)) {
+            $companyMenuQuery->where('permissions_id', UserPermissions::getPermission($user)->id);
+        }
+
+        if ($user->allow_late_orders) {
+            $companyMenuQuery->where('max_order_date', '>', Carbon::now());
+        }
+
+        // If a company-specific menu exists, return it
+        if ($companyMenuQuery->exists()) {
+            return $companyMenuQuery;
+        }
+
+        // If no company-specific menu found, fall back to general menus (without company association)
         $query = Menu::where('publication_date', $date)
             ->where('role_id', UserPermissions::getRole($user)->id)
             ->where('publication_date', '>=', Carbon::now()->startOfDay())
-            ->where('active', 1);
-        
+            ->where('active', 1)
+            ->whereDoesntHave('companies');
+
         if (UserPermissions::getPermission($user)) {
             $query->where('permissions_id', UserPermissions::getPermission($user)->id);
         }
@@ -43,11 +85,27 @@ class MenuHelper
      * Check if menu exists for UpdateStatusRequest
      * Used in: UpdateStatusRequest.php
      */
-    public static function menuExistsForStatusUpdate($date, $roleId, $permissionId)
+    public static function menuExistsForStatusUpdate($date, $roleId, $permissionId, $companyId)
     {
+        // First, try to find a menu associated with the company
+        $companyMenuExists = Menu::where('publication_date', $date)
+            ->where('role_id', $roleId)
+            ->where('permissions_id', $permissionId)
+            ->whereHas('companies', function ($subQuery) use ($companyId) {
+                $subQuery->where('companies.id', $companyId);
+            })
+            ->exists();
+
+        // If a company-specific menu exists, return true
+        if ($companyMenuExists) {
+            return true;
+        }
+
+        // If no company-specific menu found, check for general menus (without company association)
         return Menu::where('publication_date', $date)
             ->where('role_id', $roleId)
             ->where('permissions_id', $permissionId)
+            ->whereDoesntHave('companies')
             ->exists();
     }
 
@@ -55,11 +113,27 @@ class MenuHelper
      * Check if menu exists for CreateOrUpdateOrderRequest
      * Used in: CreateOrUpdateOrderRequest.php
      */
-    public static function menuExistsForOrderCreateUpdate($date, $roleId, $permissionId)
+    public static function menuExistsForOrderCreateUpdate($date, $roleId, $permissionId, $companyId)
     {
+        // First, try to find a menu associated with the company
+        $companyMenuExists = Menu::where('publication_date', $date)
+            ->where('role_id', $roleId)
+            ->where('permissions_id', $permissionId)
+            ->whereHas('companies', function ($subQuery) use ($companyId) {
+                $subQuery->where('companies.id', $companyId);
+            })
+            ->exists();
+
+        // If a company-specific menu exists, return true
+        if ($companyMenuExists) {
+            return true;
+        }
+
+        // If no company-specific menu found, check for general menus (without company association)
         return Menu::where('publication_date', $date)
             ->where('role_id', $roleId)
             ->where('permissions_id', $permissionId)
+            ->whereDoesntHave('companies')
             ->exists();
     }
 
@@ -115,33 +189,20 @@ class MenuHelper
      */
     public static function checkDuplicateMenuForCreate($publicationDate, $roleId, $permissionId, $active, $companyIds = [])
     {
-        \Log::info('MenuHelper::checkDuplicateMenuForCreate called', [
-            'publication_date' => $publicationDate,
-            'role_id' => $roleId,
-            'permission_id' => $permissionId,
-            'active' => $active,
-            'company_ids' => $companyIds
-        ]);
-
         $query = Menu::where('publication_date', $publicationDate)
             ->where('role_id', $roleId)
             ->where('permissions_id', $permissionId)
             ->where('active', $active);
 
         if (!empty($companyIds)) {
-            \Log::info('Adding company overlap filter to create query', ['company_ids' => $companyIds]);
             $query->whereHas('companies', function ($subQuery) use ($companyIds) {
                 $subQuery->whereIn('companies.id', $companyIds);
             });
         } else {
-            \Log::info('No companies provided - checking only menus without companies');
             $query->whereDoesntHave('companies');
         }
 
-        $exists = $query->exists();
-        \Log::info('Create duplicate check result', ['exists' => $exists]);
-
-        return $exists;
+        return $query->exists();
     }
 
     /**
@@ -150,15 +211,6 @@ class MenuHelper
      */
     public static function checkDuplicateMenuForUpdate($publicationDate, $roleId, $permissionId, $active, $excludeId, $companyIds = [])
     {
-        \Log::info('MenuHelper::checkDuplicateMenuForUpdate called', [
-            'publication_date' => $publicationDate,
-            'role_id' => $roleId,
-            'permission_id' => $permissionId,
-            'active' => $active,
-            'exclude_id' => $excludeId,
-            'company_ids' => $companyIds
-        ]);
-
         $query = Menu::where('publication_date', $publicationDate)
             ->where('role_id', $roleId)
             ->where('permissions_id', $permissionId)
@@ -166,18 +218,13 @@ class MenuHelper
             ->where('id', '!=', $excludeId);
 
         if (!empty($companyIds)) {
-            \Log::info('Adding company overlap filter to update query', ['company_ids' => $companyIds]);
             $query->whereHas('companies', function ($subQuery) use ($companyIds) {
                 $subQuery->whereIn('companies.id', $companyIds);
             });
         } else {
-            \Log::info('No companies provided - checking only menus without companies (except current)');
             $query->whereDoesntHave('companies');
         }
 
-        $exists = $query->exists();
-        \Log::info('Update duplicate check result', ['exists' => $exists]);
-
-        return $exists;
+        return $query->exists();
     }
 }

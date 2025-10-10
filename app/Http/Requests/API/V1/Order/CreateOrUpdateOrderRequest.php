@@ -63,8 +63,11 @@ class CreateOrUpdateOrderRequest extends DelegateUserRequest
         $firstPermission = $user->permissions->first();
         $permissionId = $firstPermission ? $firstPermission->id : null;
 
+        // Obtener el company_id del usuario
+        $companyId = $user->company_id;
+
         // Verificar si existe un menú que cumpla con las condiciones
-        $menuExists = MenuHelper::menuExistsForOrderCreateUpdate($date, $roleId, $permissionId);
+        $menuExists = MenuHelper::menuExistsForOrderCreateUpdate($date, $roleId, $permissionId, $companyId);
 
         // Si no existe un menú válido, denegar la autorización
         if (!$menuExists) {
