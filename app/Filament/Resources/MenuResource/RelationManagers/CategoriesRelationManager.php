@@ -110,7 +110,20 @@ class CategoriesRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('name')
             ->columns([
-                Tables\Columns\TextColumn::make('category.name'),
+                Tables\Columns\TextColumn::make('category.name')
+                    ->label(__('Categoría'))
+                    ->formatStateUsing(function ($record) {
+                        $categoryName = $record->category->name;
+                        $subcategories = $record->category->subcategories;
+
+                        if ($subcategories->isEmpty()) {
+                            return $categoryName;
+                        }
+
+                        $subcategoryNames = $subcategories->pluck('name')->join(', ');
+                        return $categoryName . ' (' . $subcategoryNames . ')';
+                    })
+                    ->wrap(),
                 Tables\Columns\ToggleColumn::make('show_all_products')
                     ->label(__('Mostrar todos productos'))
                     ->disabled(true),

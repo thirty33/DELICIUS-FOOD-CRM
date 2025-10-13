@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Classes\UserPermissions;
 use App\Models\User;
 use App\Classes\Menus\MenuHelper;
+use App\Repositories\CategoryMenuRepository;
 use Carbon\Carbon;
 use Exception;
 

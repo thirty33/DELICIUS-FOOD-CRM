@@ -25,3 +25,8 @@ composer.lock
 storage/trusted-signer.pem
 docs/
 
+# SQL dumps - No commitear archivos de base de datos
+*.sql
+delisoft_*.sql
+*_dump*.sql
+

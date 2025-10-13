@@ -144,6 +144,9 @@ class CategoryMenuTest extends TestCase
             'mandatory_category' => false,
         ]);
 
+        // 8.1. Attach product to CategoryMenu pivot table
+        $categoryMenu->products()->attach($product->id);
+
         // Create auth token for testing
         $token = $user->createToken('test-token')->plainTextToken;
 
@@ -365,13 +368,16 @@ class CategoryMenuTest extends TestCase
                 ]);
 
                 // Create CategoryMenu to associate Category with Menu
-                CategoryMenu::create([
+                $categoryMenu = CategoryMenu::create([
                     'category_id' => $category->id,
                     'menu_id' => $menu->id,
                     'display_order' => 10,
                     'show_all_products' => true,
                     'mandatory_category' => false,
                 ]);
+
+                // Attach product to CategoryMenu pivot table
+                $categoryMenu->products()->attach($product->id);
 
                 // Make API request
                 $response = $this->withToken($token)
@@ -531,13 +537,16 @@ class CategoryMenuTest extends TestCase
         ]);
 
         // 8. Create CategoryMenu to associate Category with Menu
-        CategoryMenu::create([
+        $categoryMenu = CategoryMenu::create([
             'category_id' => $category->id,
             'menu_id' => $menu->id,
             'display_order' => 10,
             'show_all_products' => true,
             'mandatory_category' => false,
         ]);
+
+        // 8.1. Attach product to CategoryMenu pivot table
+        $categoryMenu->products()->attach($product->id);
 
         // 9. Make API request
         $response = $this->withToken($token)
@@ -656,13 +665,16 @@ class CategoryMenuTest extends TestCase
         ]);
 
         // 8. Create CategoryMenu to associate Category with Menu
-        CategoryMenu::create([
+        $categoryMenu = CategoryMenu::create([
             'category_id' => $category->id,
             'menu_id' => $menu->id,
             'display_order' => 10,
             'show_all_products' => true,
             'mandatory_category' => false,
         ]);
+
+        // 8.1. Attach product to CategoryMenu pivot table
+        $categoryMenu->products()->attach($product->id);
 
         // 9. Make API request
         $response = $this->withToken($token)
@@ -808,13 +820,17 @@ class CategoryMenuTest extends TestCase
         // Create in reverse order to make sure ordering is based on display_order, not creation time
         $displayOrders = [50, 40, 30, 20, 10];
         foreach ($categories as $index => $category) {
-            CategoryMenu::create([
+            $categoryMenu = CategoryMenu::create([
                 'category_id' => $category->id,
                 'menu_id' => $menu->id,
                 'display_order' => $displayOrders[$index - 1], // Use displayOrders array
                 'show_all_products' => true,
                 'mandatory_category' => false,
             ]);
+
+            // 7.1. Attach products of this category to the CategoryMenu pivot
+            $productsForCategory = Product::where('category_id', $category->id)->pluck('id');
+            $categoryMenu->products()->attach($productsForCategory);
         }
 
         // 8. Make API request
@@ -1009,6 +1025,10 @@ class CategoryMenuTest extends TestCase
                         'product_id' => $product->id
                     ]);
                 }
+            } else {
+                // For categories with show_all_products=true, add ALL products to the pivot
+                $products = Product::where('category_id', $category->id)->get();
+                $categoryMenu->products()->attach($products->pluck('id'));
             }
         }
 
@@ -1264,6 +1284,10 @@ class CategoryMenuTest extends TestCase
                         'has_price_list_line' => in_array($product->id, $productsWithPriceListLines)
                     ]);
                 }
+            } else {
+                // For categories with show_all_products=true, add ALL products to the pivot
+                $products = Product::where('category_id', $category->id)->get();
+                $categoryMenu->products()->attach($products->pluck('id'));
             }
         }
 
@@ -1541,6 +1565,10 @@ class CategoryMenuTest extends TestCase
                         'has_active_price_line' => in_array($product->id, $productsWithActivePriceLines)
                     ]);
                 }
+            } else {
+                // For categories with show_all_products=true, add ALL products to the pivot
+                $products = Product::where('category_id', $category->id)->get();
+                $categoryMenu->products()->attach($products->pluck('id'));
             }
         }
 

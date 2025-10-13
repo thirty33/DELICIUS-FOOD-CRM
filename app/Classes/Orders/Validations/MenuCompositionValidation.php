@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Classes\Menus\MenuHelper;
 use App\Classes\OrderHelper;
 use App\Enums\Subcategory;
+use App\Repositories\CategoryMenuRepository;
 use Carbon\Carbon;
 use Exception;
 
@@ -43,16 +44,9 @@ class MenuCompositionValidation extends OrderStatusValidation
                 throw new Exception("No se encontró un menú activo para la fecha");
             }
 
-            $categoryMenus = $currentMenu->categoryMenus()
-                ->where('is_active', true)
-                ->whereHas('category.products.priceListLines', function ($query) use ($user) {
-                    $query->where('active', true)
-                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
-                })
-                ->orderedByDisplayOrder()
-                ->get();
+            // Use repository to get category menus filtered by price list
+            $categoryMenuRepository = app(CategoryMenuRepository::class);
+            $categoryMenus = $categoryMenuRepository->getCategoryMenusForValidation($currentMenu, $user);
             
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
                 return [
@@ -70,7 +64,7 @@ class MenuCompositionValidation extends OrderStatusValidation
                 $this->validateCategoriesWithSubcategories($categoryMenus, $categoriesInOrder);
 
                 $this->validateCategoriesWithoutSubcategories($categoryMenus, $categoriesInOrder, $groupedByCategory);
-                
+
             } else {
                 $this->validateSimplifiedCategoryRules($categoryMenus, $categoriesInOrder, $groupedByCategory);
             }

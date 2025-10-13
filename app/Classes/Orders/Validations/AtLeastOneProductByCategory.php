@@ -6,6 +6,7 @@ use App\Classes\Menus\MenuHelper;
 use App\Classes\UserPermissions;
 use App\Models\Order;
 use App\Models\User;
+use App\Repositories\CategoryMenuRepository;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -22,18 +23,9 @@ class AtLeastOneProductByCategory extends OrderStatusValidation
                 throw new Exception("No se encontró un menú activo para la fecha");
             }
 
-            // Obtener las categorías del menú ordenadas por display_order
-            // Filtrar solo las categorías que tienen productos en la lista de precios de la empresa del usuario
-            // $categoryMenus = $currentMenu->categoryMenus()->orderedByDisplayOrder()->get();
-            $categoryMenus = $currentMenu->categoryMenus()
-                ->whereHas('category.products.priceListLines', function ($query) use ($user) {
-                    $query->where('active', true)
-                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
-                })
-                ->orderedByDisplayOrder()
-                ->get();
+            // Use repository to get category menus filtered by price list
+            $categoryMenuRepository = app(CategoryMenuRepository::class);
+            $categoryMenus = $categoryMenuRepository->getCategoryMenusForValidation($currentMenu, $user);
 
             // Obtener las categorías de los productos en la orden
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
