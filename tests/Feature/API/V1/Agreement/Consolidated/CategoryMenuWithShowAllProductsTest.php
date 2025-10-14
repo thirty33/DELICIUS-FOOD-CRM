@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Feature\API\V1;
+namespace Tests\Feature\API\V1\Agreement\Consolidated;
 
 use Tests\TestCase;
 use App\Models\User;
@@ -40,7 +40,7 @@ class CategoryMenuWithShowAllProductsTest extends TestCase
      * Test that API returns categories when show_all_products = true
      * and category has products with prices (even if pivot is empty)
      *
-     * Replicates production scenario: Menu 209, User HEY.FRIA (Convenio Consolidado)
+     * Replicates production scenario (anonymized): Convenio Consolidado user type
      */
     public function test_api_returns_categories_when_show_all_products_true_and_category_has_priced_products(): void
     {
@@ -50,20 +50,20 @@ class CategoryMenuWithShowAllProductsTest extends TestCase
 
         // === CREATE COMPANY AND PRICE LIST ===
         $company = Company::create([
-            'name' => 'TEST OTERO COMPANY',
-            'fantasy_name' => 'OTERO',
+            'name' => 'TEST CONSOLIDATED COMPANY',
+            'fantasy_name' => 'TEST CONS',
             'address' => 'Test Address',
-            'email' => 'test@otero.com',
+            'email' => 'test@testcompany.com',
             'phone_number' => '123456789',
-            'registration_number' => 'REG123',
-            'description' => 'Test company',
+            'registration_number' => 'REG-TEST-001',
+            'description' => 'Test company for consolidated agreement',
             'active' => true,
             'tax_id' => '123456789',
         ]);
 
         $priceList = PriceList::create([
-            'name' => 'OTERO PRICE LIST',
-            'description' => 'Test price list',
+            'name' => 'TEST CONSOLIDATED PRICE LIST',
+            'description' => 'Test price list for consolidated agreement',
             'min_price_order' => 0,
             'active' => true,
         ]);
@@ -72,18 +72,18 @@ class CategoryMenuWithShowAllProductsTest extends TestCase
 
         // === CREATE BRANCH ===
         $branch = Branch::create([
-            'name' => 'OTERO BRANCH',
+            'name' => 'TEST CONSOLIDATED BRANCH',
             'address' => 'Test Branch Address',
             'company_id' => $company->id,
             'min_price_order' => 0,
             'active' => true,
         ]);
 
-        // === CREATE USER (Convenio Consolidado like HEY.FRIA) ===
+        // === CREATE USER (Convenio Consolidado) ===
         $user = User::create([
-            'name' => 'TEST FRIA USER',
-            'nickname' => 'TEST.FRIA',
-            'email' => 'test.fria@test.com',
+            'name' => 'TEST CONSOLIDATED USER',
+            'nickname' => 'TEST.CONS',
+            'email' => 'test.cons@test.com',
             'password' => bcrypt('password'),
             'company_id' => $company->id,
             'branch_id' => $branch->id,
