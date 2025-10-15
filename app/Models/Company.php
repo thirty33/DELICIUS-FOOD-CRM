@@ -69,4 +69,9 @@ class Company extends Model
         return $this->belongsToMany(Menu::class, 'company_menu');
     }
 
+    public function orderRules(): BelongsToMany
+    {
+        return $this->belongsToMany(OrderRule::class, 'order_rule_companies');
+    }
+
 }

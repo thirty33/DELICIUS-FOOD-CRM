@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\API\V1\Agreement\Individual;
 
-use Tests\TestCase;
+use Tests\BaseIndividualAgreementTest;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Branch;
@@ -20,13 +20,11 @@ use App\Models\Permission;
 use App\Enums\OrderStatus;
 use App\Enums\RoleName;
 use App\Enums\PermissionName;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Carbon\Carbon;
 
-class OrderUpdateStatusWithMenuTest extends TestCase
+class OrderUpdateStatusWithMenuTest extends BaseIndividualAgreementTest
 {
-    use RefreshDatabase;
 
     private User $testUser;
     private Company $testCompany;
@@ -39,6 +37,9 @@ class OrderUpdateStatusWithMenuTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Freeze time to 2025-10-14 (test creation date)
+        Carbon::setTestNow('2025-10-14 00:00:00');
 
         // Create company
         $this->testCompany = Company::create([
@@ -67,9 +68,9 @@ class OrderUpdateStatusWithMenuTest extends TestCase
             'active' => true,
         ]);
 
-        // Create Role and Permission (emulating OTERO user)
-        $agreementRole = Role::firstOrCreate(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::firstOrCreate(['name' => PermissionName::INDIVIDUAL->value]);
+        // Get Role and Permission (created in BaseIndividualAgreementTest)
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
 
         // Create user (emulating agreement individual user like OTERO)
         $this->testUser = User::create([
@@ -92,6 +93,13 @@ class OrderUpdateStatusWithMenuTest extends TestCase
         $this->calienteSubcategory = Subcategory::firstOrCreate(['name' => 'CALIENTE']);
         $this->friaSubcategory = Subcategory::firstOrCreate(['name' => 'FRIA']);
         $this->platoFondoSubcategory = Subcategory::firstOrCreate(['name' => 'PLATO DE FONDO']);
+    }
+
+    protected function tearDown(): void
+    {
+        // Release frozen time after each test
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     /**

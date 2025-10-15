@@ -5,39 +5,62 @@ namespace App\Classes\Orders\Validations;
 use App\Models\Order;
 use App\Classes\UserPermissions;
 use App\Models\User;
+use App\Repositories\OrderRuleRepository;
 use Carbon\Carbon;
 use Exception;
-use App\Enums\Subcategory;
 
 /**
  * Validates subcategory exclusion rules to ensure menu balance.
- * 
- * This validation enforces specific combination rules between subcategories:
+ *
+ * NEW APPROACH: Rules are now loaded dynamically from the database via OrderRuleRepository.
+ * The repository fetches OrderRuleSubcategoryExclusion records based on:
+ * - User's role and permission
+ * - User's company (company-specific rules take precedence)
+ * - Rule priority (lower number = higher priority)
+ * - Rule type: 'subcategory_exclusion'
+ *
+ * Common exclusion rules example:
  * - PLATO DE FONDO: Cannot have multiple main dishes
- * - ENTRADA: Cannot have multiple appetizers  
+ * - ENTRADA: Cannot have multiple appetizers
  * - FRIA vs HIPOCALORICO: Cold items cannot be combined with low-calorie options
  * - PAN DE ACOMPAÑAMIENTO vs SANDWICH: Bread accompaniment cannot be combined with sandwiches
- * 
+ *
  * Only applies when validate_subcategory_rules is TRUE and for individual agreement users.
  * Generates user-friendly messages explaining why certain combinations aren't allowed.
  */
 class SubcategoryExclusion extends OrderStatusValidation
 {
-    
+    protected OrderRuleRepository $orderRuleRepository;
+
+    // OLD CODE - HARDCODED RULES (keeping for backward compatibility during testing)
+    // TODO: Remove once database-driven approach is validated
+    /*
     protected $subcategoryExclusions = [
         Subcategory::PLATO_DE_FONDO->value => [Subcategory::PLATO_DE_FONDO->value],
         Subcategory::ENTRADA->value => [Subcategory::ENTRADA->value],
         Subcategory::FRIA->value => [Subcategory::HIPOCALORICO->value],
         Subcategory::PAN_DE_ACOMPANAMIENTO->value => [Subcategory::SANDWICH->value],
     ];
+    */
+
+    // NEW CODE - DYNAMIC RULES FROM DATABASE
+    protected array $subcategoryExclusions = [];
+
+    public function __construct()
+    {
+        $this->orderRuleRepository = new OrderRuleRepository();
+    }
 
     protected function check(Order $order, User $user, Carbon $date): void
-    {   
+    {
         if(!$user->validate_subcategory_rules) {
             return;
         }
 
         if (UserPermissions::IsAgreementIndividual($user)) {
+            // NEW CODE - Load rules from database
+            $this->loadSubcategoryExclusionsFromDatabase($user);
+
             $filteredOrderLines = $order->orderLines->filter(function ($orderLine) {
                 return $orderLine->product->category->subcategories->isNotEmpty();
             });
@@ -57,6 +80,34 @@ class SubcategoryExclusion extends OrderStatusValidation
             });
 
             $this->validateSubcategoryExclusions($productsWithSubcategories);
+        }
+    }
+
+    /**
+     * Load subcategory exclusion rules from database for the given user.
+     *
+     * Builds the $subcategoryExclusions array from OrderRuleSubcategoryExclusion records.
+     *
+     * @param User $user
+     * @return void
+     */
+    protected function loadSubcategoryExclusionsFromDatabase(User $user): void
+    {
+        $exclusions = $this->orderRuleRepository->getSubcategoryExclusionsForUser($user);
+
+        // Reset the array
+        $this->subcategoryExclusions = [];
+
+        // Build the exclusions array in the same format as the hardcoded version
+        foreach ($exclusions as $exclusion) {
+            $subcategoryName = $exclusion->subcategory->name;
+            $excludedSubcategoryName = $exclusion->excludedSubcategory->name;
+
+            if (!isset($this->subcategoryExclusions[$subcategoryName])) {
+                $this->subcategoryExclusions[$subcategoryName] = [];
+            }
+
+            $this->subcategoryExclusions[$subcategoryName][] = $excludedSubcategoryName;
         }
     }
 

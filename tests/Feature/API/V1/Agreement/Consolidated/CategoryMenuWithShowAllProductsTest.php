@@ -18,6 +18,7 @@ use App\Enums\RoleName;
 use App\Enums\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Carbon\Carbon;
 
 /**
  * Test for CategoryMenu API with show_all_products = true
@@ -35,6 +36,20 @@ use Laravel\Sanctum\Sanctum;
 class CategoryMenuWithShowAllProductsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Freeze time to 2025-10-14 (test creation date)
+        Carbon::setTestNow('2025-10-14 00:00:00');
+    }
+
+    protected function tearDown(): void
+    {
+        // Release frozen time after each test
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     /**
      * Test that API returns categories when show_all_products = true

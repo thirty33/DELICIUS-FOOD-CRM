@@ -14,6 +14,7 @@ use App\Models\PriceListLine;
 use App\Models\Subcategory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Carbon\Carbon;
 
 class CategoryMenuPriceListFilterTest extends TestCase
 {
@@ -29,6 +30,9 @@ class CategoryMenuPriceListFilterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Freeze time to 2025-10-13 (test creation date)
+        Carbon::setTestNow('2025-10-13 00:00:00');
 
         // Create company
         $this->testCompany = Company::create([
@@ -64,6 +68,13 @@ class CategoryMenuPriceListFilterTest extends TestCase
         $this->entradaSubcategory = Subcategory::firstOrCreate(['name' => 'ENTRADA']);
         $this->calienteSubcategory = Subcategory::firstOrCreate(['name' => 'CALIENTE']);
         $this->friaSubcategory = Subcategory::firstOrCreate(['name' => 'FRIA']);
+    }
+
+    protected function tearDown(): void
+    {
+        // Release frozen time after each test
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     /**

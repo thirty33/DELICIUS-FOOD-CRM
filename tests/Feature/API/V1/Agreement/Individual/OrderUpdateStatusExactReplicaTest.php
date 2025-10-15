@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\API\V1\Agreement\Individual;
 
-use Tests\TestCase;
+use Tests\BaseIndividualAgreementTest;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Branch;
@@ -20,7 +20,6 @@ use App\Models\Permission;
 use App\Enums\OrderStatus;
 use App\Enums\RoleName;
 use App\Enums\PermissionName;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Carbon\Carbon;
@@ -29,16 +28,29 @@ use Carbon\Carbon;
  * This test replicates EXACTLY the structure of production data
  * to validate that WORKING scenarios continue to work as expected.
  */
-class OrderUpdateStatusExactReplicaTest extends TestCase
+class OrderUpdateStatusExactReplicaTest extends BaseIndividualAgreementTest
 {
-    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Freeze time to 2025-10-14 so tests always run with the same date
+        Carbon::setTestNow('2025-10-14 00:00:00');
+    }
+
+    protected function tearDown(): void
+    {
+        // Release frozen time after each test
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_order_update_fails_when_missing_entrada_exactly_like_real_scenario(): void
     {
-        // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]); // ID will be 1
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]); // ID will be 1
-
+        // ===  GET ROLES AND PERMISSIONS (created in BaseIndividualAgreementTest) ===
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+        
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
             'name' => 'Test Price List',
@@ -263,8 +275,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_cannot_add_multiple_products_from_same_plato_fondo_category(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -427,8 +440,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_cannot_combine_incompatible_subcategories_fria_with_hipocalorico(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -607,8 +621,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_cannot_add_product_from_duplicate_plato_de_fondo_subcategory(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -779,11 +794,198 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
         ]);
     }
 
+    /**
+     * Test that adding a product with duplicate ENTRADA subcategory fails validation.
+     *
+     * Scenario:
+     * - Order already has product 1067 with ENTRADA subcategory (SOPAS)
+     * - User tries to add product 1086 with ENTRADA subcategory (MINI ENSALADA)
+     * - Expected: 422 error with message about duplicate ENTRADA
+     */
+    public function test_cannot_add_product_from_duplicate_entrada_subcategory(): void
+    {
+        // ===  CREATE ROLES AND PERMISSIONS ===
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
+
+        // === CREATE PRICE LIST ===
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'active' => false,
+        ]);
+
+        // === CREATE COMPANY ===
+        $company = Company::create([
+            'name' => 'Test Company S.A.',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@company.com',
+            'active' => true,
+            'price_list_id' => $priceList->id,
+        ]);
+
+        // === CREATE BRANCH ===
+        $branch = Branch::create([
+            'name' => '',
+            'address' => '-',
+            'company_id' => $company->id,
+            'min_price_order' => 0,
+            'active' => false,
+        ]);
+
+        // === CREATE USER ===
+        $user = User::create([
+            'name' => 'Test User Master',
+            'nickname' => 'TEST.USER.MASTER',
+            'email' => null,
+            'password' => bcrypt('password123'),
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'active' => true,
+            'validate_subcategory_rules' => true,
+        ]);
+
+        $user->roles()->attach($agreementRole->id);
+        $user->permissions()->attach($individualPermission->id);
+
+        // === CREATE SUBCATEGORIES ===
+        $entradaSubcat = Subcategory::firstOrCreate(['name' => 'ENTRADA']);
+        $friaSubcat = Subcategory::firstOrCreate(['name' => 'FRIA']);
+        $calienteSubcat = Subcategory::firstOrCreate(['name' => 'CALIENTE']);
+
+        // === CREATE MENU ===
+        $menu = Menu::create([
+            'title' => 'CONVENIO INDV. TEST 14/10/25',
+            'publication_date' => '2025-10-14',
+            'active' => true,
+            'role_id' => $agreementRole->id,
+            'permissions_id' => $individualPermission->id,
+        ]);
+
+        // === CREATE CATEGORY 1: SOPAS Y CREMAS (ENTRADA + CALIENTE) ===
+        $categorySopas = Category::create([
+            'name' => 'SOPAS Y CREMAS VARIABLES HORECA',
+            'description' => null,
+            'active' => true,
+        ]);
+        $categorySopas->subcategories()->attach([$entradaSubcat->id, $calienteSubcat->id]);
+
+        // === CREATE CATEGORY 2: MINI ENSALADAS (ENTRADA + FRIA) ===
+        $categoryMiniEnsaladas = Category::create([
+            'name' => 'MINI ENSALADAS DE ACOMPAÑAMIENTO HORECA',
+            'description' => '-',
+            'active' => true,
+        ]);
+        $categoryMiniEnsaladas->subcategories()->attach([$entradaSubcat->id, $friaSubcat->id]);
+
+        // === CREATE PRODUCTS ===
+
+        // Product 1067: SOPA (ENTRADA + CALIENTE) - already in order
+        $product1067 = Product::create([
+            'name' => 'SOV - HORECA SOPA DE VERDURAS',
+            'code' => 'SOV00000001',
+            'description' => 'No description',
+            'category_id' => $categorySopas->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $product1067->id,
+            'unit_price' => 3500.00,
+            'active' => true,
+        ]);
+
+        // Product 1086: MINI ENSALADA (ENTRADA + FRIA) - trying to add
+        $product1086 = Product::create([
+            'name' => 'ACM - HORECA MINI ENSALADA CHOCLO CIBOULETTE',
+            'code' => 'ACM00000030',
+            'description' => 'No description',
+            'category_id' => $categoryMiniEnsaladas->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $product1086->id,
+            'unit_price' => 2000.00,
+            'active' => true,
+        ]);
+
+        // === CREATE CATEGORY MENUS ===
+        $categoryMenuSopas = CategoryMenu::create([
+            'category_id' => $categorySopas->id,
+            'menu_id' => $menu->id,
+            'order' => null,
+            'display_order' => 100,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuSopas->products()->attach($product1067->id);
+
+        $categoryMenuMini = CategoryMenu::create([
+            'category_id' => $categoryMiniEnsaladas->id,
+            'menu_id' => $menu->id,
+            'order' => null,
+            'display_order' => 110,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuMini->products()->attach($product1086->id);
+
+        // === CREATE ORDER WITH PRODUCT 1067 (ENTRADA) ===
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_date' => null,
+            'dispatch_date' => Carbon::parse('2025-10-14'),
+            'status' => OrderStatus::PENDING->value,
+            'total' => 3500,
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $product1067->id,
+            'quantity' => 1,
+            'unit_price' => 3500,
+            'total' => 3500,
+        ]);
+
+        // === TEST: Try to add product 1086 (also ENTRADA) ===
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/orders/create-or-update-order/2025-10-14", [
+            'order_lines' => [
+                ['id' => $product1086->id, 'quantity' => 1, 'partially_scheduled' => false]
+            ]
+        ]);
+
+        // === ASSERTIONS ===
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'error',
+            'errors' => [
+                'message' => [
+                    "Solo puedes elegir un ENTRADA por pedido.\n\n"
+                ],
+            ],
+        ]);
+    }
+
     public function test_cannot_order_product_without_required_preparation_days(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -918,8 +1120,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_cannot_add_multiple_products_from_same_category_without_subcategories(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -1074,8 +1277,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_all_products_must_have_same_quantity(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -1257,8 +1461,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_order_must_meet_minimum_amount(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -1390,8 +1595,9 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
     public function test_menu_188_should_not_require_entrada_when_no_entrada_products_have_price(): void
     {
         // ===  CREATE ROLES AND PERMISSIONS ===
-        $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
 
         // === CREATE PRICE LIST ===
         $priceList = PriceList::create([
@@ -1801,6 +2007,638 @@ class OrderUpdateStatusExactReplicaTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson([
             'message' => 'Order status updated successfully',
+        ]);
+    }
+
+    /**
+     * Test that combining PAN DE ACOMPAÑAMIENTO with SANDWICH fails validation
+     *
+     * SubcategoryExclusion validation should prevent combining:
+     * - PAN_DE_ACOMPANAMIENTO subcategory
+     * - SANDWICH subcategory
+     * in the same order
+     */
+    public function test_cannot_combine_pan_de_acompanamiento_with_sandwich(): void
+    {
+        // ===  CREATE ROLES AND PERMISSIONS ===
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
+
+        // === CREATE PRICE LIST ===
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'active' => true,
+        ]);
+
+        // === CREATE COMPANY ===
+        $company = Company::create([
+            'name' => 'Test Company S.A.',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@company.com',
+            'active' => true,
+            'price_list_id' => $priceList->id,
+        ]);
+
+        // === CREATE BRANCH ===
+        $branch = Branch::create([
+            'name' => 'Main Branch',
+            'address' => 'Branch Address',
+            'company_id' => $company->id,
+            'min_price_order' => 0,
+            'active' => true,
+        ]);
+
+        // === CREATE USER ===
+        $user = User::create([
+            'name' => 'Test User',
+            'nickname' => 'TEST.PAN.SANDWICH',
+            'email' => 'test.pan.sandwich@test.com',
+            'password' => bcrypt('password123'),
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'active' => true,
+            'validate_subcategory_rules' => true, // Enable subcategory validation
+        ]);
+
+        $user->roles()->attach($agreementRole->id);
+        $user->permissions()->attach($individualPermission->id);
+
+        // === CREATE SUBCATEGORIES ===
+        $panSubcat = Subcategory::firstOrCreate(['name' => 'PAN DE ACOMPAÑAMIENTO']);
+        $sandwichSubcat = Subcategory::firstOrCreate(['name' => 'SANDWICH']);
+        $platoFondoSubcat = Subcategory::firstOrCreate(['name' => 'PLATO DE FONDO']);
+
+        // === CREATE MENU ===
+        $menu = Menu::create([
+            'title' => 'TEST MENU PAN VS SANDWICH 14/10/25',
+            'publication_date' => '2025-10-14',
+            'active' => true,
+            'role_id' => $agreementRole->id,
+            'permissions_id' => $individualPermission->id,
+        ]);
+
+        // === CREATE CATEGORIES ===
+
+        // Category: PAN ARTESANAL (PAN DE ACOMPAÑAMIENTO)
+        $categoryPan = Category::create([
+            'name' => 'PAN ARTESANAL',
+            'description' => 'Bread as accompaniment',
+            'active' => true,
+        ]);
+        $categoryPan->subcategories()->attach([$panSubcat->id]);
+
+        // Category: SANDWICHES (SANDWICH + PLATO DE FONDO)
+        $categorySandwich = Category::create([
+            'name' => 'SANDWICHES',
+            'description' => 'Sandwiches',
+            'active' => true,
+        ]);
+        $categorySandwich->subcategories()->attach([$sandwichSubcat->id, $platoFondoSubcat->id]);
+
+        // === CREATE PRODUCTS ===
+
+        // Product: Pan Artesanal (PAN DE ACOMPAÑAMIENTO)
+        $productPan = Product::create([
+            'name' => 'PAN - PAN ARTESANAL INTEGRAL',
+            'code' => 'PAN-ART-001',
+            'description' => 'Artisan integral bread',
+            'category_id' => $categoryPan->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productPan->id,
+            'unit_price' => 50000, // $500.00
+            'active' => true,
+        ]);
+
+        // Product: Sandwich (SANDWICH + PLATO DE FONDO)
+        $productSandwich = Product::create([
+            'name' => 'SND - SANDWICH DE POLLO PALTA',
+            'code' => 'SND-POL-001',
+            'description' => 'Chicken and avocado sandwich',
+            'category_id' => $categorySandwich->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productSandwich->id,
+            'unit_price' => 350000, // $3,500.00
+            'active' => true,
+        ]);
+
+        // === CREATE CATEGORY MENUS ===
+        $categoryMenuPan = CategoryMenu::create([
+            'category_id' => $categoryPan->id,
+            'menu_id' => $menu->id,
+            'display_order' => 10,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuPan->products()->attach($productPan->id);
+
+        $categoryMenuSandwich = CategoryMenu::create([
+            'category_id' => $categorySandwich->id,
+            'menu_id' => $menu->id,
+            'display_order' => 20,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuSandwich->products()->attach($productSandwich->id);
+
+        // === CREATE ORDER WITH PAN DE ACOMPAÑAMIENTO ===
+        $order = Order::create([
+            'user_id' => $user->id,
+            'dispatch_date' => Carbon::parse('2025-10-14'),
+            'status' => OrderStatus::PENDING->value,
+            'total' => 50000,
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $productPan->id,
+            'quantity' => 1,
+            'unit_price' => 50000,
+        ]);
+
+        // === TEST: Try to add product with SANDWICH subcategory ===
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/orders/create-or-update-order/2025-10-14", [
+            'order_lines' => [
+                ['id' => $productSandwich->id, 'quantity' => 1, 'partially_scheduled' => false]
+            ]
+        ]);
+
+        // === ASSERTIONS ===
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'error',
+            'errors' => [
+                'message' => [
+                    "No puedes combinar las subcategorías: PAN DE ACOMPAÑAMIENTO con SANDWICH.\n\n"
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Test that order fails when missing PLATO DE FONDO subcategory
+     *
+     * MenuCompositionValidation should require at least one product
+     * from PLATO DE FONDO subcategory when it exists in the menu
+     */
+    public function test_order_fails_when_missing_plato_de_fondo_subcategory(): void
+    {
+        // ===  CREATE ROLES AND PERMISSIONS ===
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
+
+        // === CREATE PRICE LIST ===
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'active' => true,
+        ]);
+
+        // === CREATE COMPANY ===
+        $company = Company::create([
+            'name' => 'Test Company S.A.',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@company.com',
+            'active' => true,
+            'price_list_id' => $priceList->id,
+        ]);
+
+        // === CREATE BRANCH ===
+        $branch = Branch::create([
+            'name' => 'Main Branch',
+            'address' => 'Branch Address',
+            'company_id' => $company->id,
+            'min_price_order' => 0,
+            'active' => true,
+        ]);
+
+        // === CREATE USER ===
+        $user = User::create([
+            'name' => 'Test User',
+            'nickname' => 'TEST.PLATO.FONDO',
+            'email' => 'test.plato.fondo@test.com',
+            'password' => bcrypt('password123'),
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'active' => true,
+            'validate_subcategory_rules' => true,
+        ]);
+
+        $user->roles()->attach($agreementRole->id);
+        $user->permissions()->attach($individualPermission->id);
+
+        // === CREATE SUBCATEGORIES ===
+        $platoFondoSubcat = Subcategory::firstOrCreate(['name' => 'PLATO DE FONDO']);
+        $entradaSubcat = Subcategory::firstOrCreate(['name' => 'ENTRADA']);
+        $panSubcat = Subcategory::firstOrCreate(['name' => 'PAN DE ACOMPAÑAMIENTO']);
+
+        // === CREATE MENU ===
+        $menu = Menu::create([
+            'title' => 'TEST MENU PLATO FONDO 14/10/25',
+            'publication_date' => '2025-10-14',
+            'active' => true,
+            'role_id' => $agreementRole->id,
+            'permissions_id' => $individualPermission->id,
+        ]);
+
+        // === CREATE CATEGORIES ===
+
+        // Category: GUISOS (PLATO DE FONDO)
+        $categoryGuisos = Category::create([
+            'name' => 'GUISOS',
+            'description' => 'Stews and main dishes',
+            'active' => true,
+        ]);
+        $categoryGuisos->subcategories()->attach([$platoFondoSubcat->id]);
+
+        // Category: ENSALADAS (ENTRADA)
+        $categoryEnsaladas = Category::create([
+            'name' => 'ENSALADAS',
+            'description' => 'Salads',
+            'active' => true,
+        ]);
+        $categoryEnsaladas->subcategories()->attach([$entradaSubcat->id]);
+
+        // Category: PAN (PAN DE ACOMPAÑAMIENTO)
+        $categoryPan = Category::create([
+            'name' => 'PAN',
+            'description' => 'Bread',
+            'active' => true,
+        ]);
+        $categoryPan->subcategories()->attach([$panSubcat->id]);
+
+        // === CREATE PRODUCTS ===
+
+        // Product: Guiso (PLATO DE FONDO) - NOT IN ORDER
+        $productGuiso = Product::create([
+            'name' => 'GIS - GUISO DE LENTEJAS CON ARROZ',
+            'code' => 'GIS-LENT-001',
+            'description' => 'Lentil stew with rice',
+            'category_id' => $categoryGuisos->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productGuiso->id,
+            'unit_price' => 400000, // $4,000.00
+            'active' => true,
+        ]);
+
+        // Product: Ensalada (ENTRADA) - IN ORDER
+        $productEnsalada = Product::create([
+            'name' => 'ENS - ENSALADA CESAR',
+            'code' => 'ENS-CES-001',
+            'description' => 'Caesar salad',
+            'category_id' => $categoryEnsaladas->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productEnsalada->id,
+            'unit_price' => 250000, // $2,500.00
+            'active' => true,
+        ]);
+
+        // Product: Pan (PAN DE ACOMPAÑAMIENTO) - IN ORDER
+        $productPan = Product::create([
+            'name' => 'PAN - PAN INTEGRAL',
+            'code' => 'PAN-INT-001',
+            'description' => 'Whole wheat bread',
+            'category_id' => $categoryPan->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productPan->id,
+            'unit_price' => 50000, // $500.00
+            'active' => true,
+        ]);
+
+        // === CREATE CATEGORY MENUS ===
+        $categoryMenuGuisos = CategoryMenu::create([
+            'category_id' => $categoryGuisos->id,
+            'menu_id' => $menu->id,
+            'display_order' => 10,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuGuisos->products()->attach($productGuiso->id);
+
+        $categoryMenuEnsaladas = CategoryMenu::create([
+            'category_id' => $categoryEnsaladas->id,
+            'menu_id' => $menu->id,
+            'display_order' => 20,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuEnsaladas->products()->attach($productEnsalada->id);
+
+        $categoryMenuPan = CategoryMenu::create([
+            'category_id' => $categoryPan->id,
+            'menu_id' => $menu->id,
+            'display_order' => 30,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuPan->products()->attach($productPan->id);
+
+        // === CREATE ORDER WITH ENTRADA AND PAN (MISSING PLATO DE FONDO) ===
+        $order = Order::create([
+            'user_id' => $user->id,
+            'dispatch_date' => Carbon::parse('2025-10-14'),
+            'status' => OrderStatus::PENDING->value,
+            'total' => 300000, // 250000 + 50000
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $productEnsalada->id,
+            'quantity' => 1,
+            'unit_price' => 250000,
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $productPan->id,
+            'quantity' => 1,
+            'unit_price' => 50000,
+        ]);
+
+        // === TEST: Try to update order status to PROCESSED without PLATO DE FONDO ===
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/orders/update-order-status/2025-10-14", [
+            'status' => 'PROCESSED'
+        ]);
+
+        // === ASSERTIONS ===
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'error',
+            'errors' => [
+                'message' => [
+                    '🍽️ Tu menú necesita algunos elementos para estar completo: Plato de fondo.'
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Test that order fails when missing PAN DE ACOMPAÑAMIENTO subcategory
+     *
+     * MenuCompositionValidation should require at least one product
+     * from PAN DE ACOMPAÑAMIENTO subcategory when it exists in the menu
+     */
+    public function test_order_fails_when_missing_pan_de_acompanamiento_subcategory(): void
+    {
+        // ===  CREATE ROLES AND PERMISSIONS ===
+        $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
+        $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
+
+
+        // === CREATE PRICE LIST ===
+        $priceList = PriceList::create([
+            'name' => 'Test Price List',
+            'active' => true,
+        ]);
+
+        // === CREATE COMPANY ===
+        $company = Company::create([
+            'name' => 'Test Company S.A.',
+            'fantasy_name' => 'Test Company',
+            'address' => 'Test Address',
+            'email' => 'test@company.com',
+            'active' => true,
+            'price_list_id' => $priceList->id,
+        ]);
+
+        // === CREATE BRANCH ===
+        $branch = Branch::create([
+            'name' => 'Main Branch',
+            'address' => 'Branch Address',
+            'company_id' => $company->id,
+            'min_price_order' => 0,
+            'active' => true,
+        ]);
+
+        // === CREATE USER ===
+        $user = User::create([
+            'name' => 'Test User',
+            'nickname' => 'TEST.PAN.ACOMP',
+            'email' => 'test.pan.acomp@test.com',
+            'password' => bcrypt('password123'),
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'active' => true,
+            'validate_subcategory_rules' => true,
+        ]);
+
+        $user->roles()->attach($agreementRole->id);
+        $user->permissions()->attach($individualPermission->id);
+
+        // === CREATE SUBCATEGORIES ===
+        $platoFondoSubcat = Subcategory::firstOrCreate(['name' => 'PLATO DE FONDO']);
+        $entradaSubcat = Subcategory::firstOrCreate(['name' => 'ENTRADA']);
+        $panSubcat = Subcategory::firstOrCreate(['name' => 'PAN DE ACOMPAÑAMIENTO']);
+
+        // === CREATE MENU ===
+        $menu = Menu::create([
+            'title' => 'TEST MENU PAN ACOMP 14/10/25',
+            'publication_date' => '2025-10-14',
+            'active' => true,
+            'role_id' => $agreementRole->id,
+            'permissions_id' => $individualPermission->id,
+        ]);
+
+        // === CREATE CATEGORIES ===
+
+        // Category: GUISOS (PLATO DE FONDO)
+        $categoryGuisos = Category::create([
+            'name' => 'GUISOS',
+            'description' => 'Stews',
+            'active' => true,
+        ]);
+        $categoryGuisos->subcategories()->attach([$platoFondoSubcat->id]);
+
+        // Category: ENSALADAS (ENTRADA)
+        $categoryEnsaladas = Category::create([
+            'name' => 'ENSALADAS',
+            'description' => 'Salads',
+            'active' => true,
+        ]);
+        $categoryEnsaladas->subcategories()->attach([$entradaSubcat->id]);
+
+        // Category: PAN (PAN DE ACOMPAÑAMIENTO)
+        $categoryPan = Category::create([
+            'name' => 'PAN ARTESANAL',
+            'description' => 'Artisan bread',
+            'active' => true,
+        ]);
+        $categoryPan->subcategories()->attach([$panSubcat->id]);
+
+        // === CREATE PRODUCTS ===
+
+        // Product: Guiso (PLATO DE FONDO) - IN ORDER
+        $productGuiso = Product::create([
+            'name' => 'GIS - GUISO DE POLLO',
+            'code' => 'GIS-POL-001',
+            'description' => 'Chicken stew',
+            'category_id' => $categoryGuisos->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productGuiso->id,
+            'unit_price' => 400000, // $4,000.00
+            'active' => true,
+        ]);
+
+        // Product: Ensalada (ENTRADA) - IN ORDER
+        $productEnsalada = Product::create([
+            'name' => 'ENS - ENSALADA MIXTA',
+            'code' => 'ENS-MIX-001',
+            'description' => 'Mixed salad',
+            'category_id' => $categoryEnsaladas->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productEnsalada->id,
+            'unit_price' => 250000, // $2,500.00
+            'active' => true,
+        ]);
+
+        // Product: Pan (PAN DE ACOMPAÑAMIENTO) - NOT IN ORDER
+        $productPan = Product::create([
+            'name' => 'PAN - PAN MARRAQUETA',
+            'code' => 'PAN-MAR-001',
+            'description' => 'Marraqueta bread',
+            'category_id' => $categoryPan->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productPan->id,
+            'unit_price' => 50000, // $500.00
+            'active' => true,
+        ]);
+
+        // === CREATE CATEGORY MENUS ===
+        $categoryMenuGuisos = CategoryMenu::create([
+            'category_id' => $categoryGuisos->id,
+            'menu_id' => $menu->id,
+            'display_order' => 10,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuGuisos->products()->attach($productGuiso->id);
+
+        $categoryMenuEnsaladas = CategoryMenu::create([
+            'category_id' => $categoryEnsaladas->id,
+            'menu_id' => $menu->id,
+            'display_order' => 20,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuEnsaladas->products()->attach($productEnsalada->id);
+
+        $categoryMenuPan = CategoryMenu::create([
+            'category_id' => $categoryPan->id,
+            'menu_id' => $menu->id,
+            'display_order' => 30,
+            'show_all_products' => false,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+        $categoryMenuPan->products()->attach($productPan->id);
+
+        // === CREATE ORDER WITH PLATO DE FONDO AND ENTRADA (MISSING PAN) ===
+        $order = Order::create([
+            'user_id' => $user->id,
+            'dispatch_date' => Carbon::parse('2025-10-14'),
+            'status' => OrderStatus::PENDING->value,
+            'total' => 650000, // 400000 + 250000
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $productGuiso->id,
+            'quantity' => 1,
+            'unit_price' => 400000,
+        ]);
+
+        OrderLine::create([
+            'order_id' => $order->id,
+            'product_id' => $productEnsalada->id,
+            'quantity' => 1,
+            'unit_price' => 250000,
+        ]);
+
+        // === TEST: Try to update order status to PROCESSED without PAN ===
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/orders/update-order-status/2025-10-14", [
+            'status' => 'PROCESSED'
+        ]);
+
+        // === ASSERTIONS ===
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'error',
+            'errors' => [
+                'message' => [
+                    '🍽️ Tu menú necesita algunos elementos para estar completo: Pan de acompañamiento.'
+                ],
+            ],
         ]);
     }
 }
