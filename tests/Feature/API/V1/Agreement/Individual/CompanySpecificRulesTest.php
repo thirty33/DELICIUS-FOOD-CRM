@@ -17,6 +17,7 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\OrderRule;
 use App\Models\OrderRuleSubcategoryExclusion;
+use App\Models\OrderRuleSubcategoryLimit;
 use App\Models\Role;
 use App\Models\Permission;
 use App\Enums\OrderStatus;
@@ -339,6 +340,38 @@ class CompanySpecificRulesTest extends BaseIndividualAgreementTest
                     'excluded_subcategory_id' => $excludedSubcategory->id,
                 ]);
             }
+        }
+
+        // CREATE COMPANY-SPECIFIC LIMIT RULE
+        // Priority 50 (same as exclusion rule - higher priority than general rule which is 100)
+        $companyLimitRule = OrderRule::create([
+            'name' => 'Company Specific Product Limits',
+            'description' => 'Custom product limits for this specific company - allows 2 ENTRADA',
+            'rule_type' => 'product_limit_per_subcategory',
+            'role_id' => $agreementRole->id,
+            'permission_id' => $individualPermission->id,
+            'priority' => 50, // Higher priority than general rule (100)
+            'is_active' => true,
+        ]);
+
+        // ASSOCIATE LIMIT RULE TO COMPANY via pivot table
+        $companyLimitRule->companies()->attach($company->id);
+
+        // CREATE LIMITS - Allow 2 ENTRADA (instead of general limit of 1)
+        $companySpecificLimits = [
+            'ENTRADA' => 2,  // Company allows 2 ENTRADA products
+            'CALIENTE' => 1, // SOPA has ENTRADA + CALIENTE
+            'FRIA' => 1,     // ENSALADA has ENTRADA + FRIA
+        ];
+
+        foreach ($companySpecificLimits as $subcategoryName => $maxProducts) {
+            $subcategory = Subcategory::firstOrCreate(['name' => $subcategoryName]);
+
+            OrderRuleSubcategoryLimit::create([
+                'order_rule_id' => $companyLimitRule->id,
+                'subcategory_id' => $subcategory->id,
+                'max_products' => $maxProducts,
+            ]);
         }
 
         // Get subcategories (created by BaseIndividualAgreementTest and in the company rule creation above)

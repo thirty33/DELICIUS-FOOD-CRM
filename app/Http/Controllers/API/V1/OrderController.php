@@ -13,6 +13,7 @@ use App\Classes\Orders\Validations\SubcategoryExclusion;
 use App\Classes\Orders\Validations\MandatoryCategoryValidation;
 use App\Classes\Orders\Validations\OneProductPerCategorySimple;
 use App\Classes\Orders\Validations\OneProductPerSubcategory;
+use App\Classes\Orders\Validations\ExactProductCountPerSubcategory;
 use App\Classes\UserPermissions;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
@@ -347,7 +348,8 @@ class OrderController extends Controller
                 ->linkWith(new MaxOrderAmountValidation())
                 ->linkWith(new SubcategoryExclusion())
                 ->linkWith(new MenuCompositionValidation())
-                ->linkWith(new MandatoryCategoryValidation());
+                ->linkWith(new MandatoryCategoryValidation())
+                ->linkWith(new ExactProductCountPerSubcategory());
 
             $validationChain
                 ->validate($order, $user, $carbonDate);

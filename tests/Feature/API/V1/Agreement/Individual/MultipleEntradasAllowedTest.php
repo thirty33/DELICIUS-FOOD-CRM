@@ -62,6 +62,22 @@ class MultipleEntradasAllowedTest extends BaseIndividualAgreementTest
     }
 
     /**
+     * Override to allow 2 ENTRADA products (instead of default 1).
+     *
+     * This aligns with the exclusion override to allow multiple ENTRADA.
+     */
+    protected function getSubcategoryLimits(): array
+    {
+        return [
+            'PLATO DE FONDO' => 1,
+            'ENTRADA' => 2,  // Allow 2 ENTRADA products (overrides default of 1)
+            'CALIENTE' => 1,
+            'FRIA' => 1,
+            'PAN DE ACOMPAÑAMIENTO' => 1,
+        ];
+    }
+
+    /**
      * Test that multiple ENTRADA products can be added when exclusion rule is not present.
      *
      * This test verifies that when the ENTRADA->ENTRADA exclusion rule is removed,
