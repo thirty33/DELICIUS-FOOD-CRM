@@ -24,13 +24,13 @@ use Laravel\Sanctum\Sanctum;
 use Tests\BaseIndividualAgreementTest;
 
 /**
- * Production Bug Replica Test - UNICON CHILE Case
+ * Production Bug Replica Test - Company Specific Rules Case
  *
- * This test replicates EXACTLY the production scenario:
+ * This test replicates EXACTLY a production scenario:
  *
- * PRODUCTION DATA:
- * - User: MAESTRO.ALMUERZO.PANAMERICANA
- * - Company: UNICON CHILE S.A. (ID: 588)
+ * PRODUCTION DATA (anonymized):
+ * - User: TEST.INDIVIDUAL.USER (production user ID: 547)
+ * - Company: TEST COMPANY S.A. (production company ID: 588)
  * - Role: Convenio, Permission: Individual
  * - validate_subcategory_rules: TRUE
  *
@@ -43,15 +43,15 @@ use Tests\BaseIndividualAgreementTest;
  *
  * ACTIVE RULES (Exclusions):
  * - Exclusion Rule 1 (General, Priority 100): ENTRADA => ENTRADA exclusion
- * - Exclusion Rule 2 (UNICON, Priority 99): Does NOT include ENTRADA => ENTRADA exclusion
+ * - Exclusion Rule 2 (Company-Specific, Priority 99): Does NOT include ENTRADA => ENTRADA exclusion
  *
  * ACTIVE RULES (Limits):
  * - Limit Rule 1 (General, Priority 100): Max 1 ENTRADA product
- * - Limit Rule 2 (UNICON, Priority 99): Max 2 ENTRADA products
+ * - Limit Rule 2 (Company-Specific, Priority 99): Max 2 ENTRADA products
  *
  * EXPECTED:
  * - Company-specific rules (Priority 99) should override general rules (Priority 100)
- * - Should allow adding second ENTRADA product (UNICON limit is 2)
+ * - Should allow adding second ENTRADA product (company-specific limit is 2)
  * - API should return 200 OK
  *
  * ACTUAL BUG:
@@ -85,24 +85,24 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
 
     protected function getSubcategoryLimits(): array
     {
-        // Default limits: max 1 for most, but max 2 for ENTRADA (UNICON case)
+        // Default limits: max 1 for most, but max 2 for ENTRADA (company-specific case)
         return [
             'PLATO DE FONDO' => 1,
-            'ENTRADA' => 1,  // ← UNICON allows 1 ENTRADA products
+            'ENTRADA' => 1,  // ← Company-specific rule allows 2 ENTRADA products
             'FRIA' => 1,
             'PAN DE ACOMPAÑAMIENTO' => 1,
         ];
     }
 
-    public function test_unicon_chile_should_allow_multiple_entrada_products_via_company_specific_rule(): void
+    public function test_company_specific_rule_should_allow_multiple_entrada_products(): void
     {
         // Get roles (created by parent setUp)
         $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
         $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
 
-        // CREATE COMPANY-SPECIFIC RULE (simulating UNICON CHILE - Rule ID 2, Priority 99)
-        $uniconRule = OrderRule::create([
-            'name' => 'Exclusión de categorías (UNICON CHILE)',
+        // CREATE COMPANY-SPECIFIC RULE (simulating company-specific Rule ID 2, Priority 99)
+        $companyRule = OrderRule::create([
+            'name' => 'Exclusión de categorías (Empresa Específica)',
             'rule_type' => 'subcategory_exclusion',
             'role_id' => $agreementRole->id,
             'permission_id' => $individualPermission->id,
@@ -111,19 +111,19 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
         ]);
 
         // Create company
-        $priceList = PriceList::create(['name' => 'UNICON Price List', 'active' => true]);
+        $priceList = PriceList::create(['name' => 'Test Company Price List', 'active' => true]);
 
         $company = Company::create([
-            'name' => 'UNICON CHILE S.A.',
-            'fantasy_name' => 'UNICON',
+            'name' => 'TEST COMPANY S.A.',
+            'fantasy_name' => 'TEST CO',
             'address' => 'Test Address',
-            'email' => 'unicon@test.com',
+            'email' => 'test@testcompany.com',
             'active' => true,
             'price_list_id' => $priceList->id,
         ]);
 
         $branch = Branch::create([
-            'name' => 'PANAMERICANA',
+            'name' => 'TEST BRANCH',
             'address' => 'Branch Address',
             'company_id' => $company->id,
             'min_price_order' => 0,
@@ -131,10 +131,10 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
         ]);
 
         // Associate company-specific rule
-        $uniconRule->companies()->attach($company->id);
+        $companyRule->companies()->attach($company->id);
 
-        // UNICON rule does NOT have ENTRADA => ENTRADA exclusion
-        $this->createSubcategoryExclusions($uniconRule, [
+        // Company-specific rule does NOT have ENTRADA => ENTRADA exclusion
+        $this->createSubcategoryExclusions($companyRule, [
             'PLATO DE FONDO' => ['PLATO DE FONDO'],
             // NO 'ENTRADA' => ['ENTRADA'] ← Key difference!
             'FRIA' => ['HIPOCALORICO'],
@@ -142,8 +142,8 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
         ]);
 
         // CREATE COMPANY-SPECIFIC LIMIT RULE (Priority 99 - same as exclusion rule)
-        $uniconLimitRule = OrderRule::create([
-            'name' => 'Límite de productos por subcategoría (UNICON CHILE)',
+        $companyLimitRule = OrderRule::create([
+            'name' => 'Límite de productos por subcategoría (Empresa Específica)',
             'rule_type' => 'product_limit_per_subcategory',
             'role_id' => $agreementRole->id,
             'permission_id' => $individualPermission->id,
@@ -152,12 +152,12 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
         ]);
 
         // Associate company with limit rule
-        $uniconLimitRule->companies()->attach($company->id);
+        $companyLimitRule->companies()->attach($company->id);
 
-        // UNICON allows 2 ENTRADA products and 2 CALIENTE products (overrides general limit of 1)
-        $this->createSubcategoryLimits($uniconLimitRule, [
+        // Company-specific rule allows 2 ENTRADA products and 2 CALIENTE products (overrides general limit of 1)
+        $this->createSubcategoryLimits($companyLimitRule, [
             'PLATO DE FONDO' => 1,
-            'ENTRADA' => 2,  // ← UNICON allows 2 ENTRADA products!
+            'ENTRADA' => 2,  // ← Company allows 2 ENTRADA products!
             'CALIENTE' => 2, // ← Both ENTRADA products also have CALIENTE
             'FRIA' => 1,
             'PAN DE ACOMPAÑAMIENTO' => 1,
@@ -165,9 +165,9 @@ class ProductionBugReplicaTest extends BaseIndividualAgreementTest
 
         // Create user
         $user = User::create([
-            'name' => 'MAESTRO ALMUERZO PANAMERICANA',
-            'nickname' => 'MAESTRO.ALMUERZO.PANAMERICANA',
-            'email' => 'maestro.panamericana@test.com',
+            'name' => 'Test Individual User',
+            'nickname' => 'TEST.INDIVIDUAL.USER',
+            'email' => 'test.individual@test.com',
             'password' => bcrypt('password123'),
             'company_id' => $company->id,
             'branch_id' => $branch->id,

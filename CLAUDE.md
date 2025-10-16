@@ -544,3 +544,96 @@ This test demonstrates:
 - Comprehensive documentation
 
 **Key Learning**: This test found that `OneProductPerSubcategory` validation was ignoring database-driven rules and using hardcoded validation logic.
+
+---
+
+## Creating Production Replica Tests for Consolidated Agreements
+
+For Consolidated Agreement tests, follow the same process but with these specific considerations:
+
+### Additional Tinker Investigations for Consolidated
+
+#### Analyze Menu Details
+```bash
+./vendor/bin/sail artisan tinker --execute="
+\ = App\Models\Menu::find(MENU_ID);
+echo \"=== MENU ===\\n\";
+echo \"Menu ID: \" . \->id . \"\\n\";
+echo \"Title: \" . \->title . \"\\n\";
+echo \"Publication Date: \" . \->publication_date . \"\\n\";
+echo \"Role: \" . (\->role ? \->role->name : 'N/A') . \"\\n\";
+echo \"Permission: \" . (\->permission ? \->permission->name : 'N/A') . \"\\n\";
+echo \"Active: \" . (\->active ? 'Yes' : 'No') . \"\\n\";
+echo \"Category Menus: \" . \->categoryMenus->count() . \"\\n\";
+"
+```
+
+#### Get Company Details
+```bash
+./vendor/bin/sail artisan tinker --execute="
+\ = App\Models\Company::find(COMPANY_ID);
+echo \"=== COMPANY ===\\n\";
+echo \"Company ID: \" . \->id . \"\\n\";
+echo \"Name: \" . \->name . \"\\n\";
+echo \"Tax ID: \" . \->tax_id . \"\\n\";
+echo \"Company Code: \" . \->company_code . \"\\n\";
+echo \"Fantasy Name: \" . \->fantasy_name . \"\\n\";
+echo \"Price List ID: \" . \->price_list_id . \"\\n\";
+"
+```
+
+### Data Anonymization Rules
+
+**CRITICAL**: Never use real production data in tests. Always anonymize:
+
+❌ **WRONG**:
+```php
+$user = User::create([
+    'nickname' => 'EXACTO.FRIA',  // Real company name
+    'email' => 'contacto@exacto.cl',  // Real email
+]);
+```
+
+✅ **CORRECT**:
+```php
+$user = User::create([
+    'nickname' => 'TEST.CONSOLIDATED.USER',  // Generic name
+    'email' => 'test.consolidated@test.com',  // Test email
+]);
+```
+
+**Anonymization Guidelines**:
+1. **User Names**: Use TEST.CONSOLIDATED.USER, TEST.AGREEMENT.USER, etc.
+2. **Company Names**: Use TEST CONSOLIDATED COMPANY S.A., TEST COMPANY INC
+3. **Tax IDs**: Use fake IDs like 12.345.678-9
+4. **Emails**: Use @test.com domain
+5. **Product Names**: Keep generic descriptions (Sandwich type A, Juice boxes, etc.)
+
+**Document Real IDs in Comments**:
+```php
+/**
+ * PRODUCTION DATA (anonymized):
+ * - User: TEST.CONSOLIDATED.USER (production ID: 380)
+ * - Company: TEST CONSOLIDATED COMPANY (production ID: 594)
+ * - Order: production order ID 109
+ */
+```
+
+### Test Location for Consolidated
+
+Place consolidated agreement tests in:
+```
+tests/Feature/API/V1/Agreement/Consolidated/
+```
+
+Examples:
+- `OrderUpdateStatusProductionReplicaTest.php` - Order status updates
+- `CategoryMenuWithShowAllProductsTest.php` - Category menu behavior
+- `MissingCategoryProductValidationTest.php` - Product validation
+
+### Example: Consolidated Order Update Status Test
+
+See: `tests/Feature/API/V1/Agreement/Consolidated/OrderUpdateStatusProductionReplicaTest.php`
+
+This test demonstrates anonymized production data replication for order status updates with consolidated agreement validation.
+

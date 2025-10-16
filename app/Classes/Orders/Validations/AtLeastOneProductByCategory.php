@@ -13,62 +13,6 @@ use Illuminate\Support\Facades\Log;
 
 class AtLeastOneProductByCategory extends OrderStatusValidation
 {
-    // protected function check(Order $order, User $user, Carbon $date): void
-    // {
-    //     if (UserPermissions::IsAgreementConsolidated($user)) {
-
-    //         $currentMenu = MenuHelper::getCurrentMenuQuery($date, $user)->first();
-
-    //         if (!$currentMenu) {
-    //             throw new Exception("No se encontró un menú activo para la fecha");
-    //         }
-
-    //         // Use repository to get category menus filtered by price list
-    //         $categoryMenuRepository = app(CategoryMenuRepository::class);
-    //         $categoryMenus = $categoryMenuRepository->getCategoryMenusForValidation($currentMenu, $user);
-
-    //         // Obtener las categorías de los productos en la orden
-    //         $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
-    //             return [
-    //                 'category' => $orderLine->product->category,
-    //                 'quantity' => $orderLine->quantity,
-    //             ];
-    //         });
-
-    //         // Verificar que la orden incluya al menos un producto de cada categoría
-    //         // Solo se validan las categorías que tienen productos en la lista de precios de la empresa
-    //         foreach ($categoryMenus as $categoryMenu) {
-    //             $category = $categoryMenu->category;
-    //             $hasProductInCategory = $categoriesInOrder->contains('category.id', $category->id);
-
-    //             if (!$hasProductInCategory) {
-    //                 throw new Exception("La orden debe incluir al menos un producto de la categoría: {$category->name}.");
-    //             }
-    //         }
-
-    //         // Agrupar las cantidades por categoría y calcular la suma por categoría
-    //         $quantitiesByCategory = $categoriesInOrder->groupBy('category.id')->map(function ($items) {
-    //             return $items->sum('quantity'); // Sumar las cantidades de los productos por categoría
-    //         });
-
-    //         // Verificar que todas las sumas de cantidades por categoría sean iguales
-    //         $uniqueQuantities = $quantitiesByCategory->unique();
-
-    //         if ($uniqueQuantities->count() > 1) {
-    //             throw new Exception("Cada categoría debe tener la misma cantidad de productos.");
-    //         }
-    //     }
-
-    //     // Validación de cantidad para UserPermissions::IsAgreementIndividual
-    //     if (UserPermissions::IsAgreementIndividual($user)) {
-    //         $quantities = $order->orderLines->pluck('quantity')->unique();
-
-    //         if ($quantities->count() > 1) {
-    //             throw new Exception("Todos los productos en la orden deben tener la misma cantidad.");
-    //         }
-    //     }
-    // }
-
     protected function check(Order $order, User $user, Carbon $date): void
     {
         \Log::debug('AtLeastOneProductByCategory: Starting validation', [
@@ -129,21 +73,23 @@ class AtLeastOneProductByCategory extends OrderStatusValidation
                 $this->validateConsolidatedWithoutSubcategories($categoryMenus, $categoriesInOrder);
             }
 
-            // Rest of the quantity validation remains the same...
-            // TODO: EXCLUDE null products (is_null_product = 1) from quantity validation
-            // $categoriesInOrderWithoutNullProducts = $categoriesInOrder->filter(function ($item) {
-            //     return !$item['is_null_product'];
-            // });
+            // Quantity validation: group differently based on subcategory rules
+            if ($user->validate_subcategory_rules && $this->hasSubcategoriesInMenu($categoryMenus)) {
+                // Group by subcategory for special subcategories, by category for others
+                $quantitiesByGroup = $this->groupQuantitiesForConsolidatedWithSubcategories($categoriesInOrder);
+            } else {
+                // Standard: group by category
+                $quantitiesByGroup = $categoriesInOrder->groupBy('category.id')->map(function ($items) {
+                    return $items->sum('quantity');
+                });
+            }
 
-            $quantitiesByCategory = $categoriesInOrder->groupBy('category.id')->map(function ($items) {
-                return $items->sum('quantity');
-            });
-
-            $uniqueQuantities = $quantitiesByCategory->unique();
+            $uniqueQuantities = $quantitiesByGroup->unique();
 
             if ($uniqueQuantities->count() > 1) {
                 \Log::debug('AtLeastOneProductByCategory: Quantity validation failed', [
-                    'quantities_by_category' => $quantitiesByCategory->toArray()
+                    'quantities_by_group' => $quantitiesByGroup->toArray(),
+                    'validate_subcategory_rules' => $user->validate_subcategory_rules
                 ]);
                 throw new Exception("Cada categoría debe tener la misma cantidad de productos.");
             }
@@ -331,5 +277,60 @@ class AtLeastOneProductByCategory extends OrderStatusValidation
             ]);
             throw new Exception($message);
         }
+    }
+
+    /**
+     * Group quantities for consolidated orders with subcategories.
+     *
+     * Grouping rules:
+     * 1. Special subcategories (PLATO_DE_FONDO, ENTRADA, PAN_DE_ACOMPAÑAMIENTO):
+     *    Group ALL categories with these subcategories together by subcategory
+     * 2. Categories without subcategories:
+     *    Each category is a separate group
+     *
+     * @param \Illuminate\Support\Collection $categoriesInOrder
+     * @return \Illuminate\Support\Collection
+     */
+    protected function groupQuantitiesForConsolidatedWithSubcategories($categoriesInOrder)
+    {
+        $requiredSubcategories = [
+            \App\Enums\Subcategory::PLATO_DE_FONDO,
+            \App\Enums\Subcategory::ENTRADA,
+            \App\Enums\Subcategory::PAN_DE_ACOMPANAMIENTO
+        ];
+
+        $quantities = collect();
+
+        // Group 1: Products with special subcategories (grouped by subcategory)
+        foreach ($requiredSubcategories as $requiredSubcategory) {
+            $subcategoryValue = $requiredSubcategory->value;
+
+            $totalForSubcategory = $categoriesInOrder->filter(function ($item) use ($subcategoryValue) {
+                return $item['category']->subcategories->pluck('name')->contains($subcategoryValue);
+            })->sum('quantity');
+
+            if ($totalForSubcategory > 0) {
+                $quantities->put("subcat_{$subcategoryValue}", $totalForSubcategory);
+            }
+        }
+
+        // Group 2: Products without subcategories (each category separate)
+        $categoriesWithoutSubcategories = $categoriesInOrder->filter(function ($item) {
+            return $item['category']->subcategories->isEmpty();
+        });
+
+        $quantitiesByCategory = $categoriesWithoutSubcategories->groupBy('category.id')->map(function ($items) {
+            return $items->sum('quantity');
+        });
+
+        foreach ($quantitiesByCategory as $categoryId => $quantity) {
+            $quantities->put("cat_{$categoryId}", $quantity);
+        }
+
+        \Log::debug('AtLeastOneProductByCategory: Grouped quantities', [
+            'quantities' => $quantities->toArray()
+        ]);
+
+        return $quantities;
     }
 }

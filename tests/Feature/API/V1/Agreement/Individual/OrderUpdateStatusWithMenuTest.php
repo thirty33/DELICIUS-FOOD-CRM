@@ -72,7 +72,7 @@ class OrderUpdateStatusWithMenuTest extends BaseIndividualAgreementTest
         $agreementRole = Role::where('name', RoleName::AGREEMENT->value)->first();
         $individualPermission = Permission::where('name', PermissionName::INDIVIDUAL->value)->first();
 
-        // Create user (emulating agreement individual user like OTERO)
+        // Create user (emulating agreement individual user)
         $this->testUser = User::create([
             'name' => 'TEST USER',
             'nickname' => 'TEST.USER',
@@ -81,7 +81,7 @@ class OrderUpdateStatusWithMenuTest extends BaseIndividualAgreementTest
             'company_id' => $this->testCompany->id,
             'branch_id' => $branch->id,
             'active' => true,
-            'validate_subcategory_rules' => true,  // Enable subcategory validation like OTERO user
+            'validate_subcategory_rules' => true,  // Enable subcategory validation
         ]);
 
         // Attach role and permission to user
