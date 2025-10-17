@@ -7,7 +7,6 @@ use App\Classes\UserPermissions;
 use App\Models\User;
 use App\Classes\Menus\MenuHelper;
 use App\Repositories\OrderRuleRepository;
-use App\Repositories\CategoryMenuRepository;
 use Carbon\Carbon;
 use Exception;
 
@@ -59,16 +58,6 @@ class ExactProductCountPerSubcategory extends OrderStatusValidation
             // These limits are interpreted as REQUIRED counts in this validation
             $subcategoryLimits = $this->orderRuleRepository->getSubcategoryLimitsForUser($user);
 
-            // Get subcategories available in menu with products that have prices
-            $categoryMenuRepository = app(CategoryMenuRepository::class);
-            $categoryMenus = $categoryMenuRepository->getCategoryMenusForValidation($currentMenu, $user);
-            $availableSubcategories = $this->getAvailableSubcategoriesInMenu($categoryMenus);
-
-            // Filter limits to only include subcategories that are available in the menu
-            $applicableLimits = $subcategoryLimits->filter(function ($limit, $subcategoryName) use ($availableSubcategories) {
-                return $availableSubcategories->contains($subcategoryName);
-            });
-
             $categoriesInOrder = $order->orderLines->map(function ($orderLine) {
                 return [
                     'category' => $orderLine->product->category,
@@ -77,6 +66,13 @@ class ExactProductCountPerSubcategory extends OrderStatusValidation
             });
 
             $subcategoriesInOrder = $this->buildSubcategoriesInOrder($categoriesInOrder);
+
+            // Filter based on subcategories CURRENTLY in the order
+            // Only validate subcategories that the user already chose to include in their order
+            // This prevents forcing users to include subcategories they can't add due to exclusion rules
+            $applicableLimits = $subcategoryLimits->filter(fn($maxCount, $subcategoryName) =>
+                $subcategoriesInOrder->has($subcategoryName)
+            );
 
             $this->validateExactProductCountPerSubcategory($subcategoriesInOrder, $applicableLimits);
         }
