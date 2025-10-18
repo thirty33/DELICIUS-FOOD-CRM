@@ -184,7 +184,13 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 ### General Rules
 - Explain what you're going to do before providing code
 - Do not create code comments in Spanish (use English)
-- Run all PHP and related commands using `./vendor/bin/sail` (Laravel Sail)
+- **ALWAYS** run ALL PHP and related commands using `./vendor/bin/sail` (Laravel Sail)
+  - Use `./vendor/bin/sail artisan` instead of `php artisan`
+  - Use `./vendor/bin/sail composer` instead of `composer`
+  - Use `./vendor/bin/sail npm` instead of `npm`
+  - Use `./vendor/bin/sail mysql` instead of `mysql`
+  - Use `./vendor/bin/sail tinker` instead of `php artisan tinker`
+  - This is MANDATORY even if Sail is not currently running
 - Do not assign default text values to variables unless explicitly instructed
 
 ### File Management Rules
@@ -192,6 +198,16 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - **NEVER** save generated Excel files (.xlsx) in the project directory
 - **ALWAYS** save Python scripts and generated Excel files directly to `/mnt/c/Users/Usuario/Downloads/`
 - This applies to all test data generation, import templates, and similar files
+
+### Python Scripts and Excel Reports Directory
+- **Working Directory for Python Scripts**: `/mnt/c/Users/USUARIO/Documents/food-shop-python-scripts`
+- Use this directory for:
+  - Python scripts related to data analysis and reporting
+  - Reading existing Excel reports from the system
+  - Creating new Excel reports and analysis files
+  - Data processing scripts for the Food Shop CRM
+- For temporary files or quick tests, continue using `/mnt/c/Users/Usuario/Downloads/`
+- For production-ready scripts and reports, use the `food-shop-python-scripts` directory
 
 ---
 
