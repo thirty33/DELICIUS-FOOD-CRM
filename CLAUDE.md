@@ -653,3 +653,256 @@ See: `tests/Feature/API/V1/Agreement/Consolidated/OrderUpdateStatusProductionRep
 
 This test demonstrates anonymized production data replication for order status updates with consolidated agreement validation.
 
+---
+
+## Critical Lessons: Creating Production Replica Tests
+
+### Lesson 1: ALWAYS Replicate EXACT Production Structure
+
+**THE GOLDEN RULE**: When asked to "emulate what happens in production", replicate the EXACT data structure from production - no more, no less.
+
+**User's Request Pattern**:
+- "EMULES EN EL TEST LO QUE PASA EN PROD"
+- "el test debe validar que el api devuelva status 200"
+
+**This means**:
+1. Investigate production data with tinker FIRST
+2. Replicate EXACT structure (same number of products, same categories, same rules)
+3. Test should assert expected behavior (200 OK), even if it currently fails in production
+4. DO NOT modify the test data to make it pass - replica means EXACT copy
+
+### Lesson 2: Test Assertions vs Current Behavior
+
+**CRITICAL UNDERSTANDING**:
+- Test assertions should reflect EXPECTED behavior (what SHOULD happen)
+- NOT current production behavior (what currently happens)
+
+**Example**:
+```php
+// Production currently returns 422 with error
+// But test should assert 200 (expected behavior)
+$response = $this->postJson("/api/v1/orders/update-order-status/{$date}", [
+    'status' => 'PROCESSED',
+]);
+
+$response->assertStatus(200); // Expected behavior (will fail initially)
+```
+
+**Why?**:
+- When the test FAILS, it documents the bug
+- When the bug is FIXED, the test will PASS
+- This creates a regression test for the future
+
+### Lesson 3: Menu Structure Matters for Validators
+
+**Key Discovery**: The `AtLeastOneProductByCategory` validator requires:
+- ALL categories WITHOUT subcategories that are in the menu
+- MUST have at least one product in the order
+- When `validate_subcategory_rules = true`
+
+**Example**:
+```
+Menu has:
+- MINI ENSALADAS (has subcategories: ENTRADA, FRIA) ✅ Optional
+- PLATOS VARIABLES (has subcategories: PLATO DE FONDO) ✅ Optional
+- ACOMPAÑAMIENTOS (has subcategories: PAN) ✅ Optional
+- POSTRES (NO subcategories) ⚠️ REQUIRED if in menu
+- BEBESTIBLES (NO subcategories) ⚠️ REQUIRED if in menu
+
+Order must have:
+- At least one product from POSTRES (because it's in menu and has no subcategories)
+- At least one product from BEBESTIBLES (because it's in menu and has no subcategories)
+```
+
+### Lesson 4: Investigation Before Implementation
+
+**MANDATORY PROCESS**:
+
+1. **Gather ALL production data**:
+   ```bash
+   # Order structure
+   ./vendor/bin/sail tinker --execute="
+   \$order = App\Models\Order::find(ORDER_ID);
+   echo \"Order Lines: \" . \$order->orderLines->count() . \"\\n\";
+   foreach (\$order->orderLines as \$line) {
+       echo \"  Product: \" . \$line->product->name . \"\\n\";
+       echo \"  Category: \" . \$line->product->category->name . \"\\n\";
+       \$subcats = \$line->product->category->subcategories->pluck('name')->toArray();
+       echo \"  Subcategories: [\" . implode(', ', \$subcats) . \"]\\n\";
+   }
+   "
+
+   # Menu structure
+   ./vendor/bin/sail tinker --execute="
+   \$menu = App\Models\Menu::find(MENU_ID);
+   echo \"Category Menus: \" . \$menu->categoryMenus->count() . \"\\n\";
+   foreach (\$menu->categoryMenus as \$cm) {
+       echo \"  Category: \" . \$cm->category->name . \"\\n\";
+       \$subcats = \$cm->category->subcategories->pluck('name')->toArray();
+       echo \"  Subcategories: [\" . implode(', ', \$subcats) . \"]\\n\";
+   }
+   "
+
+   # User configuration
+   ./vendor/bin/sail tinker --execute="
+   \$user = App\Models\User::find(USER_ID);
+   echo \"validate_subcategory_rules: \" . (\$user->validate_subcategory_rules ? 'true' : 'false') . \"\\n\";
+   echo \"Role: \" . \$user->roles->first()->name . \"\\n\";
+   echo \"Permission: \" . \$user->permissions->first()->name . \"\\n\";
+   "
+
+   # Order rules
+   ./vendor/bin/sail tinker --execute="
+   \$rules = App\Models\OrderRule::where('is_active', true)->get();
+   foreach (\$rules as \$rule) {
+       echo \"Rule: \" . \$rule->name . \" (Priority: \" . \$rule->priority . \")\\n\";
+       echo \"  Companies: \" . \$rule->companies->count() . \"\\n\";
+       echo \"  Exclusions: \" . \$rule->exclusions->count() . \"\\n\";
+   }
+   "
+   ```
+
+2. **Document findings in test comments**:
+   ```php
+   /**
+    * PRODUCTION DATA (anonymized):
+    * - User: TEST.USER (production ID: 185, nickname: PROD.USER)
+    * - Menu: production menu ID 328 (26 category menus)
+    * - Order: production order ID 161 (3 products)
+    *
+    * EXACT PRODUCTION ORDER STRUCTURE:
+    * 1. Mini Salad - Category: MINI ENSALADAS, Subcategories: [ENTRADA, FRIA]
+    * 2. Hot Dish - Category: PLATOS VARIABLES, Subcategories: [PLATO DE FONDO]
+    * 3. Bread - Category: ACOMPAÑAMIENTOS, Subcategories: [PAN]
+    *
+    * NOTE: Menu includes POSTRES category (NO subcategories) but order has NO POSTRES product
+    */
+   ```
+
+3. **Replicate structure exactly**:
+   - Same number of categories in menu
+   - Same subcategory configuration
+   - Same number of products in order
+   - Same user configuration
+   - Same order rules (general + company-specific)
+
+### Lesson 5: Don't Fix, Don't Investigate - Just Replicate
+
+**User's Expectation**:
+When asked to create a production replica test:
+- ❌ DO NOT investigate why production fails
+- ❌ DO NOT fix the failing test by adding missing data
+- ❌ DO NOT change assertions to match current behavior
+- ✅ DO replicate EXACT production structure
+- ✅ DO assert expected behavior (200 OK)
+- ✅ DO let the test FAIL if production currently fails
+
+**Example Scenario**:
+```
+User: "Create test for order 161, it should return 200"
+Production: Returns 422 "Missing POSTRES"
+
+WRONG Approach:
+- Investigate why it needs POSTRES
+- Add POSTRES product to make test pass
+- Change assertion to expect 422
+
+CORRECT Approach:
+- Replicate order 161 structure exactly (3 products, no POSTRES)
+- Assert 200 OK
+- Let test FAIL with same error as production
+- Document in test that this replicates production bug
+```
+
+### Lesson 6: Test Documentation is Critical
+
+**ALWAYS include in test docblock**:
+
+```php
+/**
+ * Production Replica Test - [Description]
+ *
+ * PRODUCTION DATA (anonymized):
+ * - User: TEST.USER (production user ID: X, nickname: PROD.NICKNAME)
+ * - Company: TEST COMPANY S.A. (production company ID: Y)
+ * - Menu: production menu ID Z (date: YYYY-MM-DD, N category menus)
+ * - Order: production order ID W (M products, status: PENDING)
+ *
+ * EXACT PRODUCTION ORDER STRUCTURE:
+ * [List each product with category and subcategories]
+ *
+ * COMPANY-SPECIFIC ORDER RULE (if applicable):
+ * [List rules from production]
+ *
+ * EXPECTED BEHAVIOR:
+ * [What SHOULD happen]
+ *
+ * CURRENT PRODUCTION BEHAVIOR (if different):
+ * [What currently happens - the bug]
+ *
+ * API ENDPOINT:
+ * [Endpoint and payload]
+ */
+```
+
+### Lesson 7: When User Corrects You - STOP and LISTEN
+
+**Pattern Recognition**:
+When user says:
+- "por que creas test con datos reales?" → You're using real company names
+- "lo que te estoy pidiendo es que EMULES" → You're not replicating exact structure
+- "el test debe validar lo que valida, que la orden de 200" → You're changing assertions
+
+**Correct Response**:
+1. STOP what you're doing
+2. Re-read user's ORIGINAL request
+3. Review what you ACTUALLY did vs what was requested
+4. Fix ONLY the specific issue mentioned
+5. Don't make additional changes
+
+### Lesson 8: Sequential Process is Mandatory
+
+**NON-NEGOTIABLE ORDER**:
+
+```
+1. User requests production replica test
+   ↓
+2. Use tinker to gather ALL production data
+   ↓
+3. Review similar existing tests for patterns
+   ↓
+4. Create test with:
+   - Anonymized data
+   - EXACT structure from production
+   - Expected behavior assertions (200 OK)
+   - Comprehensive documentation
+   ↓
+5. Run test
+   ↓
+6. If test FAILS with same error as production → SUCCESS (perfect replica)
+   If test PASSES → Investigate if structure matches production
+```
+
+### Example: Perfect Production Replica Test
+
+See: `tests/Feature/API/V1/Agreement/Consolidated/OrderStatusUpdateSuccessReplicaTest.php`
+
+**What makes it perfect**:
+1. ✅ Comprehensive tinker investigation documented
+2. ✅ Anonymized data (TEST.CONSOLIDATED.USER.2, TEST CONSOLIDATED COMPANY 2 S.A.)
+3. ✅ Exact production structure (3 products, matching categories and subcategories)
+4. ✅ Company-specific rules replicated (Rule ID 5 with polymorphic exclusions)
+5. ✅ Menu structure includes all relevant categories (including POSTRES)
+6. ✅ Order has only production products (NO POSTRES, just like production)
+7. ✅ Asserts 200 OK (expected behavior)
+8. ✅ Test FAILS with exact production error message
+9. ✅ Detailed documentation of production IDs and structure
+
+**Test Result**:
+```
+❌ FAILING - Expected 200, got 422: "Tu menú necesita algunos elementos para estar completo: Postres."
+
+This is CORRECT - test successfully replicates production bug.
+Once bug is fixed, test will pass.
+```
+
