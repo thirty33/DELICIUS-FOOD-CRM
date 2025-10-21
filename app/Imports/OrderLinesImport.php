@@ -6,6 +6,8 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\Company;
+use App\Models\Branch;
 use App\Models\ImportProcess;
 use App\Enums\OrderStatus;
 use App\Classes\ErrorManagment\ExportErrorHandler;
@@ -47,9 +49,11 @@ class OrderLinesImport implements
     private $processedOrders = [];
 
     /**
-     * Mapa de cabeceras entre archivo Excel y sistema interno.
-     * Las CLAVES son las cabeceras en el archivo Excel y los VALORES son los campos internos.
-     * Orden actualizado para coincidir con OrderLineExport.
+     * Header mapping between Excel file and internal system.
+     * KEYS are the Excel headers as converted by Laravel Excel (slug format).
+     * VALUES are internal field names for processing.
+     *
+     * Note: Laravel Excel converts "Código de Empresa" to "codigo_de_empresa" automatically.
      */
     private $headingMap = [
         'id_orden' => 'order_id',
@@ -57,20 +61,21 @@ class OrderLinesImport implements
         'estado' => 'status',
         'fecha_de_orden' => 'created_at',
         'fecha_de_despacho' => 'dispatch_date',
-        'empresa' => 'company_name',
-        'nombre_fantasia' => 'fantasy_name',
-        'cliente' => 'client_name',
+        'codigo_de_empresa' => 'company_code',                 // Laravel Excel converts "Código de Empresa"
+        'empresa' => 'company_name',                           // Informational - not validated
+        'codigo_sucursal' => 'branch_code',                    // Laravel Excel converts "Código Sucursal"
+        'nombre_fantasia_sucursal' => 'branch_fantasy_name',   // Informational - not validated
         'usuario' => 'user_email',
-        'categoria_producto' => 'category_name',
+        'categoria' => 'category_name',                        // Laravel Excel converts "Categoría"
         'codigo_de_producto' => 'product_code',
-        'nombre_producto' => 'product_name',
+        'nombre_producto' => 'product_name',                   // Check for "TRANSPORTE" to skip row
         'cantidad' => 'quantity',
         'precio_neto' => 'unit_price',
         'precio_con_impuesto' => 'unit_price_with_tax',
         'precio_total_neto' => 'total_price_net',
         'precio_total_con_impuesto' => 'total_price_with_tax',
-        'parcialmente_programado' => 'partially_scheduled',
-        'precio_transporte' => 'dispatch_cost'
+        'parcialmente_programado' => 'partially_scheduled'
+        // Note: dispatch_cost is calculated internally, not imported from Excel
     ];
 
     public function __construct(int $importProcessId)
@@ -172,7 +177,7 @@ class OrderLinesImport implements
 
     /**
      * Get validation rules for import
-     * 
+     *
      * @return array
      */
     private function getValidationRules(): array
@@ -181,20 +186,22 @@ class OrderLinesImport implements
             '*.id_orden' => ['nullable', 'integer'],
             '*.codigo_de_pedido' => ['nullable'],
             '*.estado' => ['required', 'string'],
-            '*.fecha_de_orden' => ['required', 'string'],
-            '*.fecha_de_despacho' => ['required', 'string'],
+            '*.fecha_de_orden' => ['required'],               // Can be string or numeric (Excel serial date)
+            '*.fecha_de_despacho' => ['required'],            // Can be string or numeric (Excel serial date)
+            '*.codigo_de_empresa' => ['required', 'string'],     // Laravel Excel converts "Código de Empresa"
+            '*.codigo_sucursal' => ['required', 'string'],       // Laravel Excel converts "Código Sucursal"
             '*.usuario' => ['required', 'string'],
             '*.codigo_de_producto' => ['required', 'string'],
             '*.cantidad' => ['required', 'integer', 'min:1'],
             '*.precio_neto' => ['nullable', 'numeric'],
-            '*.parcialmente_programado' => ['nullable', 'in:0,1,true,false,si,no,yes,no'],
-            '*.precio_transporte' => ['nullable', 'numeric', 'min:0']
+            '*.parcialmente_programado' => ['nullable', 'in:0,1,true,false,si,no,yes,no']
+            // Note: precio_transporte removed - dispatch_cost calculated internally
         ];
     }
 
     /**
      * Get custom validation messages
-     * 
+     *
      * @return array
      */
     private function getValidationMessages(): array
@@ -204,6 +211,10 @@ class OrderLinesImport implements
             '*.estado.required' => 'El estado del pedido es obligatorio.',
             '*.fecha_de_orden.required' => 'La fecha de orden es obligatoria.',
             '*.fecha_de_despacho.required' => 'La fecha de despacho es obligatoria.',
+            '*.codigo_empresa.required' => 'El código de empresa es obligatorio.',
+            '*.codigo_empresa.string' => 'El código de empresa debe ser un texto.',
+            '*.codigo_sucursal.required' => 'El código de sucursal es obligatorio.',
+            '*.codigo_sucursal.string' => 'El código de sucursal debe ser un texto.',
             '*.usuario.required' => 'El usuario es obligatorio.',
             '*.usuario.string' => 'El usuario debe ser un texto (email o nickname).',
             '*.codigo_de_producto.required' => 'El código de producto es obligatorio.',
@@ -212,8 +223,6 @@ class OrderLinesImport implements
             '*.cantidad.min' => 'La cantidad debe ser al menos 1.',
             '*.precio_neto.numeric' => 'El precio neto debe ser un número.',
             '*.parcialmente_programado.in' => 'El campo parcialmente programado debe tener un valor válido (0, 1, true, false, si, no).',
-            '*.precio_transporte.numeric' => 'El precio de transporte debe ser un número.',
-            '*.precio_transporte.min' => 'El precio de transporte no puede ser negativo.',
         ];
     }
 
@@ -231,28 +240,46 @@ class OrderLinesImport implements
             ]);
 
             foreach ($data as $index => $row) {
+                // Skip TRANSPORTE rows - they are informational only
+                $productName = trim(strtoupper($row['nombre_producto'] ?? ''));
+                if ($productName === 'TRANSPORTE') {
+                    Log::debug('Skipping validation for TRANSPORTE row', [
+                        'index' => $index,
+                        'order_id' => $row['id_orden'] ?? null
+                    ]);
+                    continue;
+                }
+
                 // No validamos existencia de order_number, si no existe se creará uno nuevo
 
-                // Validar el formato de fechas
+                // Validar el formato de fechas (acepta números de Excel o strings DD/MM/YYYY)
                 if (!empty($row['fecha_de_orden'])) {
-                    try {
-                        Carbon::createFromFormat('d/m/Y', $row['fecha_de_orden']);
-                    } catch (\Exception $e) {
-                        $validator->errors()->add(
-                            "{$index}.fecha_de_orden",
-                            'El formato de la fecha de orden debe ser DD/MM/YYYY.'
-                        );
+                    // If it's numeric (Excel serial date), it's valid
+                    if (!is_numeric($row['fecha_de_orden'])) {
+                        // If it's a string, validate DD/MM/YYYY format
+                        try {
+                            Carbon::createFromFormat('d/m/Y', $row['fecha_de_orden']);
+                        } catch (\Exception $e) {
+                            $validator->errors()->add(
+                                "{$index}.fecha_de_orden",
+                                'El formato de la fecha de orden debe ser DD/MM/YYYY o un número de fecha de Excel.'
+                            );
+                        }
                     }
                 }
 
                 if (!empty($row['fecha_de_despacho'])) {
-                    try {
-                        Carbon::createFromFormat('d/m/Y', $row['fecha_de_despacho']);
-                    } catch (\Exception $e) {
-                        $validator->errors()->add(
-                            "{$index}.fecha_de_despacho",
-                            'El formato de la fecha de despacho debe ser DD/MM/YYYY.'
-                        );
+                    // If it's numeric (Excel serial date), it's valid
+                    if (!is_numeric($row['fecha_de_despacho'])) {
+                        // If it's a string, validate DD/MM/YYYY format
+                        try {
+                            Carbon::createFromFormat('d/m/Y', $row['fecha_de_despacho']);
+                        } catch (\Exception $e) {
+                            $validator->errors()->add(
+                                "{$index}.fecha_de_despacho",
+                                'El formato de la fecha de despacho debe ser DD/MM/YYYY o un número de fecha de Excel.'
+                            );
+                        }
                     }
                 }
 
@@ -284,7 +311,7 @@ class OrderLinesImport implements
 
     /**
      * Validate and import the collection of rows
-     * 
+     *
      * @param Collection $rows
      */
     public function collection(Collection $rows)
@@ -301,8 +328,29 @@ class OrderLinesImport implements
                 ]);
             }
 
+            // Filter out TRANSPORTE rows (informational only, dispatch_cost is calculated internally)
+            $filteredRows = $rows->filter(function ($row) {
+                $productName = trim(strtoupper($row['nombre_producto'] ?? ''));
+                $isTransportRow = $productName === 'TRANSPORTE';
+
+                if ($isTransportRow) {
+                    Log::info('Skipping TRANSPORTE row (informational only)', [
+                        'order_id' => $row['id_orden'] ?? null,
+                        'order_number' => $row['codigo_de_pedido'] ?? null
+                    ]);
+                }
+
+                return !$isTransportRow;
+            });
+
+            Log::info('Rows after filtering TRANSPORTE', [
+                'original_count' => $rows->count(),
+                'filtered_count' => $filteredRows->count(),
+                'transport_rows_skipped' => $rows->count() - $filteredRows->count()
+            ]);
+
             // Agrupar filas por código de pedido para procesarlas juntas
-            $rowsByOrderNumber = $rows->groupBy('codigo_de_pedido');
+            $rowsByOrderNumber = $filteredRows->groupBy('codigo_de_pedido');
 
             DB::beginTransaction();
 
@@ -350,15 +398,14 @@ class OrderLinesImport implements
             Log::info('Procesando orden desde Excel', [
                 'order_number' => $orderNumber,
                 'id_orden' => $idOrden,
-                'precio_transporte' => $firstRow['precio_transporte'] ?? 'NO DEFINIDO',
-                'tipo_precio_transporte' => gettype($firstRow['precio_transporte'] ?? null),
-                'todas_las_claves' => is_array($firstRow) ? array_keys($firstRow) : $firstRow->keys()->toArray()
+                'company_code' => $firstRow['codigo_empresa'] ?? null,
+                'branch_code' => $firstRow['codigo_sucursal'] ?? null
             ]);
 
             // Determinar si existe la combinación id + código
             $existingOrder = $this->findOrderByIdAndNumber($idOrden, $orderNumber);
 
-            // Si ambos campos están vacíos, crear orden completamente nueva
+            // Si ambos campos están vacíos, crear orden completamente nueva sin order_number
             if (empty($idOrden) && empty($orderNumber)) {
                 $this->createNewOrder($rows);
                 return;
@@ -372,28 +419,13 @@ class OrderLinesImport implements
                 if (isset($this->processedOrders[$processKey])) {
                     $processedData = $this->processedOrders[$processKey];
 
-                    Log::info('Verificando cambios en pedido ya procesado', [
-                        'order_id' => $existingOrder->id,
-                        'order_number' => $orderNumber,
-                        'precio_transporte_procesado' => $processedData['dispatch_cost'],
-                        'precio_transporte_actual' => $firstRow['precio_transporte'] ?? '0.00',
-                        'son_iguales' => $processedData['dispatch_cost'] === ($firstRow['precio_transporte'] ?? '0.00')
-                    ]);
-
                     // Verificar si hay cambios en los campos de la orden
                     $orderDataChanged =
                         $processedData['status'] !== $firstRow['estado'] ||
                         $processedData['created_at'] !== $firstRow['fecha_de_orden'] ||
                         $processedData['dispatch_date'] !== $firstRow['fecha_de_despacho'] ||
-                        $processedData['user_email'] !== $firstRow['usuario'] ||
-                        $processedData['dispatch_cost'] !== ($firstRow['precio_transporte'] ?? '0.00');
+                        $processedData['user_email'] !== $firstRow['usuario'];
 
-                    Log::info('Resultado verificación de cambios', [
-                        'order_id' => $existingOrder->id,
-                        'orderDataChanged' => $orderDataChanged
-                    ]);
-
-                    // Si no hay cambios, solo procesar las líneas de pedido
                     if (!$orderDataChanged) {
                         Log::info('No hay cambios en el pedido, solo procesando líneas', [
                             'order_id' => $existingOrder->id
@@ -402,13 +434,19 @@ class OrderLinesImport implements
                         return;
                     }
                 }
-                
+
                 // Actualizar orden existente
                 $this->updateExistingOrder($existingOrder, $rows);
                 return;
             }
 
-            // En cualquier otro caso (solo uno de los campos coincide, o ninguno), crear nueva orden
+            // Si hay order_number pero no existe en la BD, crear nueva orden con ese número
+            if (!empty($orderNumber)) {
+                $this->createNewOrderWithNumber($orderNumber, $rows);
+                return;
+            }
+
+            // Si solo hay id_orden pero no order_number, crear orden nueva sin número específico
             $this->createNewOrder($rows);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
@@ -448,31 +486,16 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
-            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
-            $dispatchCost = 0;
-            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
-                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
-            }
-
             Log::info('Actualizando orden existente', [
                 'order_id' => $order->id,
-                'order_number' => $order->order_number,
-                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
-                'dispatch_cost_calculado' => $dispatchCost,
-                'dispatch_cost_anterior' => $order->dispatch_cost
+                'order_number' => $order->order_number
             ]);
 
-            // Actualizar la orden
+            // Actualizar la orden (dispatch_cost will be calculated by the model)
             $order->update([
                 'status' => $status,
                 'user_id' => $user->id,
-                'dispatch_date' => $dispatchDate,
-                'dispatch_cost' => $dispatchCost
-            ]);
-
-            Log::info('Orden actualizada', [
-                'order_id' => $order->id,
-                'dispatch_cost_nuevo' => $order->fresh()->dispatch_cost
+                'dispatch_date' => $dispatchDate
             ]);
 
             // Si la fecha de creación es diferente, actualizar manualmente
@@ -488,8 +511,7 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario'],
-                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
+                'user_email' => $firstRow['usuario']
             ];
 
             // Procesar las líneas de pedido
@@ -538,31 +560,21 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
-            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
-            $dispatchCost = 0;
-            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
-                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
-            }
-
             Log::info('Creando orden nueva con order_number', [
-                'order_number' => $orderNumber,
-                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
-                'dispatch_cost_calculado' => $dispatchCost
+                'order_number' => $orderNumber
             ]);
 
-            // Crear la orden con el order_number específico
+            // Crear la orden con el order_number específico (dispatch_cost will be calculated by the model)
             $order = Order::create([
                 'order_number' => $orderNumber,
                 'status' => $status,
                 'user_id' => $user->id,
                 'dispatch_date' => $dispatchDate,
-                'created_at' => $createdAt,
-                'dispatch_cost' => $dispatchCost
+                'created_at' => $createdAt
             ]);
 
             Log::info('Orden creada con order_number', [
-                'order_id' => $order->id,
-                'dispatch_cost_guardado' => $order->dispatch_cost
+                'order_id' => $order->id
             ]);
 
             // Guardar los datos procesados para comparaciones futuras
@@ -571,8 +583,7 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario'],
-                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
+                'user_email' => $firstRow['usuario']
             ];
 
             // Procesar las líneas de pedido
@@ -620,30 +631,20 @@ class OrderLinesImport implements
             $createdAt = $this->formatDate($firstRow['fecha_de_orden']);
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
-            // Calcular dispatch_cost (multiplicar por 100 para convertir a centavos)
-            $dispatchCost = 0;
-            if (isset($firstRow['precio_transporte']) && is_numeric($firstRow['precio_transporte'])) {
-                $dispatchCost = (int) ($firstRow['precio_transporte'] * 100);
-            }
-
-            Log::info('Creando orden nueva', [
-                'precio_transporte_excel' => $firstRow['precio_transporte'] ?? 'NO EXISTE',
-                'dispatch_cost_calculado' => $dispatchCost
-            ]);
+            Log::info('Creando orden nueva');
 
             // Crear la orden (el order_number se generará automáticamente en el modelo)
+            // dispatch_cost will be calculated by the model
             $order = Order::create([
                 'status' => $status,
                 'user_id' => $user->id,
                 'dispatch_date' => $dispatchDate,
-                'created_at' => $createdAt,
-                'dispatch_cost' => $dispatchCost
+                'created_at' => $createdAt
             ]);
 
             Log::info('Orden creada', [
                 'order_id' => $order->id,
-                'order_number' => $order->order_number,
-                'dispatch_cost_guardado' => $order->dispatch_cost
+                'order_number' => $order->order_number
             ]);
 
             // Guardar los datos procesados para comparaciones futuras usando el order_number como clave
@@ -652,8 +653,7 @@ class OrderLinesImport implements
                 'status' => $firstRow['estado'],
                 'created_at' => $firstRow['fecha_de_orden'],
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
-                'user_email' => $firstRow['usuario'],
-                'dispatch_cost' => $firstRow['precio_transporte'] ?? '0.00'
+                'user_email' => $firstRow['usuario']
             ];
 
             // Procesar las líneas de pedido
@@ -686,13 +686,8 @@ class OrderLinesImport implements
     private function processOrderLines($orderId, Collection $rows)
     {
         try {
-            // Get the order to preserve dispatch_cost
-            $order = Order::find($orderId);
-            $preservedDispatchCost = $order->dispatch_cost;
-
             Log::info('Procesando líneas de pedido', [
-                'order_id' => $orderId,
-                'dispatch_cost_a_preservar' => $preservedDispatchCost
+                'order_id' => $orderId
             ]);
 
             // Eliminar las líneas de pedido existentes
@@ -724,21 +719,11 @@ class OrderLinesImport implements
                 ]);
             }
 
-            // Restore dispatch_cost after processing lines (events may have changed it)
-            $order->refresh();
-            if ($order->dispatch_cost !== $preservedDispatchCost) {
-                Log::warning('dispatch_cost fue modificado por eventos, restaurando valor', [
-                    'order_id' => $orderId,
-                    'valor_anterior' => $preservedDispatchCost,
-                    'valor_modificado' => $order->dispatch_cost
-                ]);
-                $order->update(['dispatch_cost' => $preservedDispatchCost]);
-            }
+            // dispatch_cost will be calculated automatically by the Order model
 
             Log::info("Líneas de pedido procesadas con éxito", [
                 'order_id' => $orderId,
-                'lines_count' => $rows->count(),
-                'dispatch_cost_final' => $order->fresh()->dispatch_cost
+                'lines_count' => $rows->count()
             ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
@@ -774,14 +759,34 @@ class OrderLinesImport implements
     }
 
     /**
-     * Format date from Excel format (DD/MM/YYYY) to database format (YYYY-MM-DD)
-     * 
-     * @param string $dateValue
+     * Format date from Excel format to database format (YYYY-MM-DD)
+     * Handles both string format (DD/MM/YYYY) and Excel serial date numbers
+     *
+     * @param string|int|float $dateValue
      * @return string
      */
     private function formatDate($dateValue)
     {
-        return Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
+        // If it's a numeric value (Excel serial date number)
+        if (is_numeric($dateValue)) {
+            // Excel serial dates start from 1900-01-01 (serial number 1)
+            // Convert Excel serial number to Unix timestamp
+            // Excel base date is 1899-12-30 (accounting for Excel's leap year bug)
+            $unixTimestamp = ($dateValue - 25569) * 86400;
+            return Carbon::createFromTimestamp($unixTimestamp)->format('Y-m-d');
+        }
+
+        // If it's already a string in DD/MM/YYYY format
+        if (is_string($dateValue) && strpos($dateValue, '/') !== false) {
+            return Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
+        }
+
+        // If it's a standard date string (Y-m-d or similar)
+        try {
+            return Carbon::parse($dateValue)->format('Y-m-d');
+        } catch (\Exception $e) {
+            throw new \Exception("Invalid date format: {$dateValue}");
+        }
     }
 
     /**

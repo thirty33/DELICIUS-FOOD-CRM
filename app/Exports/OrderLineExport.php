@@ -51,9 +51,12 @@ class OrderLineExport implements
         'estado' => 'Estado',
         'fecha_de_orden' => 'Fecha de Orden',
         'fecha_de_despacho' => 'Fecha de Despacho',
+        'codigo_empresa' => 'Código de Empresa', // NEW: Company code
         'empresa' => 'Empresa',
-        'nombre_fantasia' => 'Nombre Fantasía',
-        'cliente' => 'Cliente',
+        // 'nombre_fantasia' => 'Nombre Fantasía', // REMOVED: Replaced by branch info
+        // 'cliente' => 'Cliente', // REMOVED: Replaced by branch info
+        'codigo_sucursal' => 'Código Sucursal', // NEW: Branch code
+        'nombre_fantasia_sucursal' => 'Nombre Fantasía Sucursal', // NEW: Branch fantasy name
         'usuario' => 'Usuario',
         'categoria_producto' => 'Categoría',
         'codigo_de_producto' => 'Código de Producto',
@@ -64,7 +67,7 @@ class OrderLineExport implements
         'precio_total_neto' => 'Precio Total Neto',
         'precio_total_con_impuesto' => 'Precio Total con Impuesto',
         'parcialmente_programado' => 'Parcialmente Programado',
-        'precio_transporte' => 'Precio Transporte'
+        // 'precio_transporte' => 'Precio Transporte' // REMOVED: Will be separate row
     ];
 
     private $exportProcessId;
@@ -79,8 +82,9 @@ class OrderLineExport implements
     public function query()
     {
         return OrderLine::with([
-            'order.user', 
-            'order.user.company', 
+            'order.user',
+            'order.user.company',
+            'order.user.branch', // NEW: Load branch information
             'product.category'
         ])->whereIn('id', $this->orderLineIds);
     }
@@ -97,6 +101,7 @@ class OrderLineExport implements
             $order = $orderLine->order;
             $user = $order->user ?? null;
             $company = $user->company ?? null;
+            $branch = $user->branch ?? null; // NEW: Get branch information
             $product = $orderLine->product ?? null;
             $category = $product->category ?? null;
 
@@ -139,20 +144,20 @@ class OrderLineExport implements
             $precioTotalNeto = $orderLine->quantity * $orderLine->unit_price;
             $precioTotalConImpuesto = $orderLine->quantity * $orderLine->unit_price_with_tax;
 
-            // Calculate transport price value for every line
-            $transportPriceValue = '';
-            if ($order->dispatch_cost !== null) {
-                $calculatedValue = $order->dispatch_cost / 100;
-                if ($calculatedValue == 0) {
-                    $transportPriceValue = '0.00';
-                } else {
-                    $transportPriceValue = number_format($calculatedValue, 2, '.', '');
-                }
-            } else {
-                $transportPriceValue = '0.00';
-            }
-            
-            
+            // OLD: Calculate transport price value for every line (REMOVED - now separate row per order)
+            // $transportPriceValue = '';
+            // if ($order->dispatch_cost !== null) {
+            //     $calculatedValue = $order->dispatch_cost / 100;
+            //     if ($calculatedValue == 0) {
+            //         $transportPriceValue = '0.00';
+            //     } else {
+            //         $transportPriceValue = number_format($calculatedValue, 2, '.', '');
+            //     }
+            // } else {
+            //     $transportPriceValue = '0.00';
+            // }
+
+
             // Map data using the same keys expected by the importer
             return [
                 'id_orden' => $order ? $order->id : null,
@@ -160,9 +165,13 @@ class OrderLineExport implements
                 'estado' => $estadoOrden,
                 'fecha_de_orden' => $fechaOrden,
                 'fecha_de_despacho' => $fechaDespacho,
+                'codigo_empresa' => $company ? $company->company_code : null, // NEW: Company code
                 'empresa' => $company ? $company->name : null,
-                'nombre_fantasia' => $company ? $company->fantasy_name : null,
-                'cliente' => $user ? $user->name : null,
+                // OLD FIELDS (commented for validation):
+                // 'nombre_fantasia' => $company ? $company->fantasy_name : null,
+                // 'cliente' => $user ? $user->name : null,
+                'codigo_sucursal' => $branch ? $branch->branch_code : null, // NEW: Branch code
+                'nombre_fantasia_sucursal' => $branch ? $branch->fantasy_name : null, // NEW: Branch fantasy name
                 'usuario' => $user ? ($user->email ?: $user->nickname) : null,
                 'categoria_producto' => $category ? $category->name : null,
                 'codigo_de_producto' => $codigoProducto,
@@ -173,7 +182,8 @@ class OrderLineExport implements
                 'precio_total_neto' => $precioTotalNeto / 100,
                 'precio_total_con_impuesto' => $precioTotalConImpuesto / 100,
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0',
-                'precio_transporte' => $transportPriceValue
+                // OLD FIELD (commented for validation):
+                // 'precio_transporte' => $transportPriceValue
             ];
         } catch (\Exception $e) {
             Log::error('Error mapping order line for export', [
@@ -226,11 +236,14 @@ class OrderLineExport implements
             },
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                
+
+                // NEW: Add transport rows for each order BEFORE cleaning empty rows
+                $this->addTransportRows($sheet);
+
                 // Remove empty rows at the end
                 $lastRow = $sheet->getHighestRow();
                 $lastColumn = $sheet->getHighestColumn();
-                
+
                 // Find actual last row with data
                 for ($row = $lastRow; $row > 1; $row--) {
                     $hasData = false;
@@ -244,7 +257,7 @@ class OrderLineExport implements
                         break;
                     }
                 }
-                
+
                 // Remove empty rows after the last row with data
                 if ($row < $lastRow) {
                     $sheet->removeRow($row + 1, $lastRow - $row);
@@ -258,8 +271,94 @@ class OrderLineExport implements
     }
 
     /**
+     * Add transport rows for each order in the export.
+     *
+     * This method reads the exported order lines, identifies unique orders,
+     * and adds a "TRANSPORTE" row after the last order line of each order.
+     *
+     * @param Worksheet $sheet
+     * @return void
+     */
+    protected function addTransportRows(Worksheet $sheet): void
+    {
+        $lastRow = $sheet->getHighestRow();
+
+        // Collect order data while reading the sheet
+        $ordersData = [];
+        $currentRow = 2; // Start after header
+
+        // Read all rows and group by order_id
+        while ($currentRow <= $lastRow) {
+            $orderId = $sheet->getCell('A' . $currentRow)->getValue(); // Column A = id_orden
+
+            if ($orderId) {
+                if (!isset($ordersData[$orderId])) {
+                    // Store order info from first line of this order
+                    $ordersData[$orderId] = [
+                        'last_row' => $currentRow,
+                        'codigo_pedido' => $sheet->getCell('B' . $currentRow)->getValue(),
+                        'estado' => $sheet->getCell('C' . $currentRow)->getValue(),
+                        'fecha_orden' => $sheet->getCell('D' . $currentRow)->getValue(),
+                        'fecha_despacho' => $sheet->getCell('E' . $currentRow)->getValue(),
+                        'codigo_empresa' => $sheet->getCell('F' . $currentRow)->getValue(),
+                        'empresa' => $sheet->getCell('G' . $currentRow)->getValue(),
+                        'codigo_sucursal' => $sheet->getCell('H' . $currentRow)->getValue(),
+                        'nombre_fantasia_sucursal' => $sheet->getCell('I' . $currentRow)->getValue(),
+                        'usuario' => $sheet->getCell('J' . $currentRow)->getValue(),
+                    ];
+                } else {
+                    // Update last_row for this order
+                    $ordersData[$orderId]['last_row'] = $currentRow;
+                }
+            }
+
+            $currentRow++;
+        }
+
+        // Now add transport rows in reverse order (to avoid shifting row numbers)
+        $orderIds = array_keys($ordersData);
+        rsort($orderIds); // Reverse sort to insert from bottom to top
+
+        foreach ($orderIds as $orderId) {
+            $orderData = $ordersData[$orderId];
+            $insertAfterRow = $orderData['last_row'];
+
+            // Get the order from database to fetch dispatch_cost
+            $order = Order::find($orderId);
+
+            if ($order && $order->dispatch_cost !== null && $order->dispatch_cost > 0) {
+                // Insert new row after the last order line
+                $sheet->insertNewRowBefore($insertAfterRow + 1, 1);
+
+                // Populate transport row
+                $transportRow = $insertAfterRow + 1;
+
+                $sheet->setCellValue('A' . $transportRow, $orderId); // id_orden
+                $sheet->setCellValue('B' . $transportRow, $orderData['codigo_pedido']); // codigo_de_pedido
+                $sheet->setCellValue('C' . $transportRow, $orderData['estado']); // estado
+                $sheet->setCellValue('D' . $transportRow, $orderData['fecha_orden']); // fecha_de_orden
+                $sheet->setCellValue('E' . $transportRow, $orderData['fecha_despacho']); // fecha_de_despacho
+                $sheet->setCellValue('F' . $transportRow, $orderData['codigo_empresa']); // codigo_empresa
+                $sheet->setCellValue('G' . $transportRow, $orderData['empresa']); // empresa
+                $sheet->setCellValue('H' . $transportRow, $orderData['codigo_sucursal']); // codigo_sucursal
+                $sheet->setCellValue('I' . $transportRow, $orderData['nombre_fantasia_sucursal']); // nombre_fantasia_sucursal
+                $sheet->setCellValue('J' . $transportRow, $orderData['usuario']); // usuario
+                $sheet->setCellValue('K' . $transportRow, ''); // categoria_producto (empty)
+                $sheet->setCellValue('L' . $transportRow, ''); // codigo_de_producto (empty)
+                $sheet->setCellValue('M' . $transportRow, 'TRANSPORTE'); // nombre_producto
+                $sheet->setCellValue('N' . $transportRow, 1); // cantidad
+                $sheet->setCellValue('O' . $transportRow, $order->dispatch_cost / 100); // precio_neto
+                $sheet->setCellValue('P' . $transportRow, $order->dispatch_cost / 100); // precio_con_impuesto
+                $sheet->setCellValue('Q' . $transportRow, $order->dispatch_cost / 100); // precio_total_neto
+                $sheet->setCellValue('R' . $transportRow, $order->dispatch_cost / 100); // precio_total_con_impuesto
+                $sheet->setCellValue('S' . $transportRow, ''); // parcialmente_programado (empty)
+            }
+        }
+    }
+
+    /**
      * Handle a failed export
-     * 
+     *
      * @param Throwable $exception
      * @return void
      */
