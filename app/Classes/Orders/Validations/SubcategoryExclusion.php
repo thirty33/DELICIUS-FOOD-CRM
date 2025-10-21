@@ -13,11 +13,12 @@ use Exception;
  * Validates subcategory exclusion rules to ensure menu balance.
  *
  * NEW APPROACH: Rules are now loaded dynamically from the database via OrderRuleRepository.
- * The repository fetches OrderRuleSubcategoryExclusion records based on:
+ * The repository fetches OrderRuleExclusion records (polymorphic table) based on:
  * - User's role and permission
  * - User's company (company-specific rules take precedence)
  * - Rule priority (lower number = higher priority)
  * - Rule type: 'subcategory_exclusion'
+ * - FILTERED to Subcategory → Subcategory only (this validator only handles subcategories)
  *
  * Common exclusion rules example:
  * - PLATO DE FONDO: Cannot have multiple main dishes
@@ -86,7 +87,8 @@ class SubcategoryExclusion extends OrderStatusValidation
     /**
      * Load subcategory exclusion rules from database for the given user.
      *
-     * Builds the $subcategoryExclusions array from OrderRuleSubcategoryExclusion records.
+     * NEW VERSION: Uses OrderRuleExclusion (polymorphic) helper methods.
+     * Builds the $subcategoryExclusions array from OrderRuleExclusion records.
      *
      * @param User $user
      * @return void
@@ -100,8 +102,15 @@ class SubcategoryExclusion extends OrderStatusValidation
 
         // Build the exclusions array in the same format as the hardcoded version
         foreach ($exclusions as $exclusion) {
+            // NEW: Use helper methods (works with polymorphic relationships)
+            $subcategoryName = $exclusion->getSourceName();
+            $excludedSubcategoryName = $exclusion->getExcludedName();
+
+            // OLD CODE (using old non-polymorphic relationships - COMMENTED OUT):
+            /*
             $subcategoryName = $exclusion->subcategory->name;
             $excludedSubcategoryName = $exclusion->excludedSubcategory->name;
+            */
 
             if (!isset($this->subcategoryExclusions[$subcategoryName])) {
                 $this->subcategoryExclusions[$subcategoryName] = [];

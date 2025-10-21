@@ -250,7 +250,7 @@ class OrderRuleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\SubcategoryExclusionsRelationManager::class,
+            RelationManagers\ExclusionsRelationManager::class, // Polymorphic exclusions (Subcategory/Category)
             RelationManagers\SubcategoryLimitsRelationManager::class,
             RelationManagers\CompaniesRelationManager::class,
         ];

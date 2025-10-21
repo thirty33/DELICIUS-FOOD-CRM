@@ -10,6 +10,7 @@ use App\Classes\Orders\Validations\MenuExistsValidation;
 use App\Classes\Orders\Validations\MenuCompositionValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
 use App\Classes\Orders\Validations\SubcategoryExclusion;
+use App\Classes\Orders\Validations\PolymorphicExclusion;
 use App\Classes\Orders\Validations\MandatoryCategoryValidation;
 use App\Classes\Orders\Validations\OneProductPerCategorySimple;
 use App\Classes\Orders\Validations\OneProductPerSubcategory;
@@ -242,8 +243,9 @@ class OrderController extends Controller
                 $validationChain2
                     ->linkWith(new OneProductPerCategorySimple())
                     ->linkWith(new OneProductPerSubcategory())
-                    ->linkWith(new SubcategoryExclusion());
-                    
+                    ->linkWith(new SubcategoryExclusion())
+                    ->linkWith(new PolymorphicExclusion()); // NEW: Validates polymorphic exclusions for Consolidated agreements
+
                 $validationChain2
                     ->validate($order, $user, $carbonDate);
 

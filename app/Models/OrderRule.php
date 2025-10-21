@@ -37,6 +37,13 @@ class OrderRule extends Model
         return $this->belongsTo(Permission::class);
     }
 
+    // NEW: Polymorphic exclusions (supports Category and Subcategory)
+    public function exclusions(): HasMany
+    {
+        return $this->hasMany(OrderRuleExclusion::class);
+    }
+
+    // OLD: Subcategory-only exclusions (deprecated - use exclusions() instead)
     public function subcategoryExclusions(): HasMany
     {
         return $this->hasMany(OrderRuleSubcategoryExclusion::class);

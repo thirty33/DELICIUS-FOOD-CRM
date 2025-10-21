@@ -5,26 +5,26 @@ namespace Tests;
 use App\Models\Role;
 use App\Models\Permission;
 use App\Models\OrderRule;
-use App\Models\OrderRuleExclusion; // NEW: Polymorphic exclusions
-use App\Models\OrderRuleSubcategoryExclusion; // OLD: Subcategory-only
+use App\Models\OrderRuleExclusion;
 use App\Models\OrderRuleSubcategoryLimit;
 use App\Models\Subcategory;
+use App\Models\Category;
 use App\Enums\RoleName;
 use App\Enums\PermissionName;
 use App\Enums\Subcategory as SubcategoryEnum;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
- * Base test class for Individual Agreement tests.
+ * Base test class for Consolidated Agreement tests.
  *
- * This class sets up the common infrastructure for Individual Agreement tests:
- * - Creates Role (AGREEMENT) and Permission (INDIVIDUAL)
- * - Creates OrderRule with subcategory exclusions
+ * This class sets up the common infrastructure for Consolidated Agreement tests:
+ * - Creates Role (AGREEMENT) and Permission (CONSOLIDATED)
+ * - Creates OrderRule with subcategory/category exclusions
  * - Creates OrderRule with subcategory product limits
  *
  * Child classes can customize the rules by overriding getSubcategoryExclusions() and getSubcategoryLimits().
  */
-abstract class BaseIndividualAgreementTest extends TestCase
+abstract class BaseConsolidatedAgreementTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -32,17 +32,17 @@ abstract class BaseIndividualAgreementTest extends TestCase
     {
         parent::setUp();
 
-        // Create base role and permission
+        // Create base role and permission for Consolidated
         $agreementRole = Role::create(['name' => RoleName::AGREEMENT->value]);
-        $individualPermission = Permission::create(['name' => PermissionName::INDIVIDUAL->value]);
+        $consolidatedPermission = Permission::create(['name' => PermissionName::CONSOLIDADO->value]);
 
         // Create order rule for exclusions
         $exclusionRule = OrderRule::create([
-            'name' => 'General Subcategory Exclusion Rules',
-            'description' => 'Default subcategory exclusion rules for individual agreements',
+            'name' => 'General Subcategory Exclusion Rules - Consolidated',
+            'description' => 'Default subcategory exclusion rules for consolidated agreements',
             'rule_type' => 'subcategory_exclusion',
             'role_id' => $agreementRole->id,
-            'permission_id' => $individualPermission->id,
+            'permission_id' => $consolidatedPermission->id,
             'priority' => 100,
             'is_active' => true,
         ]);
@@ -50,16 +50,16 @@ abstract class BaseIndividualAgreementTest extends TestCase
         // Get exclusion rules from child class (Template Method Pattern)
         $subcategoryExclusions = $this->getSubcategoryExclusions();
 
-        // Create exclusion rules
+        // Create exclusion rules (Subcategory → Subcategory)
         $this->createSubcategoryExclusions($exclusionRule, $subcategoryExclusions);
 
         // Create order rule for product limits
         $limitRule = OrderRule::create([
-            'name' => 'General Subcategory Product Limits',
-            'description' => 'Default maximum product limits per subcategory for individual agreements',
+            'name' => 'General Subcategory Product Limits - Consolidated',
+            'description' => 'Default maximum product limits per subcategory for consolidated agreements',
             'rule_type' => 'product_limit_per_subcategory',
             'role_id' => $agreementRole->id,
-            'permission_id' => $individualPermission->id,
+            'permission_id' => $consolidatedPermission->id,
             'priority' => 100,
             'is_active' => true,
         ]);
@@ -80,7 +80,7 @@ abstract class BaseIndividualAgreementTest extends TestCase
      */
     protected function getSubcategoryExclusions(): array
     {
-        // Default exclusion rules (standard for most Individual Agreement scenarios)
+        // Default exclusion rules (standard for most Consolidated Agreement scenarios)
         return [
             SubcategoryEnum::PLATO_DE_FONDO->value => [SubcategoryEnum::PLATO_DE_FONDO->value],
             SubcategoryEnum::ENTRADA->value => [SubcategoryEnum::ENTRADA->value],
@@ -111,8 +111,7 @@ abstract class BaseIndividualAgreementTest extends TestCase
      * Create OrderRuleExclusion records from the exclusion rules array.
      *
      * NEW VERSION: Uses polymorphic order_rule_exclusions table.
-     * For backward compatibility, this method still accepts the same array format,
-     * but creates records in the new polymorphic table.
+     * Creates Subcategory → Subcategory exclusions.
      *
      * @param OrderRule $orderRule
      * @param array $subcategoryExclusions Array with format: ['SUBCATEGORY_NAME' => ['EXCLUDED_SUBCATEGORY_1', ...]]
@@ -126,7 +125,7 @@ abstract class BaseIndividualAgreementTest extends TestCase
             foreach ($excludedSubcategories as $excludedSubcategoryName) {
                 $excludedSubcategory = Subcategory::firstOrCreate(['name' => $excludedSubcategoryName]);
 
-                // NEW: Create in polymorphic table
+                // NEW: Create in polymorphic table (Subcategory → Subcategory)
                 OrderRuleExclusion::create([
                     'order_rule_id' => $orderRule->id,
                     'source_id' => $subcategory->id,
@@ -134,16 +133,60 @@ abstract class BaseIndividualAgreementTest extends TestCase
                     'excluded_id' => $excludedSubcategory->id,
                     'excluded_type' => Subcategory::class,
                 ]);
-
-                // OLD CODE (using old table - COMMENTED OUT):
-                /*
-                OrderRuleSubcategoryExclusion::create([
-                    'order_rule_id' => $orderRule->id,
-                    'subcategory_id' => $subcategory->id,
-                    'excluded_subcategory_id' => $excludedSubcategory->id,
-                ]);
-                */
             }
+        }
+    }
+
+    /**
+     * Create polymorphic exclusion rules (supports Subcategory → Category, Category → Subcategory, etc.).
+     *
+     * NEW METHOD: For creating mixed polymorphic exclusions beyond just Subcategory → Subcategory.
+     *
+     * @param OrderRule $orderRule
+     * @param array $exclusions Array with format:
+     *   [
+     *     ['source_type' => Subcategory::class, 'source_name' => 'ENTRADA', 'excluded_type' => Category::class, 'excluded_name' => 'POSTRES'],
+     *     ['source_type' => Category::class, 'source_name' => 'Ensaladas', 'excluded_type' => Subcategory::class, 'excluded_name' => 'SANDWICH'],
+     *   ]
+     * @return void
+     */
+    protected function createPolymorphicExclusions(OrderRule $orderRule, array $exclusions): void
+    {
+        foreach ($exclusions as $exclusion) {
+            // Get or create source entity
+            if ($exclusion['source_type'] === Subcategory::class) {
+                $source = Subcategory::firstOrCreate(['name' => $exclusion['source_name']]);
+            } else {
+                $source = Category::firstOrCreate(
+                    ['name' => $exclusion['source_name']], // Search criteria
+                    [ // Default values if creating
+                        'description' => $exclusion['source_name'],
+                        'is_active' => true,
+                    ]
+                );
+            }
+
+            // Get or create excluded entity
+            if ($exclusion['excluded_type'] === Subcategory::class) {
+                $excluded = Subcategory::firstOrCreate(['name' => $exclusion['excluded_name']]);
+            } else {
+                $excluded = Category::firstOrCreate(
+                    ['name' => $exclusion['excluded_name']], // Search criteria
+                    [ // Default values if creating
+                        'description' => $exclusion['excluded_name'],
+                        'is_active' => true,
+                    ]
+                );
+            }
+
+            // Create polymorphic exclusion
+            OrderRuleExclusion::create([
+                'order_rule_id' => $orderRule->id,
+                'source_id' => $source->id,
+                'source_type' => $exclusion['source_type'],
+                'excluded_id' => $excluded->id,
+                'excluded_type' => $exclusion['excluded_type'],
+            ]);
         }
     }
 

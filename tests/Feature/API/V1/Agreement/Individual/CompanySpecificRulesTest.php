@@ -16,7 +16,8 @@ use App\Models\Subcategory;
 use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\OrderRule;
-use App\Models\OrderRuleSubcategoryExclusion;
+use App\Models\OrderRuleExclusion; // NEW: Polymorphic exclusions
+use App\Models\OrderRuleSubcategoryExclusion; // OLD: Subcategory-only
 use App\Models\OrderRuleSubcategoryLimit;
 use App\Models\Role;
 use App\Models\Permission;
@@ -328,6 +329,11 @@ class CompanySpecificRulesTest extends BaseIndividualAgreementTest
             SubcategoryEnum::PAN_DE_ACOMPANAMIENTO->value => [SubcategoryEnum::SANDWICH->value],
         ];
 
+        // NEW: Use helper method (creates in polymorphic table)
+        $this->createSubcategoryExclusions($companyOrderRule, $companySpecificExclusions);
+
+        // OLD CODE (duplicated code - COMMENTED OUT):
+        /*
         foreach ($companySpecificExclusions as $subcategoryName => $excludedSubcategories) {
             $subcategory = Subcategory::firstOrCreate(['name' => $subcategoryName]);
 
@@ -341,6 +347,7 @@ class CompanySpecificRulesTest extends BaseIndividualAgreementTest
                 ]);
             }
         }
+        */
 
         // CREATE COMPANY-SPECIFIC LIMIT RULE
         // Priority 50 (same as exclusion rule - higher priority than general rule which is 100)

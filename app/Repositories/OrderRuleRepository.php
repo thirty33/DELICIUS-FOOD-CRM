@@ -9,7 +9,11 @@ use Illuminate\Support\Collection;
 class OrderRuleRepository
 {
     /**
-     * Get subcategory exclusions for a user based on their role, permission, and company.
+     * Get SUBCATEGORY exclusions for a user based on their role, permission, and company.
+     *
+     * NEW VERSION: Uses polymorphic order_rule_exclusions table BUT filters to ONLY Subcategory → Subcategory.
+     * IMPORTANT: This method returns ONLY exclusions where BOTH source and excluded are Subcategories.
+     * For Category-based exclusions, create a separate method (e.g., getCategoryExclusionsForUser).
      *
      * Priority order:
      * 1. Order rules associated with the user's company
@@ -20,9 +24,10 @@ class OrderRuleRepository
      * - Type: 'subcategory_exclusion'
      * - Matching user's role and permission
      * - Ordered by priority (lowest priority number = highest priority)
+     * - source_type = Subcategory AND excluded_type = Subcategory
      *
      * @param User $user
-     * @return Collection Collection of OrderRuleSubcategoryExclusion
+     * @return Collection Collection of OrderRuleExclusion where both sides are Subcategories
      */
     public function getSubcategoryExclusionsForUser(User $user): Collection
     {
@@ -61,10 +66,20 @@ class OrderRuleRepository
             return collect();
         }
 
-        // Return the subcategory exclusions for the found order rule
+        // NEW: Return polymorphic exclusions BUT ONLY Subcategory → Subcategory
+        // (SubcategoryExclusion validator only works with subcategories, not categories)
+        return $orderRule->exclusions()
+            ->where('source_type', \App\Models\Subcategory::class)
+            ->where('excluded_type', \App\Models\Subcategory::class)
+            ->with(['source', 'excluded'])
+            ->get();
+
+        // OLD CODE (using old table - COMMENTED OUT):
+        /*
         return $orderRule->subcategoryExclusions()
             ->with(['subcategory', 'excludedSubcategory'])
             ->get();
+        */
     }
 
     /**
