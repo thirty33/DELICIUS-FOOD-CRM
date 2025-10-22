@@ -33,10 +33,10 @@ class PriceListDataExport implements
 
     private $headers = [
         'nombre_de_lista_de_precio' => 'Nombre de Lista de Precio',
-        'precio_minimo' => 'Precio Mínimo',
-        'descripcion' => 'Descripción',
-        'nombre_producto' => 'Nombre Producto',
+        'categoria' => 'Categoría',
         'codigo_de_producto' => 'Código de Producto',
+        'nombre_producto' => 'Nombre Producto',
+        'descripcion' => 'Descripción',
         'precio_unitario' => 'Precio Unitario'
     ];
 
@@ -51,7 +51,7 @@ class PriceListDataExport implements
 
     public function query()
     {
-        return PriceList::with(['companies', 'priceListLines.product'])
+        return PriceList::with(['companies', 'priceListLines.product.category'])
             ->whereIn('id', $this->priceListIds);
     }
     
@@ -67,10 +67,10 @@ class PriceListDataExport implements
             if ($priceList->priceListLines->isEmpty()) {
                 return [
                     'nombre_de_lista_de_precio' => $priceList->name,
-                    'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
-                    'descripcion' => $priceList->description,
-                    'nombre_producto' => null,
+                    'categoria' => null,
                     'codigo_de_producto' => null,
+                    'nombre_producto' => null,
+                    'descripcion' => $priceList->description,
                     'precio_unitario' => null,
                 ];
             }
@@ -80,14 +80,14 @@ class PriceListDataExport implements
             foreach ($priceList->priceListLines as $line) {
                 $rows[] = [
                     'nombre_de_lista_de_precio' => $priceList->name,
-                    'precio_minimo' => $priceList->min_price_order ? '$' . number_format($priceList->min_price_order / 100, 2, '.', ',') : null,
-                    'descripcion' => $priceList->description,
-                    'nombre_producto' => $line->product ? $line->product->name : null,
+                    'categoria' => $line->product && $line->product->category ? $line->product->category->name : null,
                     'codigo_de_producto' => $line->product ? $line->product->code : null,
+                    'nombre_producto' => $line->product ? $line->product->name : null,
+                    'descripcion' => $priceList->description,
                     'precio_unitario' => $line->unit_price ? '$' . number_format($line->unit_price / 100, 2, '.', ',') : null,
                 ];
             }
-            
+
             return $rows;
         } catch (\Exception $e) {
             Log::error('Error mapeando lista de precios para exportación', [

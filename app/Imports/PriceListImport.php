@@ -72,7 +72,7 @@ class PriceListImport implements
         return [
             'name' => $row['nombre_de_lista_de_precio'],
             'description' => $row['descripcion'] ?? null,
-            'min_price_order' => $this->transformPrice($row['precio_minimo'] ?? 0),
+            'min_price_order' => 0, // No longer imported from Excel
         ];
     }
 
@@ -115,15 +115,16 @@ class PriceListImport implements
 
     /**
      * Define validation rules.
+     * Column order matches PriceListDataExport: nombre_de_lista_de_precio, categoria, codigo_de_producto, nombre_producto, descripcion, precio_unitario
      */
     public function rules(): array
     {
         return [
             '*.nombre_de_lista_de_precio' => ['required', 'string', 'min:2', 'max:200'],
-            '*.descripcion' => ['nullable', 'string'],
-            '*.precio_minimo' => ['nullable'],
-            '*.nombre_producto' => ['nullable', 'string'],
+            '*.categoria' => ['nullable', 'string'], // Informational only, not validated
             '*.codigo_de_producto' => ['nullable', 'string'],
+            '*.nombre_producto' => ['nullable', 'string'], // Informational only
+            '*.descripcion' => ['nullable', 'string'],
             '*.precio_unitario' => ['required'],
         ];
     }
@@ -145,7 +146,6 @@ class PriceListImport implements
             '*.nombre_de_lista_de_precio.required' => 'Price list name is required',
             '*.nombre_de_lista_de_precio.min' => 'Name must be at least 2 characters',
             '*.nombre_de_lista_de_precio.max' => 'Name must not exceed 200 characters',
-            '*.precio_minimo.regex' => 'Minimum price must have a valid format (example: $1,568.33 or 1568.33)',
             '*.codigo_de_producto.exists' => 'Product code does not exist',
             '*.precio_unitario.required_with' => 'Unit price is required when a product code is specified',
             '*.precio_unitario.regex' => 'Unit price must have a valid format (example: $1,568.33 or 1568.33)',
@@ -266,22 +266,7 @@ class PriceListImport implements
         $validator->after(function ($validator) {
             $data = $validator->getData();
             foreach ($data as $index => $row) {
-                // Custom validation for precio_minimo
-                if (isset($row['precio_minimo'])) {
-                    $precioMinimo = $row['precio_minimo'];
-                    if (empty($precioMinimo) || $precioMinimo === '-') {
-                        // transformPrice already handles empty values by returning 0
-                    } elseif (!is_numeric($precioMinimo) && !empty($precioMinimo)) {
-                        // If not empty and not numeric, must be valid price format
-                        $cleanPrice = trim(str_replace(['$', ','], '', $precioMinimo));
-                        if (!is_numeric($cleanPrice)) {
-                            $validator->errors()->add(
-                                "{$index}.precio_minimo",
-                                'Minimum price must be a valid number or empty.'
-                            );
-                        }
-                    }
-                }
+                // categoria column is informational only, no validation required
 
                 // Additional validation for products
                 if (isset($row['codigo_de_producto']) && !empty($row['codigo_de_producto'])) {
@@ -302,7 +287,7 @@ class PriceListImport implements
                     }
                 }
 
-                // nombre_producto column is read-only, no additional validation required
+                // nombre_producto and categoria columns are read-only/informational, no additional validation required
             }
         });
     }
