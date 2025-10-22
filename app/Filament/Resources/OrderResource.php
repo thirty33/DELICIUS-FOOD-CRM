@@ -120,6 +120,11 @@ class OrderResource extends Resource
                             ->minValue(0)
                             ->decimals(2)
                             ->disabled(),
+                        Forms\Components\Toggle::make('charge_dispatch')
+                            ->label(__('Cobrar transporte'))
+                            ->default(true)
+                            ->disabledOn('create')
+                            ->helperText(__('Activar para cobrar el costo de transporte en este pedido. Recarga la página después de guardar para ver los cambios.')),
                         MoneyInput::make('tax_amount')
                             ->label(__('IVA'))
                             ->currency('USD')
@@ -179,6 +184,11 @@ class OrderResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('dispatch_date')
+                    ->label(__('Fecha de despacho'))
+                    ->sortable()
+                    ->date('d/m/Y')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('id')
                     ->label(__('ID'))
                     ->sortable()
@@ -209,16 +219,11 @@ class OrderResource extends Resource
                         });
                     })
                     ->description(fn(Order $order) => $order->user->branch?->fantasy_name),
-                Tables\Columns\TextColumn::make('status')
+                Tables\Columns\SelectColumn::make('status')
                     ->label(__('Estado'))
+                    ->options(OrderStatus::getSelectOptions())
                     ->sortable()
-                    ->formatStateUsing(fn(string $state): string => OrderStatus::from($state)->getLabel())
-                    ->color(fn(string $state): string => match ($state) {
-                        OrderStatus::PENDING->value => 'warning',
-                        OrderStatus::PARTIALLY_SCHEDULED->value => 'info',
-                        OrderStatus::PROCESSED->value => 'success',
-                        OrderStatus::CANCELED->value => 'danger',
-                    }),
+                    ->selectablePlaceholder(false),
                 Tables\Columns\TextColumn::make('total_products')
                     ->label(__('Total productos'))
                     ->state(fn(Model $order) => $order->orderLines->sum('quantity')),
@@ -235,11 +240,6 @@ class OrderResource extends Resource
                     ->label(__('Fecha de pedido'))
                     ->sortable()
                     ->dateTime('d/m/Y H:i:s')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('dispatch_date')
-                    ->label(__('Fecha de despacho'))
-                    ->sortable()
-                    ->date('d/m/Y')
                     ->searchable(),
             ])
             ->filters([
@@ -450,7 +450,7 @@ class OrderResource extends Resource
 
                                 self::makeNotification(
                                     'Exportación iniciada',
-                                    'El proceso de exportación finalizará en breve'
+                                    'El proceso de exportación finalizar�� en breve'
                                 )->send();
                             } catch (\Exception $e) {
                                 Log::error('Error en la exportación de líneas de pedido', [

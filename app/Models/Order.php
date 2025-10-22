@@ -23,11 +23,13 @@ class Order extends Model
         'order_number',
         'user_comment',
         'dispatch_cost',
+        'charge_dispatch',
     ];
 
     protected $casts = [
         'user_comment' => 'string',
         'dispatch_cost' => 'integer',
+        'charge_dispatch' => 'boolean',
     ];
 
     protected $appends = [
@@ -154,6 +156,17 @@ class Order extends Model
     public function updateDispatchCost(): void
     {
         try {
+            // If dispatch should not be charged, set dispatch_cost to 0
+            if (!$this->charge_dispatch) {
+                Log::info('Dispatch cost set to 0 - charge_dispatch is false', [
+                    'order_id' => $this->id,
+                    'charge_dispatch' => $this->charge_dispatch
+                ]);
+                $this->dispatch_cost = 0;
+                $this->saveQuietly();
+                return;
+            }
+
             // Skip recalculation if dispatch_cost was manually set during creation (e.g., from import)
             // Only skip if the order was just created AND has a non-zero dispatch_cost
             if ($this->wasRecentlyCreated && $this->dispatch_cost > 0) {
@@ -164,11 +177,17 @@ class Order extends Model
                 return;
             }
 
+            // Calculate dispatch cost only if charge_dispatch is true
             $repository = new DispatchRuleRepository;
             $dispatchCost = $repository->calculateDispatchCost($this);
 
             $this->dispatch_cost = $dispatchCost;
             $this->saveQuietly();
+
+            Log::info('Dispatch cost calculated and saved', [
+                'order_id' => $this->id,
+                'dispatch_cost' => $dispatchCost
+            ]);
         } catch (\Exception $e) {
             Log::error('Error calculating dispatch cost for order:', [
                 'order_id' => $this->id,
