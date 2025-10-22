@@ -51,11 +51,16 @@ class UserImport implements
         'correo_electronico' => 'email',
         'tipo_de_usuario' => 'roles',
         'tipo_de_convenio' => 'permissions',
-        'compania' => 'company_registration_number',
-        'sucursal' => 'branch_code',
+        'codigo_empresa' => 'company_code',
+        'empresa' => 'company_name',
+        'codigo_sucursal' => 'branch_code',
+        'nombre_fantasia_sucursal' => 'branch_fantasy_name',
+        'lista_de_precio' => 'price_list_name',
         'validar_fecha_y_reglas_de_despacho' => 'allow_late_orders',
         'validar_precio_minimo' => 'validate_min_price',
         'validar_reglas_de_subcategoria' => 'validate_subcategory_rules',
+        'usuario_maestro' => 'master_user',
+        'pedidos_en_fines_de_semana' => 'allow_weekend_orders',
         'nombre_de_usuario' => 'nickname',
         'contrasena' => 'plain_password'
     ];
@@ -127,11 +132,16 @@ class UserImport implements
             '*.correo_electronico' => ['nullable', 'string', 'max:200'],
             '*.tipo_de_usuario' => ['required', 'string', 'exists:roles,name'],
             '*.tipo_de_convenio' => ['nullable', 'string', 'exists:permissions,name'],
-            '*.compania' => ['required', 'string', 'exists:companies,registration_number'],
-            '*.sucursal' => ['required', 'string', 'exists:branches,branch_code'],
+            '*.codigo_empresa' => ['required', 'string', 'exists:companies,company_code'],
+            '*.empresa' => ['nullable', 'string'],
+            '*.codigo_sucursal' => ['required', 'string', 'exists:branches,branch_code'],
+            '*.nombre_fantasia_sucursal' => ['nullable', 'string'],
+            '*.lista_de_precio' => ['nullable', 'string'],
             '*.validar_fecha_y_reglas_de_despacho' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
             '*.validar_precio_minimo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
             '*.validar_reglas_de_subcategoria' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
+            '*.usuario_maestro' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
+            '*.pedidos_en_fines_de_semana' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0,si,no,yes,no'],
             '*.nombre_de_usuario' => ['nullable', 'string', 'max:200'],
             '*.contrasena' => ['required', 'string', 'max:200']
         ];
@@ -151,10 +161,10 @@ class UserImport implements
             '*.tipo_de_usuario.required' => 'El tipo de usuario es obligatorio.',
             '*.tipo_de_usuario.exists' => 'El tipo de usuario no existe.',
             '*.tipo_de_convenio.exists' => 'El tipo de convenio no existe.',
-            '*.compania.required' => 'La empresa es obligatoria.',
-            '*.compania.exists' => 'La empresa no existe.',
-            '*.sucursal.required' => 'La sucursal es obligatoria.',
-            '*.sucursal.exists' => 'La sucursal no existe.',
+            '*.codigo_empresa.required' => 'El código de empresa es obligatorio.',
+            '*.codigo_empresa.exists' => 'El código de empresa no existe.',
+            '*.codigo_sucursal.required' => 'El código de sucursal es obligatorio.',
+            '*.codigo_sucursal.exists' => 'El código de sucursal no existe.',
             '*.contrasena.required' => 'La contraseña es obligatoria.',
         ];
     }
@@ -384,36 +394,36 @@ class UserImport implements
             'values' => $row->toArray()
         ]);
         
-        // Find company by registration number
-        $company = Company::where('registration_number', $row['compania'])->first();
+        // Find company by company_code
+        $company = Company::where('company_code', $row['codigo_empresa'])->first();
         if (!$company) {
             Log::error('Compañía no encontrada', [
-                'registration_number' => $row['compania']
+                'company_code' => $row['codigo_empresa']
             ]);
-            throw new \Exception("Compañía con número de registro {$row['compania']} no encontrada.");
+            throw new \Exception("Compañía con código {$row['codigo_empresa']} no encontrada.");
         }
-        
+
         Log::info('Compañía encontrada', [
-            'registration_number' => $row['compania'],
+            'company_code' => $row['codigo_empresa'],
             'company_id' => $company->id,
             'company_name' => $company->name
         ]);
 
         // Find branch by branch code
-        $branch = Branch::where('branch_code', $row['sucursal'])
+        $branch = Branch::where('branch_code', $row['codigo_sucursal'])
             ->where('company_id', $company->id)
             ->first();
-            
+
         if (!$branch) {
             Log::error('Sucursal no encontrada', [
-                'branch_code' => $row['sucursal'],
+                'branch_code' => $row['codigo_sucursal'],
                 'company_id' => $company->id
             ]);
-            throw new \Exception("Sucursal con código {$row['sucursal']} no encontrada para la compañía {$company->name}.");
+            throw new \Exception("Sucursal con código {$row['codigo_sucursal']} no encontrada para la compañía {$company->name}.");
         }
-        
+
         Log::info('Sucursal encontrada', [
-            'branch_code' => $row['sucursal'],
+            'branch_code' => $row['codigo_sucursal'],
             'branch_id' => $branch->id,
             'branch_name' => $branch->fantasy_name
         ]);
@@ -437,14 +447,20 @@ class UserImport implements
         $allowLateOrders = $this->convertToBoolean($row['validar_fecha_y_reglas_de_despacho'] ?? true);
         $validateMinPrice = $this->convertToBoolean($row['validar_precio_minimo'] ?? true);
         $validateSubcategoryRules = $this->convertToBoolean($row['validar_reglas_de_subcategoria'] ?? true);
-        
+        $masterUser = $this->convertToBoolean($row['usuario_maestro'] ?? false);
+        $allowWeekendOrders = $this->convertToBoolean($row['pedidos_en_fines_de_semana'] ?? false);
+
         Log::info('Valores booleanos procesados', [
             'allow_late_orders' => $allowLateOrders,
-            'raw_value' => $row['validar_fecha_y_reglas_de_despacho'] ?? 'null',
+            'raw_value_late_orders' => $row['validar_fecha_y_reglas_de_despacho'] ?? 'null',
             'validate_min_price' => $validateMinPrice,
-            'raw_value' => $row['validar_precio_minimo'] ?? 'null',
+            'raw_value_min_price' => $row['validar_precio_minimo'] ?? 'null',
             'validate_subcategory_rules' => $validateSubcategoryRules,
-            'raw_value' => $row['validar_reglas_de_subcategoria'] ?? 'null'
+            'raw_value_subcategory' => $row['validar_reglas_de_subcategoria'] ?? 'null',
+            'master_user' => $masterUser,
+            'raw_value_master' => $row['usuario_maestro'] ?? 'null',
+            'allow_weekend_orders' => $allowWeekendOrders,
+            'raw_value_weekend' => $row['pedidos_en_fines_de_semana'] ?? 'null'
         ]);
 
         $userData = [
@@ -453,7 +469,9 @@ class UserImport implements
             'branch_id' => $branch->id,
             'allow_late_orders' => $allowLateOrders,
             'validate_min_price' => $validateMinPrice,
-            'validate_subcategory_rules' => $validateSubcategoryRules
+            'validate_subcategory_rules' => $validateSubcategoryRules,
+            'master_user' => $masterUser,
+            'allow_weekend_orders' => $allowWeekendOrders
         ];
 
         // Add email if present (using clean email)
