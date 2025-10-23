@@ -186,62 +186,61 @@ class OrderResource extends Resource
             ->defaultSort('dispatch_date', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('dispatch_date')
-                    ->label(__('Fecha de despacho'))
+                    ->label(__('Fechas'))
                     ->sortable()
-                    ->date('d/m/Y')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('id')
-                    ->label(__('ID'))
-                    ->sortable()
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('order_number')
-                    ->label(__('Número de Orden'))
+                    ->formatStateUsing(fn(string $state) => 'Fecha de despacho: ' . \Carbon\Carbon::parse($state)->format('d/m/Y'))
                     ->searchable()
-                    ->sortable(),
+                    ->description(fn(Order $order) => 'Fecha de pedido: ' . $order->created_at->format('d/m/Y')),
+                Tables\Columns\TextColumn::make('id')
+                    ->label(__('ID / Número'))
+                    ->sortable()
+                    ->searchable()
+                    ->formatStateUsing(fn(string $state) => 'ID: ' . $state)
+                    ->description(fn(Order $order) => 'N°: ' . ($order->order_number ?? 'Sin número')),
                 Tables\Columns\TextColumn::make('user.name')
-                    ->label(__('Cliente'))
+                    ->label(__('Cliente / Empresa'))
                     ->sortable()
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query->whereHas('user', function (Builder $q) use ($search) {
                             $q->where('name', 'like', "%{$search}%")
                               ->orWhere('email', 'like', "%{$search}%")
                               ->orWhere('nickname', 'like', "%{$search}%");
-                        });
-                    })
-                    ->description(fn(Order $order) => $order->user->email ?: $order->user->nickname),
-                Tables\Columns\TextColumn::make('user.company.fantasy_name')
-                    ->label(__('Empresa'))
-                    ->sortable()
-                    ->searchable(query: function (Builder $query, string $search): Builder {
-                        return $query->whereHas('user.company', function (Builder $q) use ($search) {
+                        })->orWhereHas('user.company', function (Builder $q) use ($search) {
                             $q->where('fantasy_name', 'like', "%{$search}%");
                         })->orWhereHas('user.branch', function (Builder $q) use ($search) {
                             $q->where('fantasy_name', 'like', "%{$search}%");
                         });
                     })
-                    ->description(fn(Order $order) => $order->user->branch?->fantasy_name),
+                    ->formatStateUsing(fn(string $state, Order $order) =>
+                        'Cliente: ' . \Illuminate\Support\Str::limit($state, 30) . ' (' . \Illuminate\Support\Str::limit($order->user->email ?: $order->user->nickname, 20) . ')'
+                    )
+                    ->html()
+                    ->description(fn(Order $order) =>
+                        new \Illuminate\Support\HtmlString(
+                            'Empresa: ' . \Illuminate\Support\Str::limit($order->user->company?->fantasy_name ?? 'Sin empresa', 40) . '<br>' .
+                            'Sucursal: ' . \Illuminate\Support\Str::limit($order->user->branch?->fantasy_name ?? 'Sin sucursal', 40)
+                        )
+                    )
+                    ->wrap(),
                 Tables\Columns\SelectColumn::make('status')
                     ->label(__('Estado'))
                     ->options(OrderStatus::getSelectOptions())
                     ->sortable()
                     ->selectablePlaceholder(false),
-                Tables\Columns\TextColumn::make('total_products')
-                    ->label(__('Total productos'))
-                    ->state(fn(Model $order) => $order->orderLines->sum('quantity')),
-                MoneyColumn::make('grand_total')
-                    ->label(__('Total'))
-                    ->currency('USD')
-                    ->locale('en_US'),
-                MoneyColumn::make('dispatch_cost')
-                    ->label(__('Costo de despacho'))
-                    ->currency('USD')
-                    ->locale('en_US')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label(__('Fecha de pedido'))
-                    ->sortable()
-                    ->dateTime('d/m/Y H:i:s')
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('grand_total')
+                    ->label(__('Totales'))
+                    ->formatStateUsing(fn(Order $order) =>
+                        'Neto: $' . number_format($order->total / 100, 2, ',', '.')
+                    )
+                    ->html()
+                    ->description(fn(Order $order) =>
+                        new \Illuminate\Support\HtmlString(
+                            'Despacho: $' . number_format($order->dispatch_cost / 100, 2, ',', '.') . '<br>' .
+                            'IVA: $' . number_format($order->tax_amount / 100, 2, ',', '.') . '<br>' .
+                            '<strong>Total Final: $' . number_format($order->grand_total / 100, 2, ',', '.') . '</strong>'
+                        )
+                    )
+                    ->sortable(),
             ])
             ->filters([
                 DateRangeFilter::make('created_at')
@@ -259,6 +258,15 @@ class OrderResource extends Resource
             ])
             ->actions([
                 ActionsActionGroup::make([
+                    Tables\Actions\Action::make('preview')
+                        ->label('Vista previa')
+                        ->icon('heroicon-o-eye')
+                        ->color('info')
+                        ->modalHeading(fn(Order $record) => 'Pedido #' . $record->id . ' - ' . ($record->order_number ?? 'Sin número'))
+                        ->modalWidth(MaxWidth::FiveExtraLarge)
+                        ->modalContent(fn(Order $record) => view('filament.resources.order-resource.preview', [
+                            'order' => $record->load(['user.company', 'user.branch', 'orderLines.product.category'])
+                        ])),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make()
                         ->action(function (Order $record) {

@@ -20,11 +20,11 @@ class CategoryMenuRepository
      *
      * @param Menu $menu
      * @param User $user
-     * @param int|null $priorityGroup
+     * @param string|null $priorityGroup The category group name (e.g., "ensaladas", "gohan")
      * @param int $perPage
      * @return LengthAwarePaginator
      */
-    public function getCategoryMenusForUser(Menu $menu, User $user, ?int $priorityGroup = null, int $perPage = 15): LengthAwarePaginator
+    public function getCategoryMenusForUser(Menu $menu, User $user, ?string $priorityGroup = null, int $perPage = 15): LengthAwarePaginator
     {
         $publicationDate = Carbon::parse($menu->publication_date);
         $weekday = ucfirst(strtolower($publicationDate->isoFormat('dddd')));

@@ -16,45 +16,56 @@ class AuthSanctumService implements AuthServiceInterface
             return ApiResponseService::unauthorized('Email or nickname is required');
         }
 
-        if (auth()->attempt([
+        // Use 'web' guard explicitly for login attempt (supports session-based authentication)
+        // This is required because the default guard may be 'sanctum' which doesn't support attempt()
+        if (auth('web')->attempt([
             'email' => $identifier,
             'password' => data_get($credentials, 'password'),
         ])) {
 
-            $token = auth()
-                ->user()
-                ->createToken(data_get($credentials, 'device_name'))
+            $user = auth('web')->user();
+
+            // Revoke all previous tokens to ensure only one active session per user
+            // This prevents users from having multiple concurrent sessions
+            $user->tokens()->delete();
+
+            $token = $user->createToken(data_get($credentials, 'device_name'))
                 ->plainTextToken;
 
             return ApiResponseService::success([
                 'token' => $token,
                 'token_type' => 'bearer',
-                'role' => optional(auth()->user()->roles->first())->name ?? null,
-                'permission' => optional(auth()->user()->permissions->first())->name ?? null,
-                'master_user' => auth()->user()->master_user ?? false,
-                'nickname' => auth()->user()->nickname ?? '',
-                'name' => auth()->user()->name ?? '',
+                'role' => optional($user->roles->first())->name ?? null,
+                'permission' => optional($user->permissions->first())->name ?? null,
+                'master_user' => $user->master_user ?? false,
+                'nickname' => $user->nickname ?? '',
+                'name' => $user->name ?? '',
             ]);
         }
 
-        if (auth()->attempt([
+        // Try login with nickname as fallback
+        if (auth('web')->attempt([
             'nickname' => $identifier,
             'password' => data_get($credentials, 'password'),
         ])) {
 
-            $token = auth()
-                ->user()
-                ->createToken(data_get($credentials, 'device_name'))
+            $user = auth('web')->user();
+
+            // Revoke all previous tokens to ensure only one active session per user
+            // This prevents users from having multiple concurrent sessions
+            $user->tokens()->delete();
+
+            $token = $user->createToken(data_get($credentials, 'device_name'))
                 ->plainTextToken;
 
             return ApiResponseService::success([
                 'token' => $token,
                 'token_type' => 'bearer',
-                'role' => optional(auth()->user()->roles->first())->name ?? null,
-                'permission' => optional(auth()->user()->permissions->first())->name ?? null,
-                'master_user' => auth()->user()->master_user ?? false,
-                'nickname' => auth()->user()->nickname ?? '',
-                'name' => auth()->user()->name ?? '',
+                'role' => optional($user->roles->first())->name ?? null,
+                'permission' => optional($user->permissions->first())->name ?? null,
+                'master_user' => $user->master_user ?? false,
+                'nickname' => $user->nickname ?? '',
+                'name' => $user->name ?? '',
             ]);
         }
 
