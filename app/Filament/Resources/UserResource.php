@@ -126,12 +126,7 @@ class UserResource extends Resource
                     ->required()
                     ->searchable(),
                 Forms\Components\Section::make(__('Información de contraseña'))
-                    ->description(__('La contraseña debe cumplir con los siguientes requisitos de seguridad:
-                    • Mínimo 8 caracteres y máximo 25
-                    • Al menos una letra minúscula (a-z)
-                    • Al menos una letra mayúscula (A-Z)
-                    • Al menos un número (0-9)
-                    • Al menos un carácter especial (@$!%*?&#)'))
+                    ->description(__('La contraseña debe tener entre 8 y 25 caracteres'))
                     ->schema([
                         // Campo para mostrar la contraseña en texto plano
                         TextInput::make('plain_password')
@@ -156,101 +151,36 @@ class UserResource extends Resource
 
                         TextInput::make('password')
                             ->password()
-                            // Descripción de los requisitos de la contraseña
-                            ->helperText(__('Debe tener entre 8 y 25 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales (@$!%*?&#)'))
-                            // Modificado para guardar también en plain_password
-                            ->live() // Hacer el campo live para poder reaccionar a cambios
-                            ->afterStateUpdated(function (TextInput $component, $state, $livewire) {
-                                // Si se ingresó una nueva contraseña, actualizar el campo de visualización
-                                if (!empty($state)) {
-                                    \Log::info('Password field updated - afterStateUpdated', [
-                                        'state_length' => strlen($state),
-                                        'is_create' => !isset($livewire->record)
-                                    ]);
-
-                                    // También actualizamos el campo oculto con la contraseña original
-                                    $livewire->data['plain_password_input'] = $state;
-
-                                    // Para mostrar en tiempo real
-                                    $livewire->data['plain_password'] = $state;
-                                }
-                            })
+                            ->revealable()
                             ->dehydrateStateUsing(function ($state, $record = null) {
-                                // Log al inicio de dehydrateStateUsing
-                                \Log::info('Password dehydrateStateUsing - start', [
-                                    'state' => $state,
-                                    'record_id' => $record ? $record->id : null,
-                                    'is_creating' => $record === null
-                                ]);
-
-                                // Si hay un valor nuevo de contraseña
                                 if (filled($state)) {
-                                    // Solo guardamos plain_password si $record no es null
                                     if ($record !== null) {
-                                        \Log::info('Saving plain_password to DB directly', [
-                                            'user_id' => $record->id,
-                                            'plain_password_length' => strlen($state)
-                                        ]);
-
                                         try {
-                                            // Guardamos directamente en la base de datos para evitar que pase por los mutators del modelo
                                             \DB::table('users')
                                                 ->where('id', $record->id)
                                                 ->update(['plain_password' => $state]);
-
-                                            \Log::info('Successfully saved plain_password');
                                         } catch (\Exception $e) {
                                             \Log::error('Error saving plain_password', [
                                                 'error' => $e->getMessage(),
                                                 'trace' => $e->getTraceAsString()
                                             ]);
                                         }
-                                    } else {
-                                        \Log::info('Record is null, not saving plain_password yet');
                                     }
 
-                                    // Devolver el hash para password
-                                    $hashedPassword = Hash::make($state);
-                                    \Log::info('Returning hashed password', [
-                                        'hash_length' => strlen($hashedPassword)
-                                    ]);
-                                    return $hashedPassword;
+                                    return Hash::make($state);
                                 }
 
-                                \Log::info('No new password provided, returning null');
-                                return null; // No modificar la contraseña si está vacío
+                                return null;
                             })
                             ->dehydrated(fn($state) => filled($state))
                             ->required(fn(string $context): bool => $context === 'create')
                             ->confirmed()
                             ->minLength(8)
                             ->maxLength(25)
-                            ->rule(function () {
-                                return function (string $attribute, $value, Closure $fail) {
-                                    // Check lowercase
-                                    if (!preg_match('/[a-z]/', $value)) {
-                                        $fail(__('La contraseña debe contener al menos una letra minúscula.'));
-                                    }
-
-                                    // Check uppercase
-                                    if (!preg_match('/[A-Z]/', $value)) {
-                                        $fail(__('La contraseña debe contener al menos una letra mayúscula.'));
-                                    }
-
-                                    // Check number
-                                    if (!preg_match('/[0-9]/', $value)) {
-                                        $fail(__('La contraseña debe contener al menos un número.'));
-                                    }
-
-                                    // Check special character
-                                    if (!preg_match('/[@$!%*?&#]/', $value)) {
-                                        $fail(__('La contraseña debe contener al menos un carácter especial (@$!%*?&#).'));
-                                    }
-                                };
-                            })
                             ->label(__('Contraseña')),
                         TextInput::make('password_confirmation')
                             ->password()
+                            ->revealable()
                             ->label(__('Confirmar contraseña')),
                     ]),
                 Toggle::make('allow_late_orders')
