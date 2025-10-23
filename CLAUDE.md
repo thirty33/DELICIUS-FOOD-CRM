@@ -655,6 +655,227 @@ This test demonstrates anonymized production data replication for order status u
 
 ---
 
+## MANDATORY: Model and Migration Review Before Creating Tests
+
+### ⚠️ CRITICAL PROTOCOL - MUST FOLLOW FOR EVERY TEST ⚠️
+
+**BEFORE writing ANY test that creates model instances, you MUST:**
+
+1. **Read CLAUDE.md FIRST** - Review testing guidelines and data anonymization rules
+2. **Review ALL model migrations** - Understand required fields and constraints
+3. **Review ALL model classes** - Understand fillable fields, relationships, and casts
+4. **Verify table relationships** - Check pivot tables and foreign keys
+5. **Test with tinker** - Validate queries work before writing test code
+
+### Required Tables to Review
+
+For EVERY model you use in a test, review:
+
+1. **Primary Migration** (`create_{table}_table.php`) - Base schema
+2. **Update Migrations** (`update_{table}_table.php`) - Added columns
+3. **Model Class** (`app/Models/{Model}.php`) - Fillable, casts, relationships
+4. **Pivot Tables** (if applicable) - Junction table structure
+
+### Example Checklist for Order Tests
+
+When creating a test involving Orders:
+
+- [ ] Read `database/migrations/*create_orders_table.php`
+- [ ] Read `database/migrations/*update_orders_table.php` (all updates)
+- [ ] Read `app/Models/Order.php` - Check fillable, appends, relationships
+- [ ] Read `database/migrations/*create_order_lines_table.php`
+- [ ] Read `app/Models/OrderLine.php`
+- [ ] Read `database/migrations/*create_dispatch_rules_table.php`
+- [ ] Read `database/migrations/*create_dispatch_rule_ranges_table.php`
+- [ ] Read `database/migrations/*create_dispatch_rule_companies_table.php` (pivot)
+- [ ] Read `database/migrations/*create_dispatch_rule_branches_table.php` (pivot)
+- [ ] Read `app/Models/DispatchRule.php` - Verify relationship method names
+- [ ] Read `app/Models/DispatchRuleRange.php`
+- [ ] Test query in tinker: `DispatchRule::whereHas('companies', fn($q) => $q->where('companies.id', 1))->first()`
+
+### Common Mistakes to Avoid
+
+#### Mistake 1: Using Non-Existent Fields
+
+❌ **WRONG**:
+```php
+Branch::create([
+    'name' => 'Test Branch',  // Field doesn't exist!
+    'company_id' => $company->id,
+]);
+```
+
+✅ **CORRECT**:
+```bash
+# First check migration
+cat database/migrations/*create_branches_table.php
+
+# Then check model
+cat app/Models/Branch.php
+```
+
+```php
+Branch::create([
+    'company_id' => $company->id,  // Only use fields that exist
+    'address' => 'Test Address',
+    'min_price_order' => 0,
+]);
+```
+
+#### Mistake 2: Wrong Column Names in Relationships
+
+❌ **WRONG**:
+```php
+Menu::create([
+    'permission_id' => $permission->id,  // Column is 'permissions_id'!
+]);
+```
+
+✅ **CORRECT**:
+```bash
+# Check migration first
+cat database/migrations/*update_menus_table.php
+# Shows: $table->unsignedBigInteger('permissions_id')
+```
+
+```php
+Menu::create([
+    'permissions_id' => $permission->id,  // Use exact column name
+]);
+```
+
+#### Mistake 3: Missing Required Fields
+
+❌ **WRONG**:
+```php
+CategoryLine::create([
+    'category_id' => $category->id,
+    'weekday' => 'monday',
+    // Missing required fields!
+]);
+```
+
+✅ **CORRECT**:
+```bash
+# Check migration
+cat database/migrations/*create_category_lines_table.php
+# Shows: preparation_days, maximum_order_time are required
+```
+
+```php
+CategoryLine::create([
+    'category_id' => $category->id,
+    'weekday' => 'monday',
+    'preparation_days' => 1,        // Required
+    'maximum_order_time' => '15:00:00',  // Required
+    'active' => true,
+]);
+```
+
+#### Mistake 4: Wrong Relationship Queries
+
+❌ **WRONG**:
+```php
+DispatchRule::whereHas('companies', function($q) use ($companyId) {
+    $q->where('company_id', $companyId);  // Wrong table context!
+});
+```
+
+✅ **CORRECT**:
+```bash
+# Check pivot table migration
+cat database/migrations/*create_dispatch_rule_companies_table.php
+# Shows: dispatch_rule_id, company_id
+
+# Check model relationship
+cat app/Models/DispatchRule.php
+# Shows: belongsToMany(Company::class, 'dispatch_rule_companies')
+```
+
+```php
+DispatchRule::whereHas('companies', function($q) use ($companyId) {
+    $q->where('companies.id', $companyId);  // Reference parent table
+});
+```
+
+### Investigation Workflow
+
+**Step 1: Use Tinker to Understand Production Data**
+```bash
+./vendor/bin/sail tinker --execute="
+\$order = App\Models\Order::find(193);
+echo \"Order Lines: \" . \$order->orderLines->count() . \"\\n\";
+echo \"Dispatch Cost: \" . \$order->dispatch_cost . \"\\n\";
+echo \"User Company: \" . \$order->user->company->name . \"\\n\";
+"
+```
+
+**Step 2: Find Related Tables**
+```bash
+# Find all migrations for a model
+ls -la database/migrations/ | grep dispatch
+
+# Read them in chronological order
+cat database/migrations/2025_08_27_132308_create_dispatch_rules_table.php
+cat database/migrations/2025_08_27_132315_create_dispatch_rule_companies_table.php
+cat database/migrations/2025_08_27_132326_create_dispatch_rule_ranges_table.php
+```
+
+**Step 3: Verify Model Relationships**
+```bash
+cat app/Models/DispatchRule.php | grep -A 3 "function companies"
+# Output: public function companies(): BelongsToMany
+#         {
+#             return $this->belongsToMany(Company::class, 'dispatch_rule_companies')
+```
+
+**Step 4: Test Query Before Using in Test**
+```bash
+./vendor/bin/sail tinker --execute="
+\$rule = App\Models\DispatchRule::whereHas('companies', function(\$q) {
+    \$q->where('companies.id', 489);
+})->first();
+echo \"Found rule: \" . \$rule->name . \"\\n\";
+"
+```
+
+**Step 5: Only Then Write Test Code**
+
+### Case Study: EmptyOrderDispatchCostBugTest
+
+**Problems Encountered:**
+
+1. ❌ Used `Branch::create(['name' => ...])` - field doesn't exist
+2. ❌ Used `Menu::create(['permission_id' => ...])` - should be `permissions_id`
+3. ❌ Used `DispatchRule::create(['role_id' => ...])` - fields don't exist
+4. ❌ Used `CategoryLine::create(['day_of_week' => 6])` - should be `weekday => 'saturday'`
+5. ❌ Missing `preparation_days` and `maximum_order_time` in CategoryLine
+6. ❌ Wrong query `where('company_id', $id)` in whereHas - should be `where('companies.id', $id)`
+
+**Time Wasted**: ~2 hours debugging errors that could have been avoided
+
+**Correct Approach**:
+1. Read CLAUDE.md first (5 minutes)
+2. Review all 15 migrations (15 minutes)
+3. Review all 8 model files (10 minutes)
+4. Test queries in tinker (5 minutes)
+5. Write test (10 minutes)
+
+**Total Time**: 45 minutes vs 2+ hours
+
+### Enforcement Rule
+
+**IF you start writing a test without reviewing migrations and models:**
+1. STOP immediately
+2. User will ask: "¿revisaste las migraciones y modelos?"
+3. You MUST go back and review them
+4. Document what you found
+5. Then proceed with the test
+
+This is **NON-NEGOTIABLE** and applies to EVERY test creation.
+
+---
+
 ## Critical Lessons: Creating Production Replica Tests
 
 ### Lesson 1: ALWAYS Replicate EXACT Production Structure

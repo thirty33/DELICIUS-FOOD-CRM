@@ -156,6 +156,22 @@ class Order extends Model
     public function updateDispatchCost(): void
     {
         try {
+            // Refresh orderLines relationship to ensure we have the latest data from DB
+            // This is critical when orderLines are deleted and the order is updated
+            $this->load('orderLines');
+
+            // If order has no products, dispatch cost must be 0
+            // There's nothing to dispatch in an empty order
+            if ($this->orderLines->count() === 0) {
+                Log::info('Dispatch cost set to 0 - order has no products', [
+                    'order_id' => $this->id,
+                    'order_lines_count' => 0
+                ]);
+                $this->dispatch_cost = 0;
+                $this->saveQuietly();
+                return;
+            }
+
             // If dispatch should not be charged, set dispatch_cost to 0
             if (!$this->charge_dispatch) {
                 Log::info('Dispatch cost set to 0 - charge_dispatch is false', [
