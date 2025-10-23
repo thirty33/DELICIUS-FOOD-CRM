@@ -183,6 +183,7 @@ class OrderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultSort('dispatch_date', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('dispatch_date')
                     ->label(__('Fecha de despacho'))

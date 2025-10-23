@@ -11,6 +11,8 @@ use App\Models\Branch;
 use App\Models\ImportProcess;
 use App\Enums\OrderStatus;
 use App\Classes\ErrorManagment\ExportErrorHandler;
+use App\Classes\Orders\Validations\OrderStatusValidation;
+use App\Classes\Orders\Validations\MaxOrderAmountValidation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -352,20 +354,11 @@ class OrderLinesImport implements
             // Agrupar filas por código de pedido para procesarlas juntas
             $rowsByOrderNumber = $filteredRows->groupBy('codigo_de_pedido');
 
-            DB::beginTransaction();
-
-            try {
-                // Procesar cada grupo de pedidos
-                foreach ($rowsByOrderNumber as $orderNumber => $orderRows) {
-                    // Limpiar comilla inicial del código de pedido
-                    $cleanOrderNumber = $this->cleanQuotedValue($orderNumber);
-                    $this->processOrderRows($cleanOrderNumber, $orderRows);
-                }
-
-                DB::commit();
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
+            // Process each order independently (each order handles its own transaction)
+            foreach ($rowsByOrderNumber as $orderNumber => $orderRows) {
+                // Limpiar comilla inicial del código de pedido
+                $cleanOrderNumber = $this->cleanQuotedValue($orderNumber);
+                $this->processOrderRows($cleanOrderNumber, $orderRows);
             }
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
@@ -384,12 +377,16 @@ class OrderLinesImport implements
 
     /**
      * Process all rows for a single order
-     * 
+     * Each order is processed in its own transaction for isolation
+     *
      * @param string|int $orderNumber
      * @param Collection $rows
      */
     private function processOrderRows($orderNumber, Collection $rows)
     {
+        // Start a transaction for this specific order
+        DB::beginTransaction();
+
         try {
             // Usar el primer registro para obtener datos de la orden
             $firstRow = $rows->first();
@@ -408,6 +405,7 @@ class OrderLinesImport implements
             // Si ambos campos están vacíos, crear orden completamente nueva sin order_number
             if (empty($idOrden) && empty($orderNumber)) {
                 $this->createNewOrder($rows);
+                DB::commit();
                 return;
             }
 
@@ -431,24 +429,32 @@ class OrderLinesImport implements
                             'order_id' => $existingOrder->id
                         ]);
                         $this->processOrderLines($processedData['order_id'], $rows);
+                        DB::commit();
                         return;
                     }
                 }
 
                 // Actualizar orden existente
                 $this->updateExistingOrder($existingOrder, $rows);
+                DB::commit();
                 return;
             }
 
             // Si hay order_number pero no existe en la BD, crear nueva orden con ese número
             if (!empty($orderNumber)) {
                 $this->createNewOrderWithNumber($orderNumber, $rows);
+                DB::commit();
                 return;
             }
 
             // Si solo hay id_orden pero no order_number, crear orden nueva sin número específico
             $this->createNewOrder($rows);
+            DB::commit();
+
         } catch (\Exception $e) {
+            // Rollback this specific order's transaction
+            DB::rollBack();
+
             ExportErrorHandler::handle(
                 $e,
                 $this->importProcessId,
@@ -456,9 +462,12 @@ class OrderLinesImport implements
                 'ImportProcess'
             );
 
-            Log::error("Error procesando pedido {$orderNumber}", [
-                'error' => $e->getMessage()
+            Log::error("Error procesando pedido {$orderNumber} - Rollback ejecutado", [
+                'error' => $e->getMessage(),
+                'order_number' => $orderNumber
             ]);
+
+            // DO NOT re-throw - allow processing to continue with next order
         }
     }
 
@@ -517,6 +526,9 @@ class OrderLinesImport implements
             // Procesar las líneas de pedido
             $this->processOrderLines($order->id, $rows);
 
+            // Execute validation chain
+            $this->executeValidationChain($order, $this->buildImportValidationChain());
+
             Log::info("Pedido actualizado con éxito", [
                 'order_id' => $order->id,
                 'order_number' => $order->order_number
@@ -533,6 +545,9 @@ class OrderLinesImport implements
                 'order_id' => $order->id,
                 'error' => $e->getMessage()
             ]);
+
+            // Re-throw to trigger rollback in processOrderRows
+            throw $e;
         }
     }
 
@@ -589,6 +604,9 @@ class OrderLinesImport implements
             // Procesar las líneas de pedido
             $this->processOrderLines($order->id, $rows);
 
+            // Execute validation chain
+            $this->executeValidationChain($order, $this->buildImportValidationChain());
+
             Log::info("Pedido creado con order_number específico", [
                 'order_id' => $order->id,
                 'order_number' => $orderNumber
@@ -605,6 +623,9 @@ class OrderLinesImport implements
                 'order_number' => $orderNumber,
                 'error' => $e->getMessage()
             ]);
+
+            // Re-throw to trigger rollback in processOrderRows
+            throw $e;
         }
     }
 
@@ -659,6 +680,9 @@ class OrderLinesImport implements
             // Procesar las líneas de pedido
             $this->processOrderLines($order->id, $rows);
 
+            // Execute validation chain
+            $this->executeValidationChain($order, $this->buildImportValidationChain());
+
             Log::info("Pedido creado con éxito", [
                 'order_id' => $order->id,
                 'order_number' => $order->order_number
@@ -674,6 +698,9 @@ class OrderLinesImport implements
             Log::error("Error creando nuevo pedido", [
                 'error' => $e->getMessage()
             ]);
+
+            // Re-throw to trigger rollback in processOrderRows
+            throw $e;
         }
     }
 
@@ -740,8 +767,63 @@ class OrderLinesImport implements
     }
 
     /**
+     * Execute validation chain on an order
+     *
+     * @param Order $order
+     * @param OrderStatusValidation $validationChain
+     * @throws Exception
+     */
+    private function executeValidationChain(Order $order, OrderStatusValidation $validationChain): void
+    {
+        try {
+            // Refresh order to get calculated totals and relations
+            $order = $order->fresh(['orderLines.product.category.subcategories']);
+
+            // Get user and date from order
+            $user = $order->user;
+            $date = Carbon::parse($order->dispatch_date);
+
+            // Execute the validation chain
+            $validationChain->validate($order, $user, $date);
+
+        } catch (Exception $e) {
+            // Log validation failure with context
+            Log::warning('Order validation failed during import', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'user_id' => $order->user_id,
+                'validation_chain' => get_class($validationChain),
+                'error' => $e->getMessage()
+            ]);
+
+            // Re-throw to be handled by caller's error handler
+            throw $e;
+        }
+    }
+
+    /**
+     * Build the validation chain for imported orders
+     *
+     * @return OrderStatusValidation
+     */
+    private function buildImportValidationChain(): OrderStatusValidation
+    {
+        // Start with minimum price validation
+        $validationChain = new MaxOrderAmountValidation();
+
+        // Future validations can be added here by chaining:
+        // $validationChain
+        //     ->linkWith(new SubcategoryExclusion())
+        //     ->linkWith(new MenuCompositionValidation())
+        //     ->linkWith(new MandatoryCategoryValidation())
+        //     ->linkWith(new ExactProductCountPerSubcategory());
+
+        return $validationChain;
+    }
+
+    /**
      * Convert status string to its corresponding value
-     * 
+     *
      * @param string $statusLabel
      * @return int|string
      */
