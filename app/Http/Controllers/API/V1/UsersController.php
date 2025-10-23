@@ -32,8 +32,9 @@ class UsersController extends Controller
 
             $masterUser = $request->user();
 
-            // Get users from the same company and branch as the master user
+            // Get subordinate users from the same company (exclude master users)
             $subordinateUsers = User::where('company_id', $masterUser->company_id)
+                ->where('master_user', false)
                 ->with(['branch'])
                 ->get();
 
