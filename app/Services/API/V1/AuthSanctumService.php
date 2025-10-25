@@ -25,6 +25,9 @@ class AuthSanctumService implements AuthServiceInterface
 
             $user = auth('web')->user();
 
+            // Load branch relationship to access fantasy_name
+            $user->load('branch');
+
             // Revoke all previous tokens to ensure only one active session per user
             // This prevents users from having multiple concurrent sessions
             $user->tokens()->delete();
@@ -40,6 +43,7 @@ class AuthSanctumService implements AuthServiceInterface
                 'master_user' => $user->master_user ?? false,
                 'nickname' => $user->nickname ?? '',
                 'name' => $user->name ?? '',
+                'branch_fantasy_name' => optional($user->branch)->fantasy_name ?? null,
             ]);
         }
 
@@ -51,6 +55,9 @@ class AuthSanctumService implements AuthServiceInterface
 
             $user = auth('web')->user();
 
+            // Load branch relationship to access fantasy_name
+            $user->load('branch');
+
             // Revoke all previous tokens to ensure only one active session per user
             // This prevents users from having multiple concurrent sessions
             $user->tokens()->delete();
@@ -66,6 +73,7 @@ class AuthSanctumService implements AuthServiceInterface
                 'master_user' => $user->master_user ?? false,
                 'nickname' => $user->nickname ?? '',
                 'name' => $user->name ?? '',
+                'branch_fantasy_name' => optional($user->branch)->fantasy_name ?? null,
             ]);
         }
 

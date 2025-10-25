@@ -53,7 +53,7 @@ class AuthenticationTest extends TestCase
 
     /**
      * Test that login throttling works and returns 429 after exceeding the limit
-     * 
+     *
      * The route is configured to allow 10 requests per minute
      */
     #[Test]
@@ -76,5 +76,33 @@ class AuthenticationTest extends TestCase
         $this->postJson(route('v1.login'), $loginData)
             ->assertStatus(429)
             ->assertJsonStructure(['message']);
+    }
+
+    /**
+     * Test that login returns branch fantasy name in the response
+     *
+     * TDD Test: Verifies that the API returns the branch's fantasy name
+     * when a user successfully logs in
+     */
+    #[Test]
+    public function login_returns_branch_fantasy_name(): void
+    {
+        // Create a user with a branch that has a fantasy name
+        $user = User::factory()
+            ->for(\App\Models\Branch::factory()->create([
+                'fantasy_name' => 'Test Fantasy Branch Name'
+            ]))
+            ->create();
+
+        $response = $this->postJson(route('v1.login'), [
+            'email' => $user->email,
+            'password' => 'password',
+            'device_name' => 'test'
+        ])
+            ->assertOk();
+
+        // Assert that the response contains the branch fantasy name
+        $this->assertArrayHasKey('branch_fantasy_name', $response->json('data'));
+        $this->assertEquals('Test Fantasy Branch Name', $response->json('data.branch_fantasy_name'));
     }
 }
