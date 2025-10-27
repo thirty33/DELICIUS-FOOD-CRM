@@ -194,8 +194,8 @@ abstract class VoucherGenerator
                 text-align: center;
                 font-size: 10px;
             }
-            .products-table .col-product { width: 60%; }
-            .products-table .col-qty { width: 20%; }
+            .products-table .col-product { width: 65%; }
+            .products-table .col-qty { width: 15%; }
             .products-table .col-subtotal { width: 20%; }
             .products-table td {
                 padding: 4px 3px;
