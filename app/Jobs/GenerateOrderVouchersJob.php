@@ -25,10 +25,11 @@ class GenerateOrderVouchersJob implements ShouldQueue
     private $exportProcessId;
     private $consolidated;
 
-    public function __construct(array $orderIds, bool $consolidated = false)
+    public function __construct(array $orderIds, bool $consolidated = false, int $exportProcessId = null)
     {
         $this->orderIds = $orderIds;
         $this->consolidated = $consolidated;
+        $this->exportProcessId = $exportProcessId;
     }
 
     public function handle()
@@ -51,25 +52,7 @@ class GenerateOrderVouchersJob implements ShouldQueue
             throw new \Exception('No se encontraron órdenes con los IDs proporcionados');
         }
 
-        $orderNumbers = $orders->pluck('order_number')->sort()->values();
-        $firstOrder = $orderNumbers->first();
-        $lastOrder = $orderNumbers->last();
-        $totalOrders = $orders->count();
-
-        $voucherType = $this->consolidated ? 'consolidados' : 'individuales';
-        $description = $totalOrders === 1
-            ? "Voucher del pedido #{$firstOrder}"
-            : "Vouchers {$voucherType} de {$totalOrders} pedidos (#{$firstOrder} a #{$lastOrder})";
-
-        $exportProcess = ExportProcess::create([
-            'type' => ExportProcess::TYPE_VOUCHERS,
-            'description' => $description,
-            'status' => ExportProcess::STATUS_QUEUED,
-            'file_url' => '-'
-        ]);
-
-        $this->exportProcessId = $exportProcess->id;
-
+        $exportProcess = ExportProcess::findOrFail($this->exportProcessId);
         $exportProcess->update(['status' => ExportProcess::STATUS_PROCESSING]);
 
         // Generate PDF using appropriate generator
@@ -80,6 +63,11 @@ class GenerateOrderVouchersJob implements ShouldQueue
             $generator = new VoucherPdfGenerator();
             $pdfContent = $generator->generateMultiVoucherPdf($orders);
         }
+
+        $orderNumbers = $orders->pluck('order_number')->sort()->values();
+        $firstOrder = $orderNumbers->first();
+        $lastOrder = $orderNumbers->last();
+        $totalOrders = $orders->count();
 
         $timestamp = now()->format('Ymd_His');
         $dateStr = now()->format('Y/m/d');

@@ -3,6 +3,8 @@
 namespace App\Filament\Resources;
 
 use App\Enums\OrderStatus;
+use App\Enums\RoleName;
+use App\Enums\PermissionName;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Order;
@@ -26,8 +28,10 @@ use Filament\Forms\Get;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Exports\OrderLineConsolidatedExport;
 use App\Exports\OrderLineExport;
+use App\Forms\OrderExportFilterForm;
 use App\Models\ExportProcess;
 use App\Models\OrderLine;
+use App\Repositories\OrderRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Filament\Notifications\Notification;
@@ -217,8 +221,16 @@ class OrderResource extends Resource
                     ->html()
                     ->description(fn(Order $order) =>
                         new \Illuminate\Support\HtmlString(
-                            'Empresa: ' . \Illuminate\Support\Str::limit($order->user->company?->fantasy_name ?? 'Sin empresa', 40) . '<br>' .
-                            'Sucursal: ' . \Illuminate\Support\Str::limit($order->user->branch?->fantasy_name ?? 'Sin sucursal', 40)
+                            '<strong>Empresa:</strong> ' . \Illuminate\Support\Str::limit($order->user->company?->fantasy_name ?? 'Sin empresa', 40) . '<br>' .
+                            '<strong>Sucursal:</strong> ' . \Illuminate\Support\Str::limit($order->user->branch?->fantasy_name ?? 'Sin sucursal', 40) . '<br>' .
+                            '<span class="inline-flex items-center gap-1 mt-1">' .
+                            '<span class="fi-badge flex items-center justify-center gap-x-1 rounded-md text-xs font-medium ring-1 ring-inset px-1.5 min-w-[theme(spacing.5)] py-0.5 fi-color-custom bg-custom-50 text-custom-600 ring-custom-600/10 dark:bg-custom-400/10 dark:text-custom-400 dark:ring-custom-400/30" style="--c-50:var(--primary-50);--c-400:var(--primary-400);--c-600:var(--primary-600);">
+                            <span class="grid"><span class="truncate">' . ($order->user->roles->first()?->name ?? 'Sin rol') . '</span></span>
+                            </span>' .
+                            '<span class="fi-badge flex items-center justify-center gap-x-1 rounded-md text-xs font-medium ring-1 ring-inset px-1.5 min-w-[theme(spacing.5)] py-0.5 fi-color-custom bg-custom-50 text-custom-600 ring-custom-600/10 dark:bg-custom-400/10 dark:text-custom-400 dark:ring-custom-400/30" style="--c-50:var(--success-50);--c-400:var(--success-400);--c-600:var(--success-600);">
+                            <span class="grid"><span class="truncate">' . ($order->user->permissions->first()?->name ?? 'Sin permiso') . '</span></span>
+                            </span>' .
+                            '</span>'
                         )
                     )
                     ->wrap(),
@@ -244,18 +256,54 @@ class OrderResource extends Resource
             ])
             ->filters([
                 DateRangeFilter::make('created_at')
-                    ->label(__('Fecha de pedido')),
+                    ->label(__('Fecha de pedido'))
+                    ->columnSpan(1),
                 DateRangeFilter::make('dispatch_date')
-                    ->label(__('Fecha de despacho')),
+                    ->label(__('Fecha de despacho'))
+                    ->columnSpan(1),
                 Tables\Filters\SelectFilter::make('user_id')
                     ->label(__('Cliente'))
                     ->options(User::customers()->pluck('name', 'id'))
-                    ->searchable(),
+                    ->searchable()
+                    ->columnSpan(1),
                 Tables\Filters\SelectFilter::make('status')
                     ->label(__('Estado'))
                     ->multiple()
                     ->options(OrderStatus::getSelectOptions())
-            ])
+                    ->columnSpan(1),
+                Tables\Filters\SelectFilter::make('role')
+                    ->label(__('Tipo de usuario'))
+                    ->multiple()
+                    ->options([
+                        RoleName::ADMIN->value => 'Admin',
+                        RoleName::CAFE->value => 'Café',
+                        RoleName::AGREEMENT->value => 'Convenio',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (!empty($data['values'])) {
+                            $query->whereHas('user.roles', function (Builder $q) use ($data) {
+                                $q->whereIn('name', $data['values']);
+                            });
+                        }
+                    })
+                    ->columnSpan(1),
+                Tables\Filters\SelectFilter::make('permission')
+                    ->label(__('Tipo de convenio'))
+                    ->multiple()
+                    ->options([
+                        PermissionName::CONSOLIDADO->value => 'Consolidado',
+                        PermissionName::INDIVIDUAL->value => 'Individual',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (!empty($data['values'])) {
+                            $query->whereHas('user.permissions', function (Builder $q) use ($data) {
+                                $q->whereIn('name', $data['values']);
+                            });
+                        }
+                    })
+                    ->columnSpan(1),
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)
+            ->filtersFormColumns(2)
             ->actions([
                 ActionsActionGroup::make([
                     Tables\Actions\Action::make('preview')
@@ -271,10 +319,6 @@ class OrderResource extends Resource
                     Tables\Actions\DeleteAction::make()
                         ->action(function (Order $record) {
                             try {
-                                Log::info('Iniciando proceso de eliminación de orden', [
-                                    'order_id' => $record->id,
-                                    'client' => $record->user->name ?? 'N/A'
-                                ]);
 
                                 // Crear array con el ID de la orden a eliminar
                                 $orderIdToDelete = [$record->id];
@@ -287,9 +331,6 @@ class OrderResource extends Resource
                                     'La orden será eliminada en segundo plano.'
                                 )->send();
 
-                                Log::info('Job de eliminación de orden enviado a la cola', [
-                                    'order_id' => $record->id
-                                ]);
                             } catch (\Exception $e) {
                                 Log::error('Error al preparar eliminación de orden', [
                                     'order_id' => $record->id,
@@ -324,9 +365,6 @@ class OrderResource extends Resource
                                     'El correo del pedido será enviado en segundo plano.'
                                 )->send();
 
-                                Log::info('Job de envío de correo de pedido enviado a la cola', [
-                                    'order_id' => $record->id
-                                ]);
                             } catch (\Exception $e) {
                                 Log::error('Error al preparar envío de correo de pedido', [
                                     'order_id' => $record->id,
@@ -376,13 +414,6 @@ class OrderResource extends Resource
                                     'El proceso de facturación ha sido creado exitosamente.'
                                 )->send();
 
-                                Log::info('Proceso de facturación creado', [
-                                    'billing_process_id' => $billingProcess->id,
-                                    'order_id' => $record->id,
-                                    'responsible_id' => auth()->id(),
-                                    'integration_id' => $integration->id,
-                                ]);
-
                                 return redirect()->route('filament.admin.resources.billing-processes.edit', ['record' => $billingProcess->id]);
                             } catch (\Exception $e) {
                                 Log::error('Error al crear proceso de facturación', [
@@ -413,29 +444,30 @@ class OrderResource extends Resource
                         ->label('Exportar líneas de pedido')
                         ->icon('heroicon-o-arrow-up-tray')
                         ->color('success')
-                        ->action(function (Collection $records) {
+                        ->form(OrderExportFilterForm::getSchema())
+                        ->action(function (Collection $records, array $data) {
                             try {
-                                Log::info('Iniciando proceso de exportación de líneas de pedido', [
-                                    'total_records' => $records->count(),
-                                    'order_ids' => $records->pluck('id')->toArray()
-                                ]);
 
-                                $orderIds = $records->pluck('id')->toArray();
-                                $orderLineIds = OrderLine::whereIn('order_id', $orderIds)
+                                // Use repository to filter orders
+                                $orderRepository = new OrderRepository();
+                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
+
+                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos que cumplan con los filtros seleccionados',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orderLineIds = OrderLine::whereIn('order_id', $filteredOrderIds)
                                     ->pluck('id');
-
-                                Log::info('Obtenidas líneas de pedido para exportar', [
-                                    'total_order_lines' => $orderLineIds->count()
-                                ]);
 
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::TYPE_ORDER_LINES,
                                     'status' => ExportProcess::STATUS_QUEUED,
                                     'file_url' => '-'
-                                ]);
-
-                                Log::info('Proceso de exportación creado', [
-                                    'export_process_id' => $exportProcess->id
                                 ]);
 
                                 $fileName = "exports/order-lines/lineas_pedido_export_{$exportProcess->id}_" . time() . '.xlsx';
@@ -452,14 +484,9 @@ class OrderResource extends Resource
                                     'file_url' => $fileUrl
                                 ]);
 
-                                Log::info('Exportación completada con éxito', [
-                                    'export_process_id' => $exportProcess->id,
-                                    'file_url' => $fileUrl
-                                ]);
-
                                 self::makeNotification(
                                     'Exportación iniciada',
-                                    'El proceso de exportación finalizar�� en breve'
+                                    'El proceso de exportación finalizará en breve'
                                 )->send();
                             } catch (\Exception $e) {
                                 Log::error('Error en la exportación de líneas de pedido', [
@@ -487,29 +514,30 @@ class OrderResource extends Resource
                         ->label('Exportar consolidado de pedidos')
                         ->icon('heroicon-o-arrow-up-tray')
                         ->color('success')
-                        ->action(function (Collection $records) {
+                        ->form(OrderExportFilterForm::getSchema())
+                        ->action(function (Collection $records, array $data) {
                             try {
-                                Log::info('Iniciando proceso de exportación de líneas de pedido', [
-                                    'total_records' => $records->count(),
-                                    'order_ids' => $records->pluck('id')->toArray()
-                                ]);
 
-                                $orderIds = $records->pluck('id')->toArray();
-                                $orderLineIds = OrderLine::whereIn('order_id', $orderIds)
+                                // Use repository to filter orders
+                                $orderRepository = new OrderRepository();
+                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
+
+                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos que cumplan con los filtros seleccionados',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orderLineIds = OrderLine::whereIn('order_id', $filteredOrderIds)
                                     ->pluck('id');
-
-                                Log::info('Obtenidas líneas de pedido para exportar', [
-                                    'total_order_lines' => $orderLineIds->count()
-                                ]);
 
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::ORDER_CONSOLIDATED,
                                     'status' => ExportProcess::STATUS_QUEUED,
                                     'file_url' => '-'
-                                ]);
-
-                                Log::info('Proceso de exportación creado', [
-                                    'export_process_id' => $exportProcess->id
                                 ]);
 
                                 $fileName = "exports/order-lines/lineas_pedido_export_{$exportProcess->id}_" . time() . '.xlsx';
@@ -523,11 +551,6 @@ class OrderResource extends Resource
 
                                 $fileUrl = Storage::disk('s3')->url($fileName);
                                 $exportProcess->update([
-                                    'file_url' => $fileUrl
-                                ]);
-
-                                Log::info('Exportación completada con éxito', [
-                                    'export_process_id' => $exportProcess->id,
                                     'file_url' => $fileUrl
                                 ]);
 
@@ -560,10 +583,6 @@ class OrderResource extends Resource
                     Tables\Actions\DeleteBulkAction::make()
                         ->action(function (Collection $records) {
                             try {
-                                Log::info('Iniciando proceso de eliminación masiva de órdenes', [
-                                    'total_records' => $records->count(),
-                                    'order_ids' => $records->pluck('id')->toArray()
-                                ]);
 
                                 // Obtener los IDs de las órdenes a eliminar
                                 $orderIdsToDelete = $records->pluck('id')->toArray();
@@ -577,9 +596,6 @@ class OrderResource extends Resource
                                         'Las órdenes seleccionadas serán eliminadas en segundo plano.'
                                     )->send();
 
-                                    Log::info('Job de eliminación masiva de órdenes enviado a la cola', [
-                                        'order_ids' => $orderIdsToDelete
-                                    ]);
                                 } else {
                                     self::makeNotification(
                                         'Información',
@@ -604,32 +620,30 @@ class OrderResource extends Resource
                         ->label('Enviar correos de pedidos')
                         ->icon('heroicon-o-envelope')
                         ->color('info')
-                        ->action(function (Collection $records) {
+                        ->form(OrderExportFilterForm::getSchema())
+                        ->action(function (Collection $records, array $data) {
                             try {
-                                Log::info('Iniciando proceso de envío masivo de correos de pedidos', [
-                                    'total_records' => $records->count(),
-                                    'order_ids' => $records->pluck('id')->toArray()
-                                ]);
 
-                                // Obtener los IDs de los pedidos seleccionados
-                                $orderIds = $records->pluck('id')->toArray();
+                                // Use repository to filter orders
+                                $orderRepository = new OrderRepository();
+                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
+
+                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos que cumplan con los filtros seleccionados',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
 
                                 // Dispatch el job para enviar los correos en segundo plano
-                                if (!empty($orderIds)) {
-                                    SendOrdersEmails::dispatch($orderIds);
+                                if (!empty($filteredOrderIds)) {
+                                    SendOrdersEmails::dispatch($filteredOrderIds);
 
                                     self::makeNotification(
                                         'Envío en proceso',
-                                        'Los correos de los pedidos seleccionados serán enviados en segundo plano.'
-                                    )->send();
-
-                                    Log::info('Job de envío masivo de correos de pedidos enviado a la cola', [
-                                        'order_ids' => $orderIds
-                                    ]);
-                                } else {
-                                    self::makeNotification(
-                                        'Información',
-                                        'No hay pedidos seleccionados para enviar correos.'
+                                        'Los correos de los pedidos filtrados serán enviados en segundo plano.'
                                     )->send();
                                 }
                             } catch (\Exception $e) {
@@ -650,11 +664,8 @@ class OrderResource extends Resource
                         ->label('Generar vouchers individuales')
                         ->icon('heroicon-o-document-text')
                         ->color('warning')
-                        ->requiresConfirmation()
-                        ->modalHeading('Generar vouchers individuales')
-                        ->modalDescription('¿Está seguro que desea generar los vouchers PDF individuales de los pedidos seleccionados? Se generará un voucher por cada pedido.')
-                        ->modalSubmitActionLabel('Sí, generar vouchers')
-                        ->action(function (Collection $records) {
+                        ->form(OrderExportFilterForm::getSchema())
+                        ->action(function (Collection $records, array $data) {
                             try {
                                 if ($records->isEmpty()) {
                                     self::makeNotification(
@@ -665,24 +676,43 @@ class OrderResource extends Resource
                                     return;
                                 }
 
-                                $orderIds = $records->pluck('id')->toArray();
+                                // Use repository to filter orders
+                                $orderRepository = new OrderRepository();
+                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
 
-                                Log::info('Iniciando generación de vouchers PDF individuales', [
-                                    'total_orders' => count($orderIds),
-                                    'order_ids' => $orderIds
+                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos que cumplan con los filtros seleccionados',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orders = Order::whereIn('id', $filteredOrderIds)->get();
+                                $orderNumbers = $orders->pluck('order_number')->sort()->values();
+                                $firstOrder = $orderNumbers->first();
+                                $lastOrder = $orderNumbers->last();
+                                $totalOrders = $orders->count();
+
+                                $description = $totalOrders === 1
+                                    ? "Voucher del pedido #{$firstOrder}"
+                                    : "Vouchers individuales de {$totalOrders} pedidos (#{$firstOrder} a #{$lastOrder})";
+
+                                $exportProcess = ExportProcess::create([
+                                    'type' => ExportProcess::TYPE_VOUCHERS,
+                                    'description' => $description,
+                                    'status' => ExportProcess::STATUS_QUEUED,
+                                    'file_url' => '-'
                                 ]);
 
-                                GenerateOrderVouchersJob::dispatch($orderIds, false);
+                                GenerateOrderVouchersJob::dispatch($filteredOrderIds, false, $exportProcess->id);
 
                                 self::makeNotification(
                                     'Generación de vouchers iniciada',
                                     'Los vouchers PDF individuales se están generando. El proceso finalizará en breve.',
                                     'success'
                                 )->send();
-
-                                Log::info('Job de generación de vouchers individuales despachado exitosamente', [
-                                    'order_ids' => $orderIds
-                                ]);
 
                             } catch (\Exception $e) {
                                 Log::error('Error al iniciar generación de vouchers PDF', [
@@ -706,7 +736,8 @@ class OrderResource extends Resource
                         ->modalHeading('Generar vouchers consolidados')
                         ->modalDescription('¿Está seguro que desea generar vouchers PDF consolidados? Los pedidos se agruparán por empresa.')
                         ->modalSubmitActionLabel('Sí, generar vouchers consolidados')
-                        ->action(function (Collection $records) {
+                        ->form(OrderExportFilterForm::getSchema())
+                        ->action(function (Collection $records, array $data) {
                             try {
                                 if ($records->isEmpty()) {
                                     self::makeNotification(
@@ -717,24 +748,42 @@ class OrderResource extends Resource
                                     return;
                                 }
 
-                                $orderIds = $records->pluck('id')->toArray();
+                                $orderRepository = new OrderRepository();
+                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
 
-                                Log::info('Iniciando generación de vouchers PDF consolidados', [
-                                    'total_orders' => count($orderIds),
-                                    'order_ids' => $orderIds
+                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos que cumplan con los filtros seleccionados',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orders = Order::whereIn('id', $filteredOrderIds)->get();
+                                $orderNumbers = $orders->pluck('order_number')->sort()->values();
+                                $firstOrder = $orderNumbers->first();
+                                $lastOrder = $orderNumbers->last();
+                                $totalOrders = $orders->count();
+
+                                $description = $totalOrders === 1
+                                    ? "Voucher del pedido #{$firstOrder}"
+                                    : "Vouchers consolidados de {$totalOrders} pedidos (#{$firstOrder} a #{$lastOrder})";
+
+                                $exportProcess = ExportProcess::create([
+                                    'type' => ExportProcess::TYPE_VOUCHERS,
+                                    'description' => $description,
+                                    'status' => ExportProcess::STATUS_QUEUED,
+                                    'file_url' => '-'
                                 ]);
 
-                                GenerateOrderVouchersJob::dispatch($orderIds, true);
+                                GenerateOrderVouchersJob::dispatch($filteredOrderIds, true, $exportProcess->id);
 
                                 self::makeNotification(
                                     'Generación de vouchers consolidados iniciada',
                                     'Los vouchers PDF consolidados se están generando. Los pedidos se agruparán por empresa.',
                                     'success'
                                 )->send();
-
-                                Log::info('Job de generación de vouchers consolidados despachado exitosamente', [
-                                    'order_ids' => $orderIds
-                                ]);
 
                             } catch (\Exception $e) {
                                 Log::error('Error al iniciar generación de vouchers consolidados', [
@@ -822,7 +871,14 @@ class OrderResource extends Resource
                                 )->send();
                             }
                         }),
-                ])->dropdownWidth(MaxWidth::ExtraSmall)
+                ])->dropdownWidth(MaxWidth::ExtraSmall),
+                Tables\Actions\Action::make('reload')
+                    ->label('Recargar')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->action(function () {
+                        return redirect()->back();
+                    })
             ])
             ->emptyStateActions([
                 Tables\Actions\CreateAction::make(),
