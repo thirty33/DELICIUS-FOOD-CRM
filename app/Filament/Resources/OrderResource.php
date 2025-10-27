@@ -647,12 +647,12 @@ class OrderResource extends Resource
                         })
                         ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('generate_vouchers_pdf')
-                        ->label('Generar vouchers PDF')
+                        ->label('Generar vouchers individuales')
                         ->icon('heroicon-o-document-text')
                         ->color('warning')
                         ->requiresConfirmation()
-                        ->modalHeading('Generar vouchers PDF')
-                        ->modalDescription('¿Está seguro que desea generar los vouchers PDF de los pedidos seleccionados?')
+                        ->modalHeading('Generar vouchers individuales')
+                        ->modalDescription('¿Está seguro que desea generar los vouchers PDF individuales de los pedidos seleccionados? Se generará un voucher por cada pedido.')
                         ->modalSubmitActionLabel('Sí, generar vouchers')
                         ->action(function (Collection $records) {
                             try {
@@ -667,20 +667,20 @@ class OrderResource extends Resource
 
                                 $orderIds = $records->pluck('id')->toArray();
 
-                                Log::info('Iniciando generación de vouchers PDF', [
+                                Log::info('Iniciando generación de vouchers PDF individuales', [
                                     'total_orders' => count($orderIds),
                                     'order_ids' => $orderIds
                                 ]);
 
-                                GenerateOrderVouchersJob::dispatch($orderIds);
+                                GenerateOrderVouchersJob::dispatch($orderIds, false);
 
                                 self::makeNotification(
                                     'Generación de vouchers iniciada',
-                                    'Los vouchers PDF se están generando. El proceso finalizará en breve.',
+                                    'Los vouchers PDF individuales se están generando. El proceso finalizará en breve.',
                                     'success'
                                 )->send();
 
-                                Log::info('Job de generación de vouchers despachado exitosamente', [
+                                Log::info('Job de generación de vouchers individuales despachado exitosamente', [
                                     'order_ids' => $orderIds
                                 ]);
 
@@ -693,6 +693,58 @@ class OrderResource extends Resource
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al iniciar la generación de vouchers: ' . $e->getMessage(),
+                                    'danger'
+                                )->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('generate_consolidated_vouchers_pdf')
+                        ->label('Generar vouchers consolidados')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Generar vouchers consolidados')
+                        ->modalDescription('¿Está seguro que desea generar vouchers PDF consolidados? Los pedidos se agruparán por empresa.')
+                        ->modalSubmitActionLabel('Sí, generar vouchers consolidados')
+                        ->action(function (Collection $records) {
+                            try {
+                                if ($records->isEmpty()) {
+                                    self::makeNotification(
+                                        'Sin registros',
+                                        'No hay pedidos seleccionados para generar vouchers',
+                                        'warning'
+                                    )->send();
+                                    return;
+                                }
+
+                                $orderIds = $records->pluck('id')->toArray();
+
+                                Log::info('Iniciando generación de vouchers PDF consolidados', [
+                                    'total_orders' => count($orderIds),
+                                    'order_ids' => $orderIds
+                                ]);
+
+                                GenerateOrderVouchersJob::dispatch($orderIds, true);
+
+                                self::makeNotification(
+                                    'Generación de vouchers consolidados iniciada',
+                                    'Los vouchers PDF consolidados se están generando. Los pedidos se agruparán por empresa.',
+                                    'success'
+                                )->send();
+
+                                Log::info('Job de generación de vouchers consolidados despachado exitosamente', [
+                                    'order_ids' => $orderIds
+                                ]);
+
+                            } catch (\Exception $e) {
+                                Log::error('Error al iniciar generación de vouchers consolidados', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                self::makeNotification(
+                                    'Error',
+                                    'Ha ocurrido un error al iniciar la generación de vouchers consolidados: ' . $e->getMessage(),
                                     'danger'
                                 )->send();
                             }

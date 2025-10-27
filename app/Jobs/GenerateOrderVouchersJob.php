@@ -7,6 +7,7 @@ use App\Facades\ImageSigner;
 use App\Models\ExportProcess;
 use App\Models\Order;
 use App\Services\Vouchers\VoucherPdfGenerator;
+use App\Services\Vouchers\ConsolidatedVoucherGenerator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,10 +23,12 @@ class GenerateOrderVouchersJob implements ShouldQueue
 
     private $orderIds;
     private $exportProcessId;
+    private $consolidated;
 
-    public function __construct(array $orderIds)
+    public function __construct(array $orderIds, bool $consolidated = false)
     {
         $this->orderIds = $orderIds;
+        $this->consolidated = $consolidated;
     }
 
     public function handle()
@@ -33,6 +36,7 @@ class GenerateOrderVouchersJob implements ShouldQueue
         $orders = Order::with([
             'user.company',
             'user.branch',
+            'user.roles',
             'orderLines.product'
         ])
         ->whereIn('orders.id', $this->orderIds)
@@ -52,9 +56,10 @@ class GenerateOrderVouchersJob implements ShouldQueue
         $lastOrder = $orderNumbers->last();
         $totalOrders = $orders->count();
 
+        $voucherType = $this->consolidated ? 'consolidados' : 'individuales';
         $description = $totalOrders === 1
             ? "Voucher del pedido #{$firstOrder}"
-            : "Vouchers de {$totalOrders} pedidos (#{$firstOrder} a #{$lastOrder})";
+            : "Vouchers {$voucherType} de {$totalOrders} pedidos (#{$firstOrder} a #{$lastOrder})";
 
         $exportProcess = ExportProcess::create([
             'type' => ExportProcess::TYPE_VOUCHERS,
@@ -67,35 +72,28 @@ class GenerateOrderVouchersJob implements ShouldQueue
 
         $exportProcess->update(['status' => ExportProcess::STATUS_PROCESSING]);
 
-        Log::info('Iniciando generación de vouchers', [
-            'export_process_id' => $this->exportProcessId,
-            'description' => $description,
-            'order_ids' => $this->orderIds
-        ]);
-
-        Log::info("Órdenes encontradas: {$orders->count()}", [
-            'export_process_id' => $this->exportProcessId
-        ]);
-
-        // Generate PDF using VoucherPdfGenerator service
-        $generator = new VoucherPdfGenerator();
-        $pdfContent = $generator->generateMultiVoucherPdf($orders);
+        // Generate PDF using appropriate generator
+        if ($this->consolidated) {
+            $generator = new ConsolidatedVoucherGenerator();
+            $pdfContent = $generator->generate($orders);
+        } else {
+            $generator = new VoucherPdfGenerator();
+            $pdfContent = $generator->generateMultiVoucherPdf($orders);
+        }
 
         $timestamp = now()->format('Ymd_His');
         $dateStr = now()->format('Y/m/d');
 
+        $prefix = $this->consolidated ? 'consolidado' : 'individual';
+
         if ($totalOrders === 1) {
-            $fileName = "voucher_pedido_{$firstOrder}_{$timestamp}.pdf";
+            $fileName = "voucher_{$prefix}_pedido_{$firstOrder}_{$timestamp}.pdf";
         } else {
-            $fileName = "vouchers_{$totalOrders}_pedidos_{$firstOrder}_al_{$lastOrder}_{$timestamp}.pdf";
+            $fileName = "vouchers_{$prefix}_{$totalOrders}_pedidos_{$firstOrder}_al_{$lastOrder}_{$timestamp}.pdf";
         }
 
         $s3Path = "pdfs/vouchers/{$dateStr}/{$fileName}";
 
-        Log::info('Subiendo PDF a S3', [
-            'export_process_id' => $this->exportProcessId,
-            's3_path' => $s3Path
-        ]);
 
         $uploadResult = Storage::disk('s3')->put($s3Path, $pdfContent, 'private');
 
@@ -110,12 +108,6 @@ class GenerateOrderVouchersJob implements ShouldQueue
             'file_url' => $signedUrlData['signed_url']
         ]);
 
-        Log::info('Vouchers generados exitosamente', [
-            'export_process_id' => $this->exportProcessId,
-            'orders_count' => $orders->count(),
-            's3_path' => $s3Path,
-            'signed_url' => $signedUrlData['signed_url']
-        ]);
     }
 
     public function failed(Throwable $e): void
