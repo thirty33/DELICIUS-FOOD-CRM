@@ -261,11 +261,22 @@ class OrderResource extends Resource
                 DateRangeFilter::make('dispatch_date')
                     ->label(__('Fecha de despacho'))
                     ->columnSpan(1),
-                Tables\Filters\SelectFilter::make('user_id')
-                    ->label(__('Cliente'))
-                    ->options(User::customers()->pluck('name', 'id'))
+                Tables\Filters\SelectFilter::make('branch_id')
+                    ->label(__('Sucursal'))
+                    ->relationship('user.branch', 'fantasy_name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) =>
+                        ($record->branch_code ?? 'N/A') . ' - ' . $record->fantasy_name
+                    )
                     ->searchable()
-                    ->columnSpan(1),
+                    ->preload()
+                    ->columnSpan(1)
+                    ->query(function (Builder $query, array $data) {
+                        if (!empty($data['value'])) {
+                            $query->whereHas('user.branch', function (Builder $q) use ($data) {
+                                $q->where('branches.id', $data['value']);
+                            });
+                        }
+                    }),
                 Tables\Filters\SelectFilter::make('status')
                     ->label(__('Estado'))
                     ->multiple()
@@ -726,8 +737,7 @@ class OrderResource extends Resource
                                     'danger'
                                 )->send();
                             }
-                        })
-                        ->deselectRecordsAfterCompletion(),
+                        }),
                     Tables\Actions\BulkAction::make('generate_consolidated_vouchers_pdf')
                         ->label('Generar vouchers consolidados')
                         ->icon('heroicon-o-document-duplicate')
@@ -797,8 +807,7 @@ class OrderResource extends Resource
                                     'danger'
                                 )->send();
                             }
-                        })
-                        ->deselectRecordsAfterCompletion(),
+                        }),
                 ])->dropdownWidth(MaxWidth::ExtraSmall),
             ])
             ->headerActions([

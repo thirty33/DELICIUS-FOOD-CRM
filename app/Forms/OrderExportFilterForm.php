@@ -5,6 +5,7 @@ namespace App\Forms;
 use App\Enums\OrderStatus;
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
+use App\Models\Branch;
 use Filament\Forms;
 
 class OrderExportFilterForm
@@ -44,6 +45,21 @@ class OrderExportFilterForm
                 ])
                 ->placeholder('Seleccionar tipos de convenio')
                 ->helperText('Dejar vacío para incluir todos los tipos. Solo aplica si se seleccionó "Convenio" en tipo de usuario'),
+            Forms\Components\Select::make('branch_ids')
+                ->label('Sucursales')
+                ->multiple()
+                ->options(function () {
+                    return Branch::query()
+                        ->orderBy('fantasy_name')
+                        ->get()
+                        ->mapWithKeys(function ($branch) {
+                            return [$branch->id => ($branch->branch_code ?? 'N/A') . ' - ' . $branch->fantasy_name];
+                        });
+                })
+                ->searchable()
+                ->preload()
+                ->placeholder('Seleccionar sucursales')
+                ->helperText('Dejar vacío para incluir todas las sucursales'),
             Forms\Components\Select::make('order_statuses')
                 ->label('Estados de pedidos')
                 ->multiple()

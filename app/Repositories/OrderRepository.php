@@ -9,10 +9,10 @@ use Illuminate\Support\Collection;
 class OrderRepository
 {
     /**
-     * Filter orders by roles, permissions, and statuses
+     * Filter orders by roles, permissions, branches, and statuses
      *
      * @param Collection $orders Collection of Order models or IDs
-     * @param array $filters Array with keys: user_roles, agreement_types, order_statuses
+     * @param array $filters Array with keys: user_roles, agreement_types, branch_ids, order_statuses
      * @return array Filtered order IDs
      */
     public function filterOrdersByRolesAndStatuses(Collection $orders, array $filters): array
@@ -35,6 +35,13 @@ class OrderRepository
         if (!empty($filters['agreement_types'])) {
             $query->whereHas('user.permissions', function (Builder $q) use ($filters) {
                 $q->whereIn('name', $filters['agreement_types']);
+            });
+        }
+
+        // Apply branch filter if provided
+        if (!empty($filters['branch_ids'])) {
+            $query->whereHas('user.branch', function (Builder $q) use ($filters) {
+                $q->whereIn('branches.id', $filters['branch_ids']);
             });
         }
 
