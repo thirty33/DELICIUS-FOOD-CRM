@@ -112,7 +112,11 @@ class ConsolidatedVoucherGenerator extends VoucherGenerator
         $productRowsHtml = '';
         foreach ($consolidatedLines as $line) {
             $formattedSubtotal = number_format($line['total_price'], 0, ',', '.');
-            $subtotalCell = $showSubtotal ? "<td class='right'>$ {$formattedSubtotal}</td>" : '';
+
+            // Always show subtotal cell, but only with value if user has permission
+            $subtotalCell = $showSubtotal
+                ? "<td class='right'>$ {$formattedSubtotal}</td>"
+                : "<td class='right'></td>";
 
             $productRowsHtml .= "
                 <tr>
@@ -122,7 +126,8 @@ class ConsolidatedVoucherGenerator extends VoucherGenerator
                 </tr>";
         }
 
-        $subtotalHeader = $showSubtotal ? "<th class='col-subtotal'>Subtotal</th>" : '';
+        // Always show subtotal header
+        $subtotalHeader = "<th class='col-subtotal'>Subtotal</th>";
 
         // Show totals section only for Admin and Café roles
         $totalsHtml = $showSubtotal ? "

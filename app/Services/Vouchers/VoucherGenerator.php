@@ -99,6 +99,10 @@ abstract class VoucherGenerator
         // Add minimal padding (20 points for cutting)
         $finalHeight = $height + 20;
 
+        // Set minimum height to prevent orientation issues (minimum ~100mm)
+        $minHeight = 283.46; // 100mm in points (100mm * 2.83465)
+        $finalHeight = max($finalHeight, $minHeight);
+
         // Now render with exact height
         $finalPdf = Pdf::loadHTML($wrappedHtml);
         $finalPdf->setPaper([0, 0, 226.77, $finalHeight], 'portrait');
