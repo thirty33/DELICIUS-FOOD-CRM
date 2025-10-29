@@ -342,6 +342,10 @@ class OrderController extends Controller
                 throw new Exception("La orden ya ha sido procesada");
             }
 
+            if ($order->status == OrderStatus::CANCELED->value) {
+                throw new Exception("No se puede procesar una orden cancelada");
+            }
+
 
             $validationChain = new MenuExistsValidation();
             $validationChain
