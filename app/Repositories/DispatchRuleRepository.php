@@ -35,6 +35,18 @@ class DispatchRuleRepository
     }
 
     /**
+     * Get the applicable dispatch rule for a user
+     */
+    public function getDispatchRuleForUser(\App\Models\User $user): ?DispatchRule
+    {
+        if (!$user->company_id || !$user->branch_id) {
+            return null;
+        }
+
+        return $this->findApplicableRule($user->company_id, $user->branch_id);
+    }
+
+    /**
      * Find the applicable dispatch rule for a company and branch
      */
     private function findApplicableRule(int $companyId, int $branchId): ?DispatchRule

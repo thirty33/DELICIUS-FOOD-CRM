@@ -218,12 +218,33 @@ class UserResource extends Resource
                             ->orWhere('nickname', 'like', "%{$search}%");
                     })
                     ->description(fn(User $user) => $user->email ?: $user->nickname),
-                Tables\Columns\TextColumn::make('roles.name')
-                    ->label(__('Tipo de usuario'))
-                    ->badge(),
-                Tables\Columns\TextColumn::make('permissions.name')
-                    ->label(__('Tipo de Convenio'))
-                    ->badge(),
+                Tables\Columns\TextColumn::make('user_type')
+                    ->label(__('Tipo de usuario / Convenio'))
+                    ->state(function (User $record): string {
+                        $role = $record->roles->first()?->name ?? '';
+                        $permission = $record->permissions->first()?->name ?? '';
+
+                        if ($role && $permission) {
+                            return $role . ' / ' . $permission;
+                        }
+
+                        return $role ?: $permission ?: '-';
+                    })
+                    ->description(function (User $record): \Illuminate\Support\HtmlString {
+                        $icon = $record->master_user
+                            ? '<svg class="fi-icon-column-icon h-5 w-5 text-success-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>'
+                            : '<svg class="fi-icon-column-icon h-5 w-5 text-danger-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
+
+                        return new \Illuminate\Support\HtmlString(
+                            '<div class="flex items-center gap-1">
+                                <span class="text-sm text-gray-500">' . __('Usuario Maestro:') . '</span>
+                                ' . $icon . '
+                            </div>'
+                        );
+                    })
+                    ->badge()
+                    ->searchable(false)
+                    ->sortable(false),
                 Tables\Columns\TextColumn::make('company.fantasy_name')
                     ->label(__('Empresa'))
                     ->searchable(query: function (Builder $query, string $search): Builder {
@@ -234,12 +255,16 @@ class UserResource extends Resource
                         });
                     })
                     ->description(fn(User $user) => $user->branch?->fantasy_name),
-                Tables\Columns\IconColumn::make('master_user')
-                    ->label(__('Usuario Maestro'))
-                    ->boolean()
-                    ->trueIcon('heroicon-o-shield-check')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('dispatch_rule')
+                    ->label(__('Asociado a regla de despacho'))
+                    ->getStateUsing(function (User $record): string {
+                        $repository = new \App\Repositories\DispatchRuleRepository();
+                        $dispatchRule = $repository->getDispatchRuleForUser($record);
+
+                        return $dispatchRule ? $dispatchRule->name : 'No';
+                    })
+                    ->searchable(false)
+                    ->sortable(false),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')
@@ -254,6 +279,28 @@ class UserResource extends Resource
                     ->boolean()
                     ->trueLabel(__('Solo usuarios maestros'))
                     ->falseLabel(__('Solo usuarios no maestros'))
+                    ->native(false),
+                Tables\Filters\TernaryFilter::make('has_dispatch_rule')
+                    ->label(__('Regla de Despacho'))
+                    ->placeholder(__('Todos'))
+                    ->trueLabel(__('Con regla de despacho'))
+                    ->falseLabel(__('Sin regla de despacho'))
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereHas('branch', function (Builder $q) {
+                            $q->whereHas('dispatchRules', function (Builder $dr) {
+                                $dr->where('active', true);
+                            });
+                        }),
+                        false: fn (Builder $query) => $query->where(function (Builder $q) {
+                            $q->whereNull('branch_id')
+                                ->orWhereHas('branch', function (Builder $b) {
+                                    $b->whereDoesntHave('dispatchRules', function (Builder $dr) {
+                                        $dr->where('active', true);
+                                    });
+                                });
+                        }),
+                        blank: fn (Builder $query) => $query,
+                    )
                     ->native(false),
                 DateRangeFilter::make('created_at')
                     ->label(__('Fecha de creación')),

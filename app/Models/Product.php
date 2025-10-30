@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Repositories\WarehouseRepository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -36,6 +37,23 @@ class Product extends Model
         'is_null_product' => 'boolean',
     ];
 
+    /**
+     * Boot the model
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::created(function ($product) {
+            $warehouseRepository = new WarehouseRepository();
+            $warehouseRepository->associateProductToDefaultWarehouse(
+                $product,
+                0, // Initial stock = 0
+                'UND' // Default unit of measure
+            );
+        });
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -61,6 +79,42 @@ class Product extends Model
     public function ingredients(): HasMany
     {
         return $this->hasMany(Ingredient::class);
+    }
+
+    /**
+     * Get warehouses where this product is stored
+     */
+    public function warehouses(): BelongsToMany
+    {
+        return $this->belongsToMany(Warehouse::class, 'warehouse_product')
+            ->withPivot('stock', 'unit_of_measure')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get the stock in a specific warehouse
+     */
+    public function getStockInWarehouse(int $warehouseId): int
+    {
+        $warehouse = $this->warehouses()->where('warehouse_id', $warehouseId)->first();
+        return $warehouse ? $warehouse->pivot->stock : 0;
+    }
+
+    /**
+     * Get the stock in the default warehouse
+     */
+    public function getDefaultWarehouseStock(): int
+    {
+        $defaultWarehouse = Warehouse::where('is_default', true)->first();
+        return $defaultWarehouse ? $this->getStockInWarehouse($defaultWarehouse->id) : 0;
+    }
+
+    /**
+     * Get total stock across all warehouses
+     */
+    public function getTotalStock(): int
+    {
+        return $this->warehouses()->sum('warehouse_product.stock');
     }
 
 }
