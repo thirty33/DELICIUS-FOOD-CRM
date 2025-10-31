@@ -12,6 +12,7 @@ class WarehouseTransaction extends Model
 {
     protected $fillable = [
         'warehouse_id',
+        'advance_order_id',
         'user_id',
         'transaction_code',
         'status',
@@ -54,6 +55,11 @@ class WarehouseTransaction extends Model
         return $this->hasMany(WarehouseTransactionLine::class);
     }
 
+    public function advanceOrder(): BelongsTo
+    {
+        return $this->belongsTo(AdvanceOrder::class);
+    }
+
     public function scopePending($query)
     {
         return $query->where('status', WarehouseTransactionStatus::PENDING);
@@ -71,12 +77,22 @@ class WarehouseTransaction extends Model
 
     public function canExecute(): bool
     {
+        // Cannot execute if associated with an advance order
+        if ($this->advance_order_id !== null) {
+            return false;
+        }
+
         return $this->status === WarehouseTransactionStatus::PENDING
             || $this->status === WarehouseTransactionStatus::CANCELLED;
     }
 
     public function canCancel(): bool
     {
+        // Cannot cancel if associated with an advance order
+        if ($this->advance_order_id !== null) {
+            return false;
+        }
+
         return $this->status === WarehouseTransactionStatus::EXECUTED;
     }
 

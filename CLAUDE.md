@@ -1127,3 +1127,130 @@ This is CORRECT - test successfully replicates production bug.
 Once bug is fixed, test will pass.
 ```
 
+---
+
+## Database Management with Laravel Sail
+
+### Creating a New Database and Importing Dumps
+
+This section covers how to create new databases and import SQL dumps using Laravel Sail and Docker.
+
+#### Prerequisites
+- Sail must be running: `./vendor/bin/sail up -d`
+- SQL dump file must be in the project root directory
+
+#### Step 1: Create the Database
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword << 'EOSQL'
+CREATE DATABASE IF NOT EXISTS database_name;
+EOSQL
+```
+
+#### Step 2: Grant Permissions to sail User
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword << 'EOSQL'
+GRANT ALL PRIVILEGES ON database_name.* TO 'sail'@'%';
+FLUSH PRIVILEGES;
+EOSQL
+```
+
+#### Step 3: Import the SQL Dump
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword database_name < dump_file.sql
+```
+
+#### Step 4: Update .env File
+Edit `.env` and comment out the previous database, add the new one:
+```env
+# DB_DATABASE=old_database
+DB_DATABASE=database_name
+```
+
+#### Step 5: Clear Configuration Cache
+```bash
+./vendor/bin/sail artisan config:clear
+./vendor/bin/sail artisan config:cache
+```
+
+#### Step 6: Verify Connection
+```bash
+./vendor/bin/sail artisan tinker --execute="
+echo 'Database: ' . config('database.connections.mysql.database') . PHP_EOL;
+echo 'Users: ' . \App\Models\User::count() . PHP_EOL;
+"
+```
+
+### Useful Database Commands
+
+#### List Existing Databases
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword -e "SHOW DATABASES;"
+```
+
+#### Connect to MySQL Directly
+```bash
+./vendor/bin/sail mysql
+```
+
+#### View Tables in a Database
+```bash
+./vendor/bin/sail mysql database_name -e "SHOW TABLES;"
+```
+
+#### Backup a Database
+```bash
+docker exec delicius-food-crm-mysql-1 mysqldump -u sail -ppassword database_name > backup_$(date +%d%m%Y).sql
+```
+
+### Complete Example
+
+```bash
+# 1. Create database
+docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "CREATE DATABASE IF NOT EXISTS delisoft_prod_13102025;"
+
+# 2. Grant permissions
+docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "GRANT ALL PRIVILEGES ON delisoft_prod_13102025.* TO 'sail'@'%'; FLUSH PRIVILEGES;"
+
+# 3. Import dump
+docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword delisoft_prod_13102025 < delisoft_prod_dump_13102025.sql
+
+# 4. Update .env (manual)
+# DB_DATABASE=delisoft_prod_13102025
+
+# 5. Clear cache
+./vendor/bin/sail artisan config:clear
+
+# 6. Verify
+./vendor/bin/sail artisan tinker --execute="echo \App\Models\User::count();"
+```
+
+### Important Notes
+
+- MySQL container name may vary. Verify with: `docker ps | grep mysql`
+- Default root password in Sail: `password`
+- sail user also uses password: `password`
+- Large SQL dumps may take several minutes to import
+- Always backup before switching databases
+- Do not commit `.sql` files to repository (see `.gitignore`)
+
+### Troubleshooting
+
+#### Error: "Access denied for user 'sail'"
+Grant permissions again:
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "GRANT ALL PRIVILEGES ON database_name.* TO 'sail'@'%'; FLUSH PRIVILEGES;"
+```
+
+#### Error: "Unknown database"
+Verify database exists:
+```bash
+docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword -e "SHOW DATABASES;"
+```
+
+#### Application Not Connecting to New Database
+Clear configuration:
+```bash
+./vendor/bin/sail artisan config:clear
+./vendor/bin/sail down
+./vendor/bin/sail up -d
+```

@@ -65,6 +65,17 @@ class WarehouseTransactionResource extends Resource
                                 ) : '-'
                             )
                             ->visible(fn ($context) => $context === 'edit'),
+                        Forms\Components\Placeholder::make('advance_order_display')
+                            ->label(__('Orden de Producción Asociada'))
+                            ->content(fn ($record) => $record?->advanceOrder ?
+                                new \Illuminate\Support\HtmlString(
+                                    '<a href="' . route('filament.admin.resources.advance-orders.edit', $record->advanceOrder) . '"
+                                        class="text-primary-600 hover:text-primary-900 font-medium">
+                                        Orden #' . $record->advanceOrder->id . ' - ' . $record->advanceOrder->preparation_datetime->format('d/m/Y H:i') . '
+                                    </a>'
+                                ) : '-'
+                            )
+                            ->visible(fn ($context, $record) => $context === 'edit' && $record?->advanceOrder !== null),
                         Forms\Components\Textarea::make('reason')
                             ->label(__('Motivo de la transacción'))
                             ->required()
@@ -202,7 +213,6 @@ class WarehouseTransactionResource extends Resource
                     ->relationship('warehouse', 'name'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
                 static::getTableExecuteAction(),
                 static::getTableCancelAction(),
             ])

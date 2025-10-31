@@ -58,4 +58,55 @@ class OrderRepository
     {
         return !empty($filteredOrderIds);
     }
+
+    /**
+     * Get unique products with quantities from orders within a date range
+     *
+     * Only includes products from:
+     * - PROCESSED orders (all order lines)
+     * - PARTIALLY_SCHEDULED orders (only order lines with partially_scheduled = true)
+     *
+     * Excludes:
+     * - PENDING orders
+     * - CANCELED orders
+     * - Order lines with partially_scheduled = false from PARTIALLY_SCHEDULED orders
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @return Collection Collection of arrays with 'product_id' and 'ordered_quantity'
+     */
+    public function getProductsFromOrdersInDateRange(string $startDate, string $endDate): Collection
+    {
+        $orders = Order::whereBetween('dispatch_date', [$startDate, $endDate])
+            ->whereIn('status', [\App\Enums\OrderStatus::PROCESSED->value, \App\Enums\OrderStatus::PARTIALLY_SCHEDULED->value])
+            ->with('orderLines.product')
+            ->get();
+
+        $filteredOrderLines = collect();
+
+        foreach ($orders as $order) {
+            foreach ($order->orderLines as $orderLine) {
+                // Include all order lines from PROCESSED orders
+                if ($order->status === \App\Enums\OrderStatus::PROCESSED->value) {
+                    $filteredOrderLines->push($orderLine);
+                    continue;
+                }
+
+                // For PARTIALLY_SCHEDULED orders, only include lines with partially_scheduled = true
+                if ($order->status === \App\Enums\OrderStatus::PARTIALLY_SCHEDULED->value && $orderLine->partially_scheduled) {
+                    $filteredOrderLines->push($orderLine);
+                }
+            }
+        }
+
+        return $filteredOrderLines
+            ->groupBy('product_id')
+            ->map(function ($orderLines, $productId) {
+                return [
+                    'product_id' => $productId,
+                    'ordered_quantity' => $orderLines->sum('quantity'),
+                ];
+            })
+            ->values();
+    }
 }
