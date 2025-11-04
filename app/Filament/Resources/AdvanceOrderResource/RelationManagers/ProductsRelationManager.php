@@ -158,7 +158,7 @@ class ProductsRelationManager extends RelationManager
                         // Get max ordered quantity from previous advance orders
                         $advanceOrderRepository = new AdvanceOrderRepository();
                         $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
-                        $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct($productId, $previousAdvanceOrders);
+                        $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct($productId, $previousAdvanceOrders, $advanceOrder);
 
                         $data['ordered_quantity'] = $currentOrderedQuantity;
                         $data['ordered_quantity_new'] = max(0, $currentOrderedQuantity - $maxPreviousQuantity);
@@ -198,7 +198,7 @@ class ProductsRelationManager extends RelationManager
                         // Get max ordered quantity from previous advance orders
                         $advanceOrderRepository = new AdvanceOrderRepository();
                         $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
-                        $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct($productId, $previousAdvanceOrders);
+                        $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct($productId, $previousAdvanceOrders, $advanceOrder);
 
                         $data['ordered_quantity'] = $currentOrderedQuantity;
                         $data['ordered_quantity_new'] = max(0, $currentOrderedQuantity - $maxPreviousQuantity);

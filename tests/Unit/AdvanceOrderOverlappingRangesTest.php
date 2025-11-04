@@ -151,7 +151,8 @@ class AdvanceOrderOverlappingRangesTest extends TestCase
         $previousAdvanceOrders = $this->advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
         $maxPreviousQuantity = $this->advanceOrderRepository->getMaxOrderedQuantityForProduct(
             $this->product->id,
-            $previousAdvanceOrders
+            $previousAdvanceOrders,
+            $advanceOrder
         );
         $orderedQuantityNew = max(0, $orderedQuantity - $maxPreviousQuantity);
 

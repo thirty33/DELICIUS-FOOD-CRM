@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\Product;
 use App\Models\Category;
+use App\Models\ProductionArea;
 use App\Models\ImportProcess;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -72,7 +73,9 @@ class ProductsImport implements
 
                     $productData = $this->prepareProductData($row, $category);
                     $ingredients = isset($productData['_ingredients']) ? $productData['_ingredients'] : [];
+                    $productionAreas = isset($productData['_production_areas']) ? $productData['_production_areas'] : [];
                     unset($productData['_ingredients']);
+                    unset($productData['_production_areas']);
 
                     $product = Product::updateOrCreate(
                         [
@@ -90,6 +93,25 @@ class ProductsImport implements
                         }
                     }
 
+                    // Handle production areas
+                    if (!empty($productionAreas)) {
+                        $productionAreaIds = [];
+                        foreach ($productionAreas as $areaName) {
+                            $areaName = trim($areaName);
+                            if (!empty($areaName)) {
+                                // Find or create production area
+                                $productionArea = ProductionArea::firstOrCreate(
+                                    ['name' => $areaName]
+                                );
+                                $productionAreaIds[] = $productionArea->id;
+                            }
+                        }
+
+                        // Sync production areas (removes old, adds new)
+                        if (!empty($productionAreaIds)) {
+                            $product->productionAreas()->sync($productionAreaIds);
+                        }
+                    }
 
                 } catch (\Exception $e) {
                     $this->handleRowError($e, $index, $row);
@@ -119,6 +141,10 @@ class ProductsImport implements
 
         if (isset($row['ingredientes']) && !empty($row['ingredientes'])) {
             $data['_ingredients'] = explode(',', $row['ingredientes']);
+        }
+
+        if (isset($row['areas_de_produccion']) && !empty($row['areas_de_produccion']) && $row['areas_de_produccion'] !== '-') {
+            $data['_production_areas'] = explode(',', $row['areas_de_produccion']);
         }
 
         return $data;
@@ -247,7 +273,8 @@ class ProductsImport implements
             '*.peso' => ['nullable', 'string'],
             '*.permitir_ventas_sin_stock' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
-            '*.ingredientes' => ['nullable', 'string']
+            '*.ingredientes' => ['nullable', 'string'],
+            '*.areas_de_produccion' => ['nullable', 'string']
         ];
     }
 

@@ -117,4 +117,9 @@ class Product extends Model
         return $this->warehouses()->sum('warehouse_product.stock');
     }
 
+    public function productionAreas(): BelongsToMany
+    {
+        return $this->belongsToMany(ProductionArea::class, 'production_area_product');
+    }
+
 }

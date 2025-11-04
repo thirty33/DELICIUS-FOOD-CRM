@@ -127,6 +127,54 @@ This is a **Laravel 11 application** with **Filament 3.x admin panel** that foll
 - Seeders available for consistent test data
 - Factory classes for model generation
 
+### ⚠️ CRITICAL TEST PHILOSOPHY ⚠️
+
+**NEVER CREATE TESTS TO DOCUMENT ERRORS**
+
+Tests MUST ALWAYS validate CORRECT functionality, not document bugs.
+
+**WRONG Approach**:
+```php
+// ❌ BAD: Test that documents a bug
+public function test_demonstrates_bug_with_getOriginal(): void
+{
+    $model->update(['status' => 'new_status']);
+    $original = $model->getOriginal('status');
+
+    // Asserting the bug exists
+    $this->assertEquals('new_status', $original); // Documents bug behavior
+}
+```
+
+**CORRECT Approach**:
+```php
+// ✅ GOOD: Test that validates correct behavior
+public function test_status_change_triggers_event(): void
+{
+    $model->update(['status' => 'new_status']);
+
+    // Assert what SHOULD happen (expected behavior)
+    $this->assertTrue(Event::dispatched(StatusChanged::class));
+}
+```
+
+**Why This Matters**:
+1. **Tests define requirements**: They document what the system SHOULD do
+2. **Regression prevention**: When test passes, feature works correctly
+3. **Documentation value**: Tests serve as executable specifications
+4. **Maintenance clarity**: Future developers understand intended behavior
+
+**Test Lifecycle**:
+1. **Initial State**: Test FAILS ❌ (bug exists in code)
+2. **After Fix**: Test PASSES ✅ (bug is resolved)
+3. **Future**: Test continues to pass, preventing regression
+
+**If you need to demonstrate a bug**:
+- Document it in test comments/docblock
+- Write test assertions for CORRECT behavior
+- Let the test FAIL initially (showing the bug)
+- Fix the code to make the test PASS
+
 ## Development Workflow
 
 ### API Development

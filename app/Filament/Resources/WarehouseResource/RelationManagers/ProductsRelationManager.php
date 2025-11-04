@@ -104,6 +104,16 @@ class ProductsRelationManager extends RelationManager
                     ->relationship('product.category', 'name')
                     ->searchable()
                     ->preload(),
+                Tables\Filters\TernaryFilter::make('has_stock')
+                    ->label(__('Stock'))
+                    ->placeholder(__('Todos'))
+                    ->trueLabel(__('Con stock (> 0)'))
+                    ->falseLabel(__('Sin stock (= 0)'))
+                    ->queries(
+                        true: fn ($query) => $query->where('stock', '>', 0),
+                        false: fn ($query) => $query->where('stock', '=', 0),
+                        blank: fn ($query) => $query,
+                    ),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()

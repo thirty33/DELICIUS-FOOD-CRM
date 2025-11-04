@@ -2,13 +2,7 @@
 
 namespace App\Filament\Resources\AdvanceOrderResource\Pages;
 
-use App\Enums\AdvanceOrderStatus;
-use App\Events\AdvanceOrderExecuted;
-use App\Events\AdvanceOrderCancelled;
 use App\Filament\Resources\AdvanceOrderResource;
-use App\Repositories\AdvanceOrderRepository;
-use Filament\Actions;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditAdvanceOrder extends EditRecord
@@ -20,6 +14,7 @@ class EditAdvanceOrder extends EditRecord
         return [
             AdvanceOrderResource::getHeaderExecuteAction(),
             AdvanceOrderResource::getHeaderCancelAction(),
+            AdvanceOrderResource::getHeaderDeleteAction(),
         ];
     }
 

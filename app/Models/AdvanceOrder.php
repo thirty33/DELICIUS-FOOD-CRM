@@ -72,6 +72,9 @@ class AdvanceOrder extends Model
                     $productsData,
                     $advanceOrderRepository
                 );
+
+                // Fire bulk load event to sync ALL orders/order_lines
+                event(new \App\Events\AdvanceOrderProductsBulkLoaded($advanceOrder));
             }
         });
     }
@@ -84,7 +87,32 @@ class AdvanceOrder extends Model
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'advance_order_products')
-            ->withPivot('quantity')
+            ->withPivot('quantity', 'ordered_quantity', 'ordered_quantity_new', 'total_to_produce')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get the orders associated with this advance order through pivot table.
+     */
+    public function associatedOrders(): HasMany
+    {
+        return $this->hasMany(AdvanceOrderOrder::class, 'advance_order_id');
+    }
+
+    /**
+     * Get the order lines associated with this advance order through pivot table.
+     */
+    public function associatedOrderLines(): HasMany
+    {
+        return $this->hasMany(AdvanceOrderOrderLine::class, 'advance_order_id');
+    }
+
+    /**
+     * Get the production areas associated with this advance order.
+     */
+    public function productionAreas(): BelongsToMany
+    {
+        return $this->belongsToMany(ProductionArea::class, 'advance_order_production_area')
             ->withTimestamps();
     }
 }

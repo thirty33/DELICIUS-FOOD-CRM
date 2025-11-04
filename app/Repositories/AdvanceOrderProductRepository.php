@@ -29,9 +29,11 @@ class AdvanceOrderProductRepository
             $productId = $productData['product_id'];
 
             // Get max ordered quantity from previous advance orders for this product
+            // (only considering orders in overlapping dispatch dates)
             $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct(
                 $productId,
-                $previousAdvanceOrders
+                $previousAdvanceOrders,
+                $advanceOrder
             );
 
             // Calculate new ordered quantity

@@ -29,7 +29,10 @@ use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Exports\OrderLineConsolidatedExport;
 use App\Exports\OrderLineExport;
 use App\Forms\OrderExportFilterForm;
+use App\Forms\AdvanceOrderGenerationForm;
 use App\Models\ExportProcess;
+use App\Models\AdvanceOrder;
+use App\Models\ProductionArea;
 use App\Models\OrderLine;
 use App\Repositories\OrderRepository;
 use Illuminate\Support\Collection;
@@ -521,76 +524,40 @@ class OrderResource extends Resource
                             }
                         })
                         ->deselectRecordsAfterCompletion(),
-                    Tables\Actions\BulkAction::make('export_order_lines_consolidated')
-                        ->label('Exportar consolidado de pedidos')
-                        ->icon('heroicon-o-arrow-up-tray')
-                        ->color('success')
-                        ->form(OrderExportFilterForm::getSchema())
+                    Tables\Actions\BulkAction::make('generate_advance_order')
+                        ->label('Generar orden de producción')
+                        ->icon('heroicon-o-clipboard-document-list')
+                        ->color('warning')
+                        ->form(AdvanceOrderGenerationForm::getSchema())
                         ->action(function (Collection $records, array $data) {
                             try {
-
-                                // Use repository to filter orders
                                 $orderRepository = new OrderRepository();
-                                $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
 
-                                if (!$orderRepository->hasFilteredOrders($filteredOrderIds)) {
-                                    self::makeNotification(
-                                        'Sin registros',
-                                        'No hay pedidos que cumplan con los filtros seleccionados',
-                                        'warning'
-                                    )->send();
-                                    return;
-                                }
-
-                                $orderLineIds = OrderLine::whereIn('order_id', $filteredOrderIds)
-                                    ->pluck('id');
-
-                                $exportProcess = ExportProcess::create([
-                                    'type' => ExportProcess::ORDER_CONSOLIDATED,
-                                    'status' => ExportProcess::STATUS_QUEUED,
-                                    'file_url' => '-'
-                                ]);
-
-                                $fileName = "exports/order-lines/lineas_pedido_export_{$exportProcess->id}_" . time() . '.xlsx';
-
-                                Excel::store(
-                                    new OrderLineConsolidatedExport($orderLineIds, $exportProcess->id),
-                                    $fileName,
-                                    's3',
-                                    \Maatwebsite\Excel\Excel::XLSX
+                                // Create advance order using repository
+                                $advanceOrder = $orderRepository->createAdvanceOrderFromOrders(
+                                    $records->pluck('id')->toArray(),
+                                    $data['preparation_datetime'],
+                                    $data['production_area_ids']
                                 );
 
-                                $fileUrl = Storage::disk('s3')->url($fileName);
-                                $exportProcess->update([
-                                    'file_url' => $fileUrl
-                                ]);
-
                                 self::makeNotification(
-                                    'Exportación iniciada',
-                                    'El proceso de exportación finalizará en breve'
+                                    'Orden de producción creada',
+                                    "Se ha creado la orden de producción #{$advanceOrder->id} exitosamente."
                                 )->send();
+
                             } catch (\Exception $e) {
-                                Log::error('Error en la exportación de líneas de pedido', [
-                                    'export_process_id' => $exportProcess->id ?? 0,
+                                Log::error('Error al crear orden de producción desde pedidos', [
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
                                 ]);
 
-                                // Usar ExportErrorHandler para registrar el error de manera consistente
-                                ExportErrorHandler::handle(
-                                    $e,
-                                    $exportProcess->id ?? 0,
-                                    'bulk_export_order_lines'
-                                );
-
                                 self::makeNotification(
                                     'Error',
-                                    'Error al iniciar la exportación',
+                                    'Ha ocurrido un error al crear la orden de producción: ' . $e->getMessage(),
                                     'danger'
                                 )->send();
                             }
-                        })
-                        ->deselectRecordsAfterCompletion(),
+                        }),
                     Tables\Actions\DeleteBulkAction::make()
                         ->action(function (Collection $records) {
                             try {

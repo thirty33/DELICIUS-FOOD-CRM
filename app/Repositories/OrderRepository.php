@@ -3,6 +3,10 @@
 namespace App\Repositories;
 
 use App\Models\Order;
+use App\Models\AdvanceOrder;
+use App\Models\OrderLine;
+use App\Enums\OrderStatus;
+use App\Enums\AdvanceOrderStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -108,5 +112,145 @@ class OrderRepository
                 ];
             })
             ->values();
+    }
+
+    /**
+     * Create an AdvanceOrder from selected orders
+     *
+     * Only includes:
+     * - PROCESSED orders (all order lines)
+     * - PARTIALLY_SCHEDULED orders (only order lines with partially_scheduled = true)
+     * - Order lines belonging to selected production areas
+     *
+     * @param array $orderIds Array of order IDs
+     * @param string $preparationDatetime Preparation date and time
+     * @param array $productionAreaIds Array of production area IDs
+     * @return AdvanceOrder Created advance order
+     */
+    public function createAdvanceOrderFromOrders(
+        array $orderIds,
+        string $preparationDatetime,
+        array $productionAreaIds
+    ): AdvanceOrder {
+        // Get orders with PROCESSED and PARTIALLY_SCHEDULED status
+        $orders = Order::whereIn('id', $orderIds)
+            ->whereIn('status', [
+                OrderStatus::PROCESSED->value,
+                OrderStatus::PARTIALLY_SCHEDULED->value
+            ])
+            ->with(['orderLines.product.productionAreas'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            throw new \Exception('No se encontraron pedidos con estado PROCESSED o PARTIALLY_SCHEDULED.');
+        }
+
+        // Calculate date range from all orders
+        $allDispatchDates = $orders->pluck('dispatch_date')->filter();
+
+        if ($allDispatchDates->isEmpty()) {
+            throw new \Exception('Los pedidos seleccionados no tienen fechas de despacho.');
+        }
+
+        $minDate = $allDispatchDates->min();
+        $maxDate = $allDispatchDates->max();
+
+        // Create advance order WITHOUT triggering observer yet
+        $advanceOrder = new AdvanceOrder([
+            'preparation_datetime' => $preparationDatetime,
+            'initial_dispatch_date' => $minDate,
+            'final_dispatch_date' => $maxDate,
+            'use_products_in_orders' => false,
+            'status' => AdvanceOrderStatus::PENDING,
+        ]);
+
+        // Save without events to prevent premature AdvanceOrderCreated event
+        $advanceOrder->saveQuietly();
+
+        // Filter and collect order lines
+        $filteredOrderLines = collect();
+
+        foreach ($orders as $order) {
+            foreach ($order->orderLines as $orderLine) {
+                // Check if product belongs to selected production areas
+                $productAreaIds = $orderLine->product->productionAreas->pluck('id')->toArray();
+
+                // If product has no production areas or none of them match selected areas, skip
+                if (empty($productAreaIds) || empty(array_intersect($productAreaIds, $productionAreaIds))) {
+                    continue;
+                }
+
+                // Include all order lines from PROCESSED orders
+                if ($order->status === OrderStatus::PROCESSED->value) {
+                    $filteredOrderLines->push($orderLine);
+                    continue;
+                }
+
+                // For PARTIALLY_SCHEDULED orders, only include lines with partially_scheduled = true
+                if ($order->status === OrderStatus::PARTIALLY_SCHEDULED->value && $orderLine->partially_scheduled) {
+                    $filteredOrderLines->push($orderLine);
+                }
+            }
+        }
+
+        if ($filteredOrderLines->isEmpty()) {
+            $advanceOrder->delete();
+            throw new \Exception('No se encontraron líneas de pedido que cumplan con los criterios seleccionados.');
+        }
+
+        // Group order lines by product and sum quantities
+        $productQuantities = $filteredOrderLines
+            ->groupBy('product_id')
+            ->map(function ($orderLines) {
+                return [
+                    'product_id' => $orderLines->first()->product_id,
+                    'ordered_quantity' => $orderLines->sum('quantity'),
+                ];
+            });
+
+        // Get previous advance orders to calculate ordered_quantity_new
+        $advanceOrderRepository = new \App\Repositories\AdvanceOrderRepository();
+        $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
+
+        // Attach products to advance order with calculated ordered_quantity_new
+        foreach ($productQuantities as $productData) {
+            $currentOrderedQuantity = $productData['ordered_quantity'];
+            $productId = $productData['product_id'];
+
+            // Get max ordered quantity from previous advance orders
+            $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct(
+                $productId,
+                $previousAdvanceOrders,
+                $advanceOrder
+            );
+
+            $orderedQuantityNew = max(0, $currentOrderedQuantity - $maxPreviousQuantity);
+
+            // Create AdvanceOrderProduct without triggering observer events
+            // Calculate total_to_produce manually to avoid AdvanceOrderProductChanged event
+            $manualQuantity = 0;
+            $totalToProduce = $orderedQuantityNew + $manualQuantity;
+
+            $advanceOrderProduct = new \App\Models\AdvanceOrderProduct([
+                'advance_order_id' => $advanceOrder->id,
+                'product_id' => $productId,
+                'ordered_quantity' => $currentOrderedQuantity,
+                'ordered_quantity_new' => $orderedQuantityNew,
+                'quantity' => $manualQuantity,
+                'total_to_produce' => $totalToProduce,
+            ]);
+
+            // Save without triggering events to prevent premature pivot sync
+            $advanceOrderProduct->saveQuietly();
+        }
+
+        // Attach production areas to advance order
+        $advanceOrder->productionAreas()->attach($productionAreaIds);
+
+        // Fire AdvanceOrderCreated event with selected order IDs
+        // This tells the listener which specific orders to sync (not all orders in the date range)
+        event(new \App\Events\AdvanceOrderCreated($advanceOrder, $orderIds));
+
+        return $advanceOrder;
     }
 }
