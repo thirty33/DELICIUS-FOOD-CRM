@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\AdvanceOrderStatus;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
 use Illuminate\Support\Collection;
@@ -9,6 +10,38 @@ use Illuminate\Support\Facades\DB;
 
 class AdvanceOrderRepository
 {
+    /**
+     * Create an AdvanceOrder without triggering Observer events
+     *
+     * This method creates the AdvanceOrder using saveQuietly() to prevent
+     * premature event firing. The AdvanceOrderCreated event should be fired
+     * manually after all products are attached.
+     *
+     * @param string $preparationDatetime
+     * @param string $initialDispatchDate
+     * @param string $finalDispatchDate
+     * @param bool $useProductsInOrders
+     * @return AdvanceOrder The created instance
+     */
+    public function createAdvanceOrder(
+        string $preparationDatetime,
+        string $initialDispatchDate,
+        string $finalDispatchDate,
+        bool $useProductsInOrders = false
+    ): AdvanceOrder {
+        $advanceOrder = new AdvanceOrder([
+            'preparation_datetime' => $preparationDatetime,
+            'initial_dispatch_date' => $initialDispatchDate,
+            'final_dispatch_date' => $finalDispatchDate,
+            'use_products_in_orders' => $useProductsInOrders,
+            'status' => AdvanceOrderStatus::PENDING,
+        ]);
+
+        // Save without events to prevent premature AdvanceOrderCreated event
+        $advanceOrder->saveQuietly();
+
+        return $advanceOrder;
+    }
     /**
      * Get previous advance orders with overlapping dispatch date ranges
      *

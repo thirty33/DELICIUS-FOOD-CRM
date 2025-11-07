@@ -92,6 +92,7 @@ class CreateWarehouseTransactionForAdvanceOrder
             ]);
 
             // Create/update transaction lines for each product in advance order
+            $productsProcessed = 0;
             foreach ($advanceOrder->advanceOrderProducts as $advanceOrderProduct) {
                 $productId = $advanceOrderProduct->product_id;
 
@@ -106,6 +107,18 @@ class CreateWarehouseTransactionForAdvanceOrder
                 $stockAfter = $stockBefore + $advanceOrderProduct->total_to_produce - $advanceOrderProduct->ordered_quantity_new;
 
                 $difference = $stockAfter - $stockBefore;
+
+                Log::debug('Processing warehouse transaction line', [
+                    'advance_order_id' => $advanceOrder->id,
+                    'product_id' => $productId,
+                    'product_code' => $advanceOrderProduct->product->code ?? 'N/A',
+                    'stock_before' => $stockBefore,
+                    'total_to_produce' => $advanceOrderProduct->total_to_produce,
+                    'ordered_quantity_new' => $advanceOrderProduct->ordered_quantity_new,
+                    'stock_after' => $stockAfter,
+                    'difference' => $difference,
+                    'formula' => "stock_after = {$stockBefore} + {$advanceOrderProduct->total_to_produce} - {$advanceOrderProduct->ordered_quantity_new} = {$stockAfter}",
+                ]);
 
                 // Create transaction line
                 WarehouseTransactionLine::create([
@@ -123,7 +136,20 @@ class CreateWarehouseTransactionForAdvanceOrder
                     $defaultWarehouse->id,
                     $stockAfter
                 );
+
+                Log::debug('Warehouse stock updated', [
+                    'product_id' => $productId,
+                    'warehouse_id' => $defaultWarehouse->id,
+                    'new_stock' => $stockAfter,
+                ]);
+
+                $productsProcessed++;
             }
+
+            Log::info('All warehouse transaction lines processed', [
+                'advance_order_id' => $advanceOrder->id,
+                'products_processed' => $productsProcessed,
+            ]);
 
             DB::commit();
 

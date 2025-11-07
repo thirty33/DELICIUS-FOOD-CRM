@@ -38,6 +38,9 @@ class AdvanceOrderProduct extends Model
         $defaultWarehouse = $warehouseRepository->getDefaultWarehouse();
 
         if (!$defaultWarehouse) {
+            \Illuminate\Support\Facades\Log::warning('No default warehouse found for total_to_produce calculation', [
+                'product_id' => $this->product_id,
+            ]);
             return 0;
         }
 
@@ -46,10 +49,27 @@ class AdvanceOrderProduct extends Model
             $defaultWarehouse->id
         );
 
+        $result = 0;
+        $formula = '';
+
         if ($this->quantity > 0) {
-            return max(0, $this->quantity - $initialInventory);
+            $result = max(0, $this->quantity - $initialInventory);
+            $formula = "MAX(0, {$this->quantity} - {$initialInventory}) = {$result}";
         } else {
-            return max(0, $this->ordered_quantity_new - $initialInventory);
+            $result = max(0, $this->ordered_quantity_new - $initialInventory);
+            $formula = "MAX(0, {$this->ordered_quantity_new} - {$initialInventory}) = {$result}";
         }
+
+        \Illuminate\Support\Facades\Log::debug('AdvanceOrderProduct: calculateTotalToProduce', [
+            'product_id' => $this->product_id,
+            'warehouse_id' => $defaultWarehouse->id,
+            'initial_inventory' => $initialInventory,
+            'quantity' => $this->quantity,
+            'ordered_quantity_new' => $this->ordered_quantity_new,
+            'formula_used' => $formula,
+            'result' => $result,
+        ]);
+
+        return $result;
     }
 }

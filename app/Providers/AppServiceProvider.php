@@ -63,21 +63,26 @@ class AppServiceProvider extends ServiceProvider
         );
 
         // Register event listeners for pivot synchronization
+        // CRITICAL: Pivots are synced ONLY at creation and NEVER change afterward
         Event::listen(
             AdvanceOrderCreated::class,
             [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderCreated']
         );
 
-        Event::listen(
-            AdvanceOrderDatesUpdated::class,
-            [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderDatesUpdated']
-        );
+        // COMMENTED OUT: Pivots are IMMUTABLE after creation
+        // Changing dates should NOT re-sync pivots
+        // Event::listen(
+        //     AdvanceOrderDatesUpdated::class,
+        //     [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderDatesUpdated']
+        // );
 
-        Event::listen(
-            AdvanceOrderProductsBulkLoaded::class,
-            [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderProductsBulkLoaded']
-        );
+        // COMMENTED OUT: Bulk loading products should NOT re-sync pivots
+        // Event::listen(
+        //     AdvanceOrderProductsBulkLoaded::class,
+        //     [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderProductsBulkLoaded']
+        // );
 
+        // Register listener for manual product addition (via Filament RelationManager)
         Event::listen(
             AdvanceOrderProductChanged::class,
             [SyncAdvanceOrderPivotsListener::class, 'handleAdvanceOrderProductChanged']

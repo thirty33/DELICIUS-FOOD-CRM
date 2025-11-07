@@ -15,6 +15,15 @@ class SyncAdvanceOrderPivotsListener
 {
     /**
      * Handle AdvanceOrderCreated event.
+     *
+     * CRITICAL: This is the ONLY place where pivots are synchronized.
+     * Pivots are synced once at creation and NEVER changed afterward.
+     *
+     * Two scenarios:
+     * 1. Created from Filament form: $orderIds = null
+     *    - Syncs ALL orders in the date range
+     * 2. Created from selected orders: $orderIds = [...]
+     *    - Syncs ONLY the specified orders
      */
     public function handleAdvanceOrderCreated(AdvanceOrderCreated $event): void
     {
@@ -24,43 +33,15 @@ class SyncAdvanceOrderPivotsListener
             'order_ids_count' => $event->orderIds ? count($event->orderIds) : 0,
         ]);
 
-        // When OP is created, sync all products that exist
-        $this->syncAllPivots($event->advanceOrder, $event->orderIds);
-    }
-
-    /**
-     * Handle AdvanceOrderDatesUpdated event.
-     */
-    public function handleAdvanceOrderDatesUpdated(AdvanceOrderDatesUpdated $event): void
-    {
-        Log::info('SyncAdvanceOrderPivotsListener: AdvanceOrderDatesUpdated', [
-            'advance_order_id' => $event->advanceOrder->id,
-            'old_dates' => [$event->oldInitialDate, $event->oldFinalDate],
-            'new_dates' => [
-                $event->advanceOrder->initial_dispatch_date->format('Y-m-d'),
-                $event->advanceOrder->final_dispatch_date->format('Y-m-d'),
-            ],
-        ]);
-
-        // When dates change, re-sync all pivots
-        $this->syncAllPivots($event->advanceOrder);
-    }
-
-    /**
-     * Handle AdvanceOrderProductsBulkLoaded event.
-     */
-    public function handleAdvanceOrderProductsBulkLoaded(AdvanceOrderProductsBulkLoaded $event): void
-    {
-        Log::info('SyncAdvanceOrderPivotsListener: AdvanceOrderProductsBulkLoaded', [
-            'advance_order_id' => $event->advanceOrder->id,
-        ]);
-
-        // When products are bulk loaded, sync all pivots
-        $this->syncAllPivots($event->advanceOrder);
+        // Sync pivots ONCE at creation - this will NEVER happen again
+        $this->syncAllPivotsOnCreation($event->advanceOrder, $event->orderIds);
     }
 
     /**
      * Handle AdvanceOrderProductChanged event.
+     *
+     * This is triggered when products are added manually via Filament RelationManager
+     * AFTER the AdvanceOrder was created.
      */
     public function handleAdvanceOrderProductChanged(AdvanceOrderProductChanged $event): void
     {
@@ -72,29 +53,38 @@ class SyncAdvanceOrderPivotsListener
 
         $advanceOrder = $event->advanceOrderProduct->advanceOrder;
 
-        if ($event->changeType === 'deleted') {
-            // Remove only the associations for this specific product
-            $this->removePivotsForProduct($advanceOrder, $event->advanceOrderProduct->product_id);
-        } else {
-            // Sync only for this specific product
+        // Only sync if this is a product being added ('created')
+        // This handles the case when OP is created empty from Filament form,
+        // then products are added manually
+        if ($event->changeType === 'created') {
+            // Sync pivots for this product only
             $this->syncPivotsForProduct($advanceOrder, $event->advanceOrderProduct->product_id);
         }
+        // NOTE: We DO NOT handle 'updated' or 'deleted' - pivots stay unchanged
     }
 
     /**
-     * Sync ALL orders and order_lines for the entire advance order.
+     * Sync ALL orders and order_lines for the entire advance order ON CREATION ONLY.
+     *
+     * This method is called ONLY when the AdvanceOrder is first created.
+     * After creation, pivots are IMMUTABLE and never change.
      *
      * @param AdvanceOrder $advanceOrder
-     * @param array|null $specificOrderIds If provided, sync only these order IDs (from creation from orders)
+     * @param array|null $specificOrderIds If provided, sync only these order IDs (from creation from selected orders)
      */
-    protected function syncAllPivots(AdvanceOrder $advanceOrder, ?array $specificOrderIds = null): void
+    protected function syncAllPivotsOnCreation(AdvanceOrder $advanceOrder, ?array $specificOrderIds = null): void
     {
         DB::beginTransaction();
         try {
             // Get all products in this OP
             $productIds = $advanceOrder->advanceOrderProducts()->pluck('product_id')->toArray();
 
-            if (empty($productIds)) {
+            // IMPORTANT: If no products exist yet (empty OP created from Filament),
+            // we still need to sync orders from date range (if no specific order IDs provided)
+            // This allows the OP to be created with all relevant orders, and products can be added later
+            if (empty($productIds) && $specificOrderIds !== null) {
+                // Case: Specific orders provided but no products yet
+                // This shouldn't happen in normal flow, but handle gracefully
                 DB::commit();
                 return;
             }
@@ -165,14 +155,14 @@ class SyncAdvanceOrderPivotsListener
 
             DB::commit();
 
-            Log::info('SyncAdvanceOrderPivotsListener: syncAllPivots completed', [
+            Log::info('SyncAdvanceOrderPivotsListener: syncAllPivotsOnCreation completed', [
                 'advance_order_id' => $advanceOrder->id,
                 'orders_count' => $orders->count(),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('SyncAdvanceOrderPivotsListener: syncAllPivots failed', [
+            Log::error('SyncAdvanceOrderPivotsListener: syncAllPivotsOnCreation failed', [
                 'advance_order_id' => $advanceOrder->id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),

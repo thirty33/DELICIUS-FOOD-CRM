@@ -6,12 +6,21 @@ use App\Models\Order;
 use App\Models\AdvanceOrder;
 use App\Models\OrderLine;
 use App\Enums\OrderStatus;
-use App\Enums\AdvanceOrderStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class OrderRepository
 {
+    protected AdvanceOrderRepository $advanceOrderRepository;
+    protected AdvanceOrderProductRepository $advanceOrderProductRepository;
+
+    public function __construct(
+        ?AdvanceOrderRepository $advanceOrderRepository = null,
+        ?AdvanceOrderProductRepository $advanceOrderProductRepository = null
+    ) {
+        $this->advanceOrderRepository = $advanceOrderRepository ?? app(AdvanceOrderRepository::class);
+        $this->advanceOrderProductRepository = $advanceOrderProductRepository ?? app(AdvanceOrderProductRepository::class);
+    }
     /**
      * Filter orders by roles, permissions, branches, and statuses
      *
@@ -155,17 +164,13 @@ class OrderRepository
         $minDate = $allDispatchDates->min();
         $maxDate = $allDispatchDates->max();
 
-        // Create advance order WITHOUT triggering observer yet
-        $advanceOrder = new AdvanceOrder([
-            'preparation_datetime' => $preparationDatetime,
-            'initial_dispatch_date' => $minDate,
-            'final_dispatch_date' => $maxDate,
-            'use_products_in_orders' => false,
-            'status' => AdvanceOrderStatus::PENDING,
-        ]);
-
-        // Save without events to prevent premature AdvanceOrderCreated event
-        $advanceOrder->saveQuietly();
+        // Create advance order using repository
+        $advanceOrder = $this->advanceOrderRepository->createAdvanceOrder(
+            $preparationDatetime,
+            $minDate,
+            $maxDate,
+            false
+        );
 
         // Filter and collect order lines
         $filteredOrderLines = collect();
@@ -209,16 +214,16 @@ class OrderRepository
             });
 
         // Get previous advance orders to calculate ordered_quantity_new
-        $advanceOrderRepository = new \App\Repositories\AdvanceOrderRepository();
-        $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
+        $previousAdvanceOrders = $this->advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
 
-        // Attach products to advance order with calculated ordered_quantity_new
+        // Create AdvanceOrderProduct instances using repository
+        // This ensures total_to_produce is calculated correctly with warehouse stock
         foreach ($productQuantities as $productData) {
             $currentOrderedQuantity = $productData['ordered_quantity'];
             $productId = $productData['product_id'];
 
             // Get max ordered quantity from previous advance orders
-            $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct(
+            $maxPreviousQuantity = $this->advanceOrderRepository->getMaxOrderedQuantityForProduct(
                 $productId,
                 $previousAdvanceOrders,
                 $advanceOrder
@@ -226,22 +231,15 @@ class OrderRepository
 
             $orderedQuantityNew = max(0, $currentOrderedQuantity - $maxPreviousQuantity);
 
-            // Create AdvanceOrderProduct without triggering observer events
-            // Calculate total_to_produce manually to avoid AdvanceOrderProductChanged event
-            $manualQuantity = 0;
-            $totalToProduce = $orderedQuantityNew + $manualQuantity;
-
-            $advanceOrderProduct = new \App\Models\AdvanceOrderProduct([
-                'advance_order_id' => $advanceOrder->id,
-                'product_id' => $productId,
-                'ordered_quantity' => $currentOrderedQuantity,
-                'ordered_quantity_new' => $orderedQuantityNew,
-                'quantity' => $manualQuantity,
-                'total_to_produce' => $totalToProduce,
-            ]);
-
-            // Save without triggering events to prevent premature pivot sync
-            $advanceOrderProduct->saveQuietly();
+            // Create AdvanceOrderProduct with proper total_to_produce calculation
+            // The repository method considers warehouse stock when calculating
+            $this->advanceOrderProductRepository->createAdvanceOrderProduct(
+                $advanceOrder->id,
+                $productId,
+                $currentOrderedQuantity,
+                $orderedQuantityNew,
+                0 // manual_quantity = 0 for orders created from selection
+            );
         }
 
         // Attach production areas to advance order
