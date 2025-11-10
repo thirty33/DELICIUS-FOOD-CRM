@@ -206,7 +206,7 @@ class OrderLinesRelationManager extends RelationManager
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->after(function ($record, Livewire $livewire) {
+                        ->after(function (Livewire $livewire) {
                             $livewire->dispatch('refreshForm');
                         }),
                 ]),

@@ -180,6 +180,10 @@ class OrderController extends Controller
                     throw new Exception('La orden ya ha sido procesada');
                 }
 
+                if ($order && $order->status === OrderStatus::CANCELED->value) {
+                    throw new Exception('No se puede modificar una orden cancelada');
+                }
+
                 if (!$order) {
                     $order = new Order();
                     $order->user_id = $user->id;
@@ -281,6 +285,10 @@ class OrderController extends Controller
 
             if ($order->status == OrderStatus::PROCESSED->value) {
                 throw new Exception("La orden ya ha sido procesada");
+            }
+
+            if ($order->status == OrderStatus::CANCELED->value) {
+                throw new Exception("No se puede modificar una orden cancelada");
             }
 
             $validationChain = new MenuExistsValidation();
