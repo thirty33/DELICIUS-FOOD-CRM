@@ -143,7 +143,9 @@ class OrderController extends Controller
         $month = $carbonDate->month;
         $year = $carbonDate->year;
 
-        return Order::with('orderLines.product')
+        return Order::with([
+            'orderLines.product.category.subcategories',
+        ])
             ->where('user_id', $userId)
             ->whereDay('dispatch_date', '=', $day)
             ->whereMonth('dispatch_date', '=', $month)
