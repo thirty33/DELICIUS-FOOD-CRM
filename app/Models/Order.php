@@ -24,6 +24,8 @@ class Order extends Model
         'user_comment',
         'dispatch_cost',
         'charge_dispatch',
+        'production_status',
+        'production_status_needs_update',
     ];
 
     protected $casts = [

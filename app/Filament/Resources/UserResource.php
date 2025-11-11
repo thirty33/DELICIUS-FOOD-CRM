@@ -111,7 +111,8 @@ class UserResource extends Resource
                     ->label(__('Empresa'))
                     ->columns(1)
                     ->searchable()
-                    ->live(),
+                    ->live()
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->company_code . ' - ' . $record->fantasy_name),
                 Forms\Components\Select::make('branch_id')
                     ->label(__('Sucursal'))
                     ->relationship(
@@ -124,7 +125,8 @@ class UserResource extends Resource
                         )
                     )
                     ->required()
-                    ->searchable(),
+                    ->searchable()
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->branch_code . ' - ' . $record->fantasy_name),
                 Forms\Components\Section::make(__('Información de contraseña'))
                     ->description(__('La contraseña debe tener entre 8 y 25 caracteres'))
                     ->schema([
@@ -247,9 +249,15 @@ class UserResource extends Resource
                     ->sortable(false),
                 Tables\Columns\TextColumn::make('company.fantasy_name')
                     ->label(__('Empresa'))
+                    ->formatStateUsing(fn(User $record) =>
+                        $record->company
+                            ? $record->company->company_code . ' - ' . $record->company->fantasy_name
+                            : '-'
+                    )
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query->whereHas('company', function (Builder $q) use ($search) {
-                            $q->where('fantasy_name', 'like', "%{$search}%");
+                            $q->where('fantasy_name', 'like', "%{$search}%")
+                              ->orWhere('company_code', 'like', "%{$search}%");
                         })->orWhereHas('branch', function (Builder $q) use ($search) {
                             $q->where('fantasy_name', 'like', "%{$search}%");
                         });

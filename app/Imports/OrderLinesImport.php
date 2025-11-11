@@ -358,6 +358,14 @@ class OrderLinesImport implements
             foreach ($rowsByOrderNumber as $orderNumber => $orderRows) {
                 // Limpiar comilla inicial del código de pedido
                 $cleanOrderNumber = $this->cleanQuotedValue($orderNumber);
+
+                Log::info('OrderLinesImport: processing order group', [
+                    'original_order_number' => $orderNumber,
+                    'clean_order_number' => $cleanOrderNumber,
+                    'order_number_type' => gettype($orderNumber),
+                    'rows_count' => $orderRows->count(),
+                ]);
+
                 $this->processOrderRows($cleanOrderNumber, $orderRows);
             }
         } catch (\Exception $e) {
@@ -576,7 +584,11 @@ class OrderLinesImport implements
             $dispatchDate = $this->formatDate($firstRow['fecha_de_despacho']);
 
             Log::info('Creando orden nueva con order_number', [
-                'order_number' => $orderNumber
+                'order_number' => $orderNumber,
+                'order_number_type' => gettype($orderNumber),
+                'order_number_length' => strlen($orderNumber),
+                'user_id' => $user->id,
+                'user_nickname' => $user->nickname,
             ]);
 
             // Crear la orden con el order_number específico (dispatch_cost will be calculated by the model)
@@ -589,7 +601,8 @@ class OrderLinesImport implements
             ]);
 
             Log::info('Orden creada con order_number', [
-                'order_id' => $order->id
+                'order_id' => $order->id,
+                'order_number_saved' => $order->order_number,
             ]);
 
             // Guardar los datos procesados para comparaciones futuras
@@ -748,9 +761,20 @@ class OrderLinesImport implements
 
             // dispatch_cost will be calculated automatically by the Order model
 
+            // Log order lines details before validation
+            $order = Order::with('orderLines')->find($orderId);
+            $lineDetails = $order->orderLines->map(fn($line) => [
+                'product_id' => $line->product_id,
+                'quantity' => $line->quantity,
+                'unit_price' => $line->unit_price,
+                'total_price' => $line->total_price,
+            ])->toArray();
+
             Log::info("Líneas de pedido procesadas con éxito", [
                 'order_id' => $orderId,
-                'lines_count' => $rows->count()
+                'lines_count' => $rows->count(),
+                'order_lines_details' => $lineDetails,
+                'order_total_before_validation' => $order->total,
             ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
@@ -782,6 +806,20 @@ class OrderLinesImport implements
             // Get user and date from order
             $user = $order->user;
             $date = Carbon::parse($order->dispatch_date);
+
+            // Log validation context
+            Log::info('Starting validation chain for order', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'user_id' => $user->id,
+                'user_nickname' => $user->nickname,
+                'user_validate_min_price' => $user->validate_min_price,
+                'branch_id' => $user->branch_id,
+                'branch_min_price_order' => $user->branch->min_price_order,
+                'order_total' => $order->total,
+                'order_lines_count' => $order->orderLines->count(),
+                'validation_will_trigger' => $user->validate_min_price && ($user->branch->min_price_order > $order->total),
+            ]);
 
             // Execute the validation chain
             $validationChain->validate($order, $user, $date);

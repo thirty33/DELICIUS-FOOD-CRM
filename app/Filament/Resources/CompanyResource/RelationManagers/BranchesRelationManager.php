@@ -84,6 +84,14 @@ class BranchesRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('name')
             ->columns([
+                Tables\Columns\TextColumn::make('branch_code')
+                    ->label(__('Código'))
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('fantasy_name')
+                    ->label(__('Nombre de fantasía'))
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('address')
                     ->label(__('Dirección'))
                     ->searchable()

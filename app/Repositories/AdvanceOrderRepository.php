@@ -592,4 +592,38 @@ class AdvanceOrderRepository
         $idsString = implode(', ', $advanceOrderIds);
         return "OPs: {$idsString} | {$dateRange}";
     }
+
+    /**
+     * Get all order IDs related to an AdvanceOrder via pivot table.
+     * Used for marking orders as needing production status update.
+     *
+     * @param int $advanceOrderId
+     * @return array Array of order IDs
+     */
+    public function getRelatedOrderIds(int $advanceOrderId): array
+    {
+        return DB::table('advance_order_orders')
+            ->where('advance_order_id', $advanceOrderId)
+            ->pluck('order_id')
+            ->toArray();
+    }
+
+    /**
+     * Get all order IDs related to an AdvanceOrder and specific product
+     * via advance_order_order_lines pivot table.
+     * Used for marking orders as needing production status update when products change.
+     *
+     * @param int $advanceOrderId
+     * @param int $productId
+     * @return array Array of order IDs
+     */
+    public function getRelatedOrderIdsByProduct(int $advanceOrderId, int $productId): array
+    {
+        return DB::table('advance_order_order_lines')
+            ->where('advance_order_id', $advanceOrderId)
+            ->where('product_id', $productId)
+            ->distinct()
+            ->pluck('order_id')
+            ->toArray();
+    }
 }

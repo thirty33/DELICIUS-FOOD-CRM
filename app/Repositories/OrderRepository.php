@@ -251,4 +251,139 @@ class OrderRepository
 
         return $advanceOrder;
     }
+
+    /**
+     * Get the total quantity produced for a specific product in an order
+     * by calculating proportionally based on ordered_quantity_new from EXECUTED advance orders.
+     *
+     * The quantity_covered in pivot represents the total quantity of the order_line at OP creation time,
+     * but we need to calculate the actual produced quantity based on ordered_quantity_new
+     * (which accounts for what was already covered by previous OPs).
+     *
+     * Formula: actual_produced = (ordered_quantity_new / ordered_quantity) * quantity_covered
+     *
+     * @param int $orderId
+     * @param int $productId
+     * @return int Total quantity produced
+     */
+    public function getTotalProducedForProduct(int $orderId, int $productId): int
+    {
+        // Get all EXECUTED OPs that cover this order and product
+        $ops = \DB::table('advance_order_order_lines as aool')
+            ->join('advance_orders as ao', 'aool.advance_order_id', '=', 'ao.id')
+            ->join('advance_order_products as aop', function ($join) use ($productId) {
+                $join->on('aop.advance_order_id', '=', 'ao.id')
+                     ->where('aop.product_id', '=', $productId);
+            })
+            ->where('aool.order_id', $orderId)
+            ->where('aool.product_id', $productId)
+            ->where('ao.status', \App\Enums\AdvanceOrderStatus::EXECUTED->value)
+            ->select(
+                'aool.quantity_covered',
+                'aop.ordered_quantity',
+                'aop.ordered_quantity_new'
+            )
+            ->get();
+
+        $totalProduced = 0;
+
+        foreach ($ops as $op) {
+            if ($op->ordered_quantity > 0) {
+                // Calculate proportional quantity based on ordered_quantity_new
+                $proportion = $op->ordered_quantity_new / $op->ordered_quantity;
+                $actualProduced = $op->quantity_covered * $proportion;
+                $totalProduced += $actualProduced;
+            }
+        }
+
+        return (int) round($totalProduced);
+    }
+
+    /**
+     * Get detailed production status breakdown for an order.
+     *
+     * Returns comprehensive analysis of which products are produced,
+     * partially produced, or not produced, including quantities and percentages.
+     *
+     * @param Order $order
+     * @return array Production detail with summary and per-product breakdown
+     */
+    public function getProductionDetail(Order $order): array
+    {
+        $orderLines = $order->orderLines;
+
+        if ($orderLines->isEmpty()) {
+            return [
+                'production_status' => \App\Enums\OrderProductionStatus::NOT_PRODUCED->value,
+                'summary' => [
+                    'total_products' => 0,
+                    'fully_produced_count' => 0,
+                    'partially_produced_count' => 0,
+                    'not_produced_count' => 0,
+                    'total_coverage_percentage' => 0,
+                ],
+                'products' => [],
+            ];
+        }
+
+        $products = [];
+        $fullyProducedCount = 0;
+        $partiallyProducedCount = 0;
+        $notProducedCount = 0;
+        $totalRequired = 0;
+        $totalProduced = 0;
+
+        foreach ($orderLines as $line) {
+            $requiredQuantity = $line->quantity;
+            $totalRequired += $requiredQuantity;
+
+            // Get produced quantity using existing method
+            $producedQuantity = $this->getTotalProducedForProduct($order->id, $line->product_id);
+            $totalProduced += $producedQuantity;
+
+            $pendingQuantity = max(0, $requiredQuantity - $producedQuantity);
+            $coveragePercentage = $requiredQuantity > 0
+                ? ($producedQuantity / $requiredQuantity) * 100
+                : 0;
+
+            // Determine product status using enum
+            if ($producedQuantity == 0) {
+                $status = \App\Enums\OrderProductionStatus::NOT_PRODUCED->value;
+                $notProducedCount++;
+            } elseif ($producedQuantity >= $requiredQuantity) {
+                $status = \App\Enums\OrderProductionStatus::FULLY_PRODUCED->value;
+                $fullyProducedCount++;
+            } else {
+                $status = \App\Enums\OrderProductionStatus::PARTIALLY_PRODUCED->value;
+                $partiallyProducedCount++;
+            }
+
+            $products[] = [
+                'product_id' => $line->product_id,
+                'product_name' => $line->product->name,
+                'product_code' => $line->product->code,
+                'required_quantity' => $requiredQuantity,
+                'produced_quantity' => $producedQuantity,
+                'pending_quantity' => $pendingQuantity,
+                'coverage_percentage' => round($coveragePercentage, 1),
+                'status' => $status,
+            ];
+        }
+
+        $totalCoveragePercentage = $totalRequired > 0
+            ? ($totalProduced / $totalRequired) * 100
+            : 0;
+
+        return [
+            'production_status' => $order->production_status,
+            'summary' => [
+                'total_products' => $orderLines->count(),
+                'fully_produced_count' => $fullyProducedCount,
+                'partially_produced_count' => $partiallyProducedCount,
+                'not_produced_count' => $notProducedCount,
+                'total_coverage_percentage' => round($totalCoveragePercentage, 1),
+            ],
+            'products' => $products,
+        ];
+    }
 }

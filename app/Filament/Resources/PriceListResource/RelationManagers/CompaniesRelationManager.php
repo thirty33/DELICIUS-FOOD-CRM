@@ -40,14 +40,28 @@ class CompaniesRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('name')
             ->columns([
-                Tables\Columns\TextColumn::make('name'),
-                Tables\Columns\TextColumn::make('email'),
-                Tables\Columns\TextColumn::make('phone_number'),
+                Tables\Columns\TextColumn::make('company_code')
+                    ->label(__('Código'))
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('name')
+                    ->label(__('Name'))
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('email')
+                    ->label(__('Email'))
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('phone_number')
+                    ->label(__('Phone number'))
+                    ->searchable(),
                 Tables\Columns\IconColumn::make('active')
+                    ->label(__('Active'))
                     ->boolean(),
                 Tables\Columns\TextColumn::make('tax_id')
-                    ->label('RUT'),
-                Tables\Columns\TextColumn::make('fantasy_name'),
+                    ->label(__('RUT'))
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('fantasy_name')
+                    ->label(__('Fantasy name'))
+                    ->searchable(),
             ])
             ->filters([
                 //

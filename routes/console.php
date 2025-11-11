@@ -1,9 +1,9 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('logs:clean', function () {
     $logPath = storage_path('logs');
@@ -40,5 +40,10 @@ Artisan::command('queue:process', function () {
     ]);
     $this->info('Procesamiento de cola completado con código: ' . $exitCode);
 })->purpose('Procesar todos los trabajos en cola hasta vaciarla')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// Schedule: Update orders production status every minute
+Schedule::command('orders:update-production-status')
     ->everyMinute()
     ->withoutOverlapping();

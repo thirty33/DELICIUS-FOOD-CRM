@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderProductionStatus;
 use App\Enums\RoleName;
 use App\Enums\PermissionName;
 use App\Filament\Resources\OrderResource\Pages;
@@ -252,7 +253,10 @@ class OrderResource extends Resource
                         new \Illuminate\Support\HtmlString(
                             'Despacho: $' . number_format($order->dispatch_cost / 100, 2, ',', '.') . '<br>' .
                             'IVA: $' . number_format($order->tax_amount / 100, 2, ',', '.') . '<br>' .
-                            '<strong>Total Final: $' . number_format($order->grand_total / 100, 2, ',', '.') . '</strong>'
+                            '<strong>Total Final: $' . number_format($order->grand_total / 100, 2, ',', '.') . '</strong><br><br>' .
+                            '<span class="' . OrderProductionStatus::from($order->production_status)->badgeClasses() . '">' .
+                            OrderProductionStatus::from($order->production_status)->label() .
+                            '</span>'
                         )
                     )
                     ->sortable(),
@@ -328,6 +332,16 @@ class OrderResource extends Resource
                         ->modalWidth(MaxWidth::FiveExtraLarge)
                         ->modalContent(fn(Order $record) => view('filament.resources.order-resource.preview', [
                             'order' => $record->load(['user.company', 'user.branch', 'orderLines.product.category'])
+                        ])),
+                    Tables\Actions\Action::make('production_detail')
+                        ->label('Ver detalle de producción')
+                        ->icon('heroicon-o-chart-bar')
+                        ->color('warning')
+                        ->modalHeading(fn(Order $record) => 'Detalle de Producción - Pedido #' . $record->id)
+                        ->modalWidth(MaxWidth::FiveExtraLarge)
+                        ->modalContent(fn(Order $record) => view('filament.resources.order-resource.production-detail', [
+                            'order' => $record,
+                            'detail' => app(\App\Repositories\OrderRepository::class)->getProductionDetail($record)
                         ])),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make()

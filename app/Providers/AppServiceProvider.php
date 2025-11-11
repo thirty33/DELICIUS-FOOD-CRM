@@ -9,9 +9,13 @@ use App\Services\API\V1\AuthSanctumService;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
+use App\Models\OrderLine;
 use App\Observers\ProductObserver;
 use App\Observers\AdvanceOrderObserver;
 use App\Observers\AdvanceOrderProductObserver;
+use App\Observers\AdvanceOrderProductionStatusObserver;
+use App\Observers\AdvanceOrderProductProductionStatusObserver;
+use App\Observers\OrderLineProductionStatusObserver;
 use App\Events\AdvanceOrderExecuted;
 use App\Events\AdvanceOrderCancelled;
 use App\Events\AdvanceOrderCreated;
@@ -50,6 +54,11 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(ProductObserver::class);
         AdvanceOrder::observe(AdvanceOrderObserver::class);
         AdvanceOrderProduct::observe(AdvanceOrderProductObserver::class);
+
+        // Register Observers for production status updates
+        AdvanceOrder::observe(AdvanceOrderProductionStatusObserver::class);
+        AdvanceOrderProduct::observe(AdvanceOrderProductProductionStatusObserver::class);
+        // OrderLine::observe(OrderLineProductionStatusObserver::class);
 
         // Register event listeners for warehouse transactions
         Event::listen(

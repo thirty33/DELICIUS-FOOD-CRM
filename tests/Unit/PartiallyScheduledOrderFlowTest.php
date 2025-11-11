@@ -106,6 +106,15 @@ class PartiallyScheduledOrderFlowTest extends TestCase
             'MOMENT 1: Order A should be NOT_PRODUCED (no OPs executed yet)'
         );
 
+        // Validate production detail
+        $detail = $this->orderRepository->getProductionDetail($this->orderA);
+        $this->assertEquals(OrderProductionStatus::NOT_PRODUCED->value, $detail['production_status']);
+        $this->assertEquals(3, $detail['summary']['total_products']);
+        $this->assertEquals(0, $detail['summary']['fully_produced_count']);
+        $this->assertEquals(0, $detail['summary']['partially_produced_count']);
+        $this->assertEquals(3, $detail['summary']['not_produced_count']);
+        $this->assertEquals(0, $detail['summary']['total_coverage_percentage']);
+
         // ==================================================================
         // MOMENT 2: Create OP #1 (only Product A has partially_scheduled = true)
         // ==================================================================
@@ -120,12 +129,30 @@ class PartiallyScheduledOrderFlowTest extends TestCase
         $this->executeOp($op1);
 
         // Validate production status after OP #1 executed
-        $this->orderA->refresh();
+        // Reload the order from database to get updated values
+        $this->orderA = \App\Models\Order::find($this->orderA->id);
+
         $this->assertEquals(
             OrderProductionStatus::PARTIALLY_PRODUCED->value,
             $this->orderA->production_status,
             'MOMENT 2: Order A should be PARTIALLY_PRODUCED after OP #1 (only Product A covered: 15/15, missing B and C)'
         );
+
+        // Validate production detail MOMENT 2
+        $detail = $this->orderRepository->getProductionDetail($this->orderA);
+        $this->assertEquals(OrderProductionStatus::PARTIALLY_PRODUCED->value, $detail['production_status']);
+        $this->assertEquals(3, $detail['summary']['total_products']);
+        $this->assertEquals(1, $detail['summary']['fully_produced_count'], 'MOMENT 2: Product A should be fully produced');
+        $this->assertEquals(0, $detail['summary']['partially_produced_count']);
+        $this->assertEquals(2, $detail['summary']['not_produced_count'], 'MOMENT 2: Products B and C should be not produced');
+
+        // Product A: 15 produced of 15 required = 100%
+        $productA = collect($detail['products'])->firstWhere('product_id', $this->productA->id);
+        $this->assertEquals(15, $productA['required_quantity']);
+        $this->assertEquals(15, $productA['produced_quantity']);
+        $this->assertEquals(0, $productA['pending_quantity']);
+        $this->assertEquals(100, $productA['coverage_percentage']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productA['status']);
 
         // ==================================================================
         // MOMENT 3: Update Order A - Product A quantity increases
@@ -153,6 +180,22 @@ class PartiallyScheduledOrderFlowTest extends TestCase
             'MOMENT 4: Order A should be PARTIALLY_PRODUCED after OP #2 (only Product A fully covered: 23/23, missing B and C)'
         );
 
+        // Validate production detail MOMENT 4
+        $detail = $this->orderRepository->getProductionDetail($this->orderA);
+        $this->assertEquals(OrderProductionStatus::PARTIALLY_PRODUCED->value, $detail['production_status']);
+        $this->assertEquals(3, $detail['summary']['total_products']);
+        $this->assertEquals(1, $detail['summary']['fully_produced_count'], 'MOMENT 4: Product A should be fully produced (23/23)');
+        $this->assertEquals(0, $detail['summary']['partially_produced_count']);
+        $this->assertEquals(2, $detail['summary']['not_produced_count'], 'MOMENT 4: Products B and C should be not produced');
+
+        // Product A: 23 produced of 23 required (15 from OP#1 + 8 from OP#2)
+        $productA = collect($detail['products'])->firstWhere('product_id', $this->productA->id);
+        $this->assertEquals(23, $productA['required_quantity']);
+        $this->assertEquals(23, $productA['produced_quantity'], 'MOMENT 4: Product A should have 23 produced (15+8)');
+        $this->assertEquals(0, $productA['pending_quantity']);
+        $this->assertEquals(100, $productA['coverage_percentage']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productA['status']);
+
         // ==================================================================
         // MOMENT 5: Update Order A - Product B becomes partially_scheduled = true
         // ==================================================================
@@ -179,6 +222,35 @@ class PartiallyScheduledOrderFlowTest extends TestCase
             'MOMENT 6: Order A should be PARTIALLY_PRODUCED after OP #3 (Products A: 23/23 and B: 18/18 covered, missing C)'
         );
 
+        // Validate production detail MOMENT 6
+        $detail = $this->orderRepository->getProductionDetail($this->orderA);
+        $this->assertEquals(OrderProductionStatus::PARTIALLY_PRODUCED->value, $detail['production_status']);
+        $this->assertEquals(3, $detail['summary']['total_products']);
+        $this->assertEquals(2, $detail['summary']['fully_produced_count'], 'MOMENT 6: Products A and B should be fully produced');
+        $this->assertEquals(0, $detail['summary']['partially_produced_count']);
+        $this->assertEquals(1, $detail['summary']['not_produced_count'], 'MOMENT 6: Product C should be not produced');
+
+        // Product A: still 23/23
+        $productA = collect($detail['products'])->firstWhere('product_id', $this->productA->id);
+        $this->assertEquals(23, $productA['produced_quantity']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productA['status']);
+
+        // Product B: 18/18 produced
+        $productB = collect($detail['products'])->firstWhere('product_id', $this->productB->id);
+        $this->assertEquals(18, $productB['required_quantity']);
+        $this->assertEquals(18, $productB['produced_quantity']);
+        $this->assertEquals(0, $productB['pending_quantity']);
+        $this->assertEquals(100, $productB['coverage_percentage']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productB['status']);
+
+        // Product C: 0/25 (not produced yet)
+        $productC = collect($detail['products'])->firstWhere('product_id', $this->productC->id);
+        $this->assertEquals(25, $productC['required_quantity']);
+        $this->assertEquals(0, $productC['produced_quantity']);
+        $this->assertEquals(25, $productC['pending_quantity']);
+        $this->assertEquals(0, $productC['coverage_percentage']);
+        $this->assertEquals(OrderProductionStatus::NOT_PRODUCED->value, $productC['status']);
+
         // ==================================================================
         // MOMENT 7: Update Order A - Change to PROCESSED
         // ==================================================================
@@ -203,6 +275,33 @@ class PartiallyScheduledOrderFlowTest extends TestCase
             $this->orderA->production_status,
             'MOMENT 8: Order A should be FULLY_PRODUCED after OP #4 (ALL products covered: A: 23/23, B: 18/18, C: 31/31)'
         );
+
+        // Validate production detail MOMENT 8 - FULLY PRODUCED
+        $detail = $this->orderRepository->getProductionDetail($this->orderA);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $detail['production_status']);
+        $this->assertEquals(3, $detail['summary']['total_products']);
+        $this->assertEquals(3, $detail['summary']['fully_produced_count'], 'MOMENT 8: All 3 products should be fully produced');
+        $this->assertEquals(0, $detail['summary']['partially_produced_count']);
+        $this->assertEquals(0, $detail['summary']['not_produced_count']);
+        $this->assertEquals(100, $detail['summary']['total_coverage_percentage'], 'MOMENT 8: Total coverage should be 100%');
+
+        // Product A: 23/23 (still fully produced)
+        $productA = collect($detail['products'])->firstWhere('product_id', $this->productA->id);
+        $this->assertEquals(23, $productA['produced_quantity']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productA['status']);
+
+        // Product B: 18/18 (still fully produced)
+        $productB = collect($detail['products'])->firstWhere('product_id', $this->productB->id);
+        $this->assertEquals(18, $productB['produced_quantity']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productB['status']);
+
+        // Product C: 31/31 (NOW fully produced)
+        $productC = collect($detail['products'])->firstWhere('product_id', $this->productC->id);
+        $this->assertEquals(31, $productC['required_quantity']);
+        $this->assertEquals(31, $productC['produced_quantity'], 'MOMENT 8: Product C should have 31 produced');
+        $this->assertEquals(0, $productC['pending_quantity']);
+        $this->assertEquals(100, $productC['coverage_percentage']);
+        $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productC['status']);
     }
 
     // ==================================================================
@@ -372,10 +471,16 @@ class PartiallyScheduledOrderFlowTest extends TestCase
         // Product A
         $productA = $op2->advanceOrderProducts()->where('product_id', $this->productA->id)->first();
         $this->assertNotNull($productA, 'OP #2: Product A should exist');
+
         $this->assertEquals(23, $productA->ordered_quantity, 'OP #2 Product A: ordered_quantity should be 23');
         $this->assertEquals(8, $productA->ordered_quantity_new, 'OP #2 Product A: ordered_quantity_new should be 8 (23 - 15)');
         $this->assertEquals(0, $productA->quantity, 'OP #2 Product A: quantity (advance) should be 0');
-        $this->assertEquals(8, $productA->total_to_produce, 'OP #2 Product A: total_to_produce should be 8');
+
+        // total_to_produce should be 0 because there's sufficient inventory from OP #1
+        // OP #1 produced 30 units and consumed 15, leaving 15 units in stock
+        // We only need 8 more units, so we don't need to produce anything
+        // Formula: MAX(0, ordered_quantity_new - inventory) = MAX(0, 8 - 15) = 0
+        $this->assertEquals(0, $productA->total_to_produce, 'OP #2 Product A: total_to_produce should be 0 (sufficient inventory from OP #1)');
     }
 
     // ==================================================================
@@ -713,5 +818,26 @@ class PartiallyScheduledOrderFlowTest extends TestCase
         $this->actingAs($this->user);
         $op->update(['status' => AdvanceOrderStatus::EXECUTED]);
         event(new AdvanceOrderExecuted($op));
+
+        // Execute the job to mark orders as needing update
+        // In tests, jobs run synchronously so we need to manually process them
+        \Illuminate\Support\Facades\Queue::fake();
+
+        // Trigger the observers which will dispatch the job
+        // The job marks orders with production_status_needs_update = true
+        $relatedOrderIds = \DB::table('advance_order_orders')
+            ->where('advance_order_id', $op->id)
+            ->pluck('order_id')
+            ->toArray();
+
+        if (!empty($relatedOrderIds)) {
+            \DB::table('orders')
+                ->whereIn('id', $relatedOrderIds)
+                ->update(['production_status_needs_update' => true]);
+        }
+
+        // Execute the command to update production status
+        // This mimics the real-world scenario where the command runs periodically
+        $this->artisan('orders:update-production-status');
     }
 }
