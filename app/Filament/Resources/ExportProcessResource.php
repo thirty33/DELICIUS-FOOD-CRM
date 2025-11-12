@@ -120,11 +120,15 @@ class ExportProcessResource extends Resource
                     ->color('success')
                     ->visible(fn($record) => !empty($record->file_url) && $record->status === ExportProcess::STATUS_PROCESSED)
                     ->action(function ($record) {
-                        // Obtener el nombre del archivo desde la URL
+                        // Get file path from URL
                         $filePath = parse_url($record->file_url, PHP_URL_PATH);
                         $filePath = ltrim($filePath, '/');
 
-                        // Generar nombre personalizado basado en tipo y descripción
+                        // Decode the path to handle special characters correctly
+                        // CloudFront signed URLs contain URL-encoded paths, but S3 stores files with actual characters
+                        $filePath = urldecode($filePath);
+
+                        // Generate custom filename based on type and description
                         $originalFileName = basename($filePath);
                         $extension = pathinfo($originalFileName, PATHINFO_EXTENSION);
 
