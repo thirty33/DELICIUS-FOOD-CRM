@@ -168,13 +168,24 @@ class OrderLinesImport implements
      */
     private function findOrderByIdAndNumber($id, $orderNumber): ?Order
     {
-        if (empty($id) || empty($orderNumber)) {
-            return null;
+        // Si tenemos ambos, buscar por ambos (más específico)
+        if (!empty($id) && !empty($orderNumber)) {
+            return Order::where('id', $id)
+                ->where('order_number', $orderNumber)
+                ->first();
         }
 
-        return Order::where('id', $id)
-            ->where('order_number', $orderNumber)
-            ->first();
+        // Si solo tenemos order_number, buscar por order_number para evitar duplicados
+        if (!empty($orderNumber)) {
+            return Order::where('order_number', $orderNumber)->first();
+        }
+
+        // Si solo tenemos ID, buscar por ID
+        if (!empty($id)) {
+            return Order::find($id);
+        }
+
+        return null;
     }
 
     /**
