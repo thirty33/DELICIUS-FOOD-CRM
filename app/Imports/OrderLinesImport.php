@@ -362,8 +362,30 @@ class OrderLinesImport implements
                 'transport_rows_skipped' => $rows->count() - $filteredRows->count()
             ]);
 
+            // Log unique order codes BEFORE grouping to detect invisible characters
+            $uniqueOrderCodes = $filteredRows->pluck('codigo_de_pedido')->unique();
+            $orderCodeAnalysis = $uniqueOrderCodes->map(function($code) {
+                return [
+                    'code' => $code,
+                    'length' => strlen($code),
+                    'hex' => bin2hex($code), // Show hexadecimal representation
+                    'trimmed' => trim($code),
+                    'trimmed_length' => strlen(trim($code)),
+                ];
+            })->toArray();
+
+            Log::info('ORDER CODES BEFORE GROUPING - Analysis', [
+                'unique_count' => $uniqueOrderCodes->count(),
+                'order_codes_analysis' => $orderCodeAnalysis,
+            ]);
+
             // Agrupar filas por código de pedido para procesarlas juntas
             $rowsByOrderNumber = $filteredRows->groupBy('codigo_de_pedido');
+
+            Log::info('ORDER CODES AFTER GROUPING', [
+                'total_groups' => $rowsByOrderNumber->count(),
+                'group_keys' => $rowsByOrderNumber->keys()->toArray(),
+            ]);
 
             // Process each order independently (each order handles its own transaction)
             foreach ($rowsByOrderNumber as $orderNumber => $orderRows) {
@@ -403,6 +425,17 @@ class OrderLinesImport implements
      */
     private function processOrderRows($orderNumber, Collection $rows)
     {
+        // Track the missing order
+        $isMissingOrder = ($orderNumber === '20251111597579' || $orderNumber === 20251111597579);
+
+        if ($isMissingOrder) {
+            Log::critical('MISSING ORDER 20251111597579 - Starting processOrderRows', [
+                'order_number' => $orderNumber,
+                'order_number_type' => gettype($orderNumber),
+                'rows_count' => $rows->count(),
+            ]);
+        }
+
         // Start a transaction for this specific order
         DB::beginTransaction();
 
@@ -410,6 +443,15 @@ class OrderLinesImport implements
             // Usar el primer registro para obtener datos de la orden
             $firstRow = $rows->first();
             $idOrden = $firstRow['id_orden'] ?? null;
+
+            if ($isMissingOrder) {
+                Log::critical('MISSING ORDER 20251111597579 - First row data', [
+                    'id_orden' => $idOrden,
+                    'usuario' => $firstRow['usuario'] ?? null,
+                    'estado' => $firstRow['estado'] ?? null,
+                    'fecha_despacho' => $firstRow['fecha_de_despacho'] ?? null,
+                ]);
+            }
 
             Log::info('Procesando orden desde Excel', [
                 'order_number' => $orderNumber,
@@ -421,8 +463,19 @@ class OrderLinesImport implements
             // Determinar si existe la combinación id + código
             $existingOrder = $this->findOrderByIdAndNumber($idOrden, $orderNumber);
 
+            if ($isMissingOrder) {
+                Log::critical('MISSING ORDER 20251111597579 - After findOrderByIdAndNumber', [
+                    'existing_order_found' => $existingOrder ? 'YES (ID: ' . $existingOrder->id . ')' : 'NO',
+                    'id_orden' => $idOrden,
+                    'order_number' => $orderNumber,
+                ]);
+            }
+
             // Si ambos campos están vacíos, crear orden completamente nueva sin order_number
             if (empty($idOrden) && empty($orderNumber)) {
+                if ($isMissingOrder) {
+                    Log::critical('MISSING ORDER 20251111597579 - Both empty, creating new order without number');
+                }
                 $this->createNewOrder($rows);
                 DB::commit();
                 return;
@@ -430,6 +483,9 @@ class OrderLinesImport implements
 
             // Si la combinación id + código existe, modificar la orden existente
             if ($existingOrder) {
+                if ($isMissingOrder) {
+                    Log::critical('MISSING ORDER 20251111597579 - Existing order found, will update');
+                }
                 $processKey = "{$idOrden}_{$orderNumber}";
 
                 // Si este pedido ya fue procesado, verificar si hay cambios
@@ -461,18 +517,36 @@ class OrderLinesImport implements
 
             // Si hay order_number pero no existe en la BD, crear nueva orden con ese número
             if (!empty($orderNumber)) {
+                if ($isMissingOrder) {
+                    Log::critical('MISSING ORDER 20251111597579 - Will create new order with number');
+                }
                 $this->createNewOrderWithNumber($orderNumber, $rows);
                 DB::commit();
+                if ($isMissingOrder) {
+                    Log::critical('MISSING ORDER 20251111597579 - Successfully committed');
+                }
                 return;
             }
 
             // Si solo hay id_orden pero no order_number, crear orden nueva sin número específico
+            if ($isMissingOrder) {
+                Log::critical('MISSING ORDER 20251111597579 - Will create new order without specific number');
+            }
             $this->createNewOrder($rows);
             DB::commit();
 
         } catch (\Exception $e) {
             // Rollback this specific order's transaction
             DB::rollBack();
+
+            if ($isMissingOrder) {
+                Log::critical('MISSING ORDER 20251111597579 - EXCEPTION CAUGHT', [
+                    'error_message' => $e->getMessage(),
+                    'error_class' => get_class($e),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine(),
+                ]);
+            }
 
             ExportErrorHandler::handle(
                 $e,
@@ -737,22 +811,63 @@ class OrderLinesImport implements
     private function processOrderLines($orderId, Collection $rows)
     {
         try {
-            Log::info('Procesando líneas de pedido', [
-                'order_id' => $orderId
+            // Get order to log its order_number
+            $order = Order::find($orderId);
+            $orderNumber = $order->order_number ?? 'UNKNOWN';
+
+            // Log Excel data received for ALL orders
+            $excelProducts = $rows->map(function($row) {
+                return [
+                    'codigo_producto' => $row['codigo_de_producto'],
+                    'nombre_producto' => $row['nombre_producto'] ?? 'N/A',
+                    'cantidad_excel' => $row['cantidad'],
+                    'categoria' => $row['categoria'] ?? 'N/A',
+                ];
+            })->toArray();
+
+            // Get existing order lines count BEFORE processing
+            $existingLinesCount = OrderLine::where('order_id', $orderId)->count();
+
+            Log::info('ORDER LINES IMPORT - Excel data received', [
+                'order_id' => $orderId,
+                'order_number' => $orderNumber,
+                'excel_rows_count' => $rows->count(),
+                'existing_lines_count' => $existingLinesCount,
+                'excel_products' => $excelProducts,
             ]);
 
-            // Eliminar las líneas de pedido existentes
-            OrderLine::where('order_id', $orderId)->delete();
+            // INTELLIGENT MERGE: Instead of deleting all lines, we'll use updateOrCreate
+            // This allows chunks to be processed independently without losing data
+            $createdLines = [];
+            $updatedLines = [];
+            $skippedProducts = [];
 
-            // Crear nuevas líneas de pedido
-            foreach ($rows as $row) {
+            foreach ($rows as $rowIndex => $row) {
                 // Obtener código de producto sin limpiar comillas
                 $productCode = $row['codigo_de_producto'];
 
                 // Obtener el producto por código
                 $product = Product::where('code', $productCode)->first();
                 if (!$product) {
-                    throw new \Exception("El producto con código {$productCode} no existe.");
+                    $errorMsg = "El producto con código {$productCode} no existe.";
+
+                    Log::error('ORDER LINES IMPORT - Product not found in database', [
+                        'order_number' => $orderNumber,
+                        'row_index' => $rowIndex,
+                        'product_code' => $productCode,
+                        'product_name' => $row['nombre_producto'] ?? 'N/A',
+                        'quantity_from_excel' => $row['cantidad'],
+                        'categoria' => $row['categoria'] ?? 'N/A',
+                    ]);
+
+                    $skippedProducts[] = [
+                        'code' => $productCode,
+                        'name' => $row['nombre_producto'] ?? 'N/A',
+                        'quantity' => $row['cantidad'],
+                        'reason' => 'Product not found in database',
+                    ];
+
+                    throw new \Exception($errorMsg);
                 }
 
                 $unitPrice = OrderLine::calculateUnitPrice($product->id, $orderId);
@@ -760,32 +875,98 @@ class OrderLinesImport implements
                 // Convertir parcialmente programado a booleano
                 $partiallyScheduled = $this->convertToBoolean($row['parcialmente_programado'] ?? false);
 
-                // Crear la línea de pedido
-                OrderLine::create([
-                    'order_id' => $orderId,
-                    'product_id' => $product->id,
-                    'quantity' => $row['cantidad'],
-                    'partially_scheduled' => $partiallyScheduled,
+                // Check if this order line already exists
+                $existingLine = OrderLine::where('order_id', $orderId)
+                    ->where('product_id', $product->id)
+                    ->first();
+
+                // Use updateOrCreate to merge intelligently
+                $orderLine = OrderLine::updateOrCreate(
+                    [
+                        'order_id' => $orderId,
+                        'product_id' => $product->id,
+                    ],
+                    [
+                        'quantity' => $row['cantidad'],
+                        'partially_scheduled' => $partiallyScheduled,
+                        'unit_price' => $unitPrice,
+                    ]
+                );
+
+                $lineData = [
+                    'row_index' => $rowIndex,
+                    'product_code' => $productCode,
+                    'product_name' => $product->name,
+                    'quantity_from_excel' => $row['cantidad'],
+                    'quantity_saved_db' => $orderLine->quantity,
                     'unit_price' => $unitPrice,
-                ]);
+                    'order_line_id' => $orderLine->id,
+                    'was_updated' => $existingLine !== null,
+                ];
+
+                if ($existingLine) {
+                    $updatedLines[] = $lineData;
+                } else {
+                    $createdLines[] = $lineData;
+                }
             }
+
+            Log::info('ORDER LINES IMPORT - Lines processed (merge)', [
+                'order_number' => $orderNumber,
+                'created_lines' => $createdLines,
+                'created_count' => count($createdLines),
+                'updated_lines' => $updatedLines,
+                'updated_count' => count($updatedLines),
+                'total_processed' => count($createdLines) + count($updatedLines),
+                'skipped_products' => $skippedProducts,
+                'skipped_count' => count($skippedProducts),
+            ]);
 
             // dispatch_cost will be calculated automatically by the Order model
 
             // Log order lines details before validation
-            $order = Order::with('orderLines')->find($orderId);
+            $order = Order::with('orderLines.product')->find($orderId);
             $lineDetails = $order->orderLines->map(fn($line) => [
                 'product_id' => $line->product_id,
+                'product_code' => $line->product->code,
+                'product_name' => $line->product->name,
                 'quantity' => $line->quantity,
                 'unit_price' => $line->unit_price,
                 'total_price' => $line->total_price,
             ])->toArray();
 
-            Log::info("Líneas de pedido procesadas con éxito", [
+            // Calculate chunk vs total comparison
+            // NOTE: With chunk processing, a single order may be processed across multiple chunks
+            // So we compare this chunk's products vs what's in DB (should be >= chunk size if multi-chunk)
+            $chunkProductCount = $rows->count();
+            $totalDbLines = $order->orderLines->count();
+            $chunkProductCodes = $rows->pluck('codigo_de_producto')->toArray();
+            $dbProductCodes = $order->orderLines->pluck('product.code')->toArray();
+
+            // Check if all products from this chunk are in DB
+            $missingInDb = array_diff($chunkProductCodes, $dbProductCodes);
+            $extraInDb = array_diff($dbProductCodes, $chunkProductCodes);
+
+            Log::info("ORDER LINES IMPORT - Lines processed successfully", [
                 'order_id' => $orderId,
-                'lines_count' => $rows->count(),
+                'order_number' => $orderNumber,
+                'chunk_products_count' => $chunkProductCount,
+                'total_db_lines_count' => $totalDbLines,
                 'order_lines_details' => $lineDetails,
                 'order_total_before_validation' => $order->total,
+            ]);
+
+            // Final comparison log for ALL orders
+            Log::info('ORDER LINES IMPORT - Chunk vs DB comparison', [
+                'order_number' => $orderNumber,
+                'chunk_product_count' => $chunkProductCount,
+                'total_db_lines' => $totalDbLines,
+                'is_multi_chunk_order' => $totalDbLines > $chunkProductCount,
+                'chunk_products' => $chunkProductCodes,
+                'all_db_products' => $dbProductCodes,
+                'missing_in_db' => $missingInDb,
+                'extra_in_db_from_previous_chunks' => $extraInDb,
+                'chunk_fully_imported' => count($missingInDb) === 0,
             ]);
         } catch (\Exception $e) {
             ExportErrorHandler::handle(
@@ -947,6 +1128,11 @@ class OrderLinesImport implements
      */
     public function onFailure(Failure ...$failures)
     {
+        Log::info('onFailure triggered', [
+            'import_process_id' => $this->importProcessId,
+            'total_failures' => count($failures),
+        ]);
+
         foreach ($failures as $failure) {
             $error = [
                 'row' => $failure->row(),
@@ -954,6 +1140,17 @@ class OrderLinesImport implements
                 'errors' => $failure->errors(),
                 'values' => $failure->values(),
             ];
+
+            // Check if this is the missing order
+            $orderNumber = $failure->values()['codigo_de_pedido'] ?? null;
+            if ($orderNumber === '20251111597579' || $orderNumber === 20251111597579) {
+                Log::critical('MISSING ORDER 20251111597579 DETECTED IN onFailure', [
+                    'row' => $failure->row(),
+                    'attribute' => $failure->attribute(),
+                    'errors' => $failure->errors(),
+                    'all_values' => $failure->values(),
+                ]);
+            }
 
             // Obtener el proceso actual y sus errores existentes
             $importProcess = ImportProcess::find($this->importProcessId);
@@ -985,6 +1182,12 @@ class OrderLinesImport implements
      */
     public function onError(Throwable $e)
     {
+        Log::critical('onError triggered', [
+            'import_process_id' => $this->importProcessId,
+            'error_message' => $e->getMessage(),
+            'error_class' => get_class($e),
+        ]);
+
         $error = [
             'error' => $e->getMessage(),
             'file' => $e->getFile(),
