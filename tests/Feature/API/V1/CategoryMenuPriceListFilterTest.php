@@ -230,6 +230,127 @@ class CategoryMenuPriceListFilterTest extends TestCase
     }
 
     /**
+     * Test menu with inactive products should NOT return inactive products
+     * Only active products with prices should be returned
+     */
+    public function test_menu_with_inactive_products_does_not_return_inactive_products(): void
+    {
+        // Create menu
+        $menu = Menu::create([
+            'title' => 'TEST MENU WITH INACTIVE PRODUCTS',
+            'publication_date' => '2025-10-14',
+            'active' => true,
+        ]);
+
+        // Create Category 1: SOPAS Y CREMAS VARIABLES
+        $category1 = Category::create([
+            'name' => 'TEST SOPAS Y CREMAS VARIABLES',
+            'description' => 'Test category',
+            'active' => true,
+        ]);
+        $category1->subcategories()->attach([
+            $this->entradaSubcategory->id,
+            $this->calienteSubcategory->id,
+        ]);
+
+        // Create Product 1 ACTIVE with price
+        $activeProduct = Product::create([
+            'name' => 'TEST - CONSOME DE POLLO ACTIVE',
+            'description' => 'Test product description',
+            'code' => 'TEST_ACTIVE_001',
+            'category_id' => $category1->id,
+            'active' => true,  // ACTIVE
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // Create price list line for active product
+        PriceListLine::create([
+            'price_list_id' => $this->testPriceList->id,
+            'product_id' => $activeProduct->id,
+            'unit_price' => 20000.00,
+            'active' => true,
+        ]);
+
+        // Create Product 2 INACTIVE with price
+        $inactiveProduct = Product::create([
+            'name' => 'TEST - CREMA DE ESPINACA INACTIVE',
+            'description' => 'Test product description',
+            'code' => 'TEST_INACTIVE_001',
+            'category_id' => $category1->id,
+            'active' => false,  // INACTIVE
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // Create price list line for inactive product (has price but product is inactive)
+        PriceListLine::create([
+            'price_list_id' => $this->testPriceList->id,
+            'product_id' => $inactiveProduct->id,
+            'unit_price' => 25000.00,
+            'active' => true,
+        ]);
+
+        // Create CategoryMenu entry
+        $categoryMenu1 = CategoryMenu::create([
+            'category_id' => $category1->id,
+            'menu_id' => $menu->id,
+            'order' => 10,
+            'show_all_products' => false,
+            'is_active' => true,
+            'display_order' => 10,
+        ]);
+
+        // Attach BOTH products to CategoryMenu (active and inactive)
+        $categoryMenu1->products()->attach($activeProduct->id);
+        $categoryMenu1->products()->attach($inactiveProduct->id);
+
+        // Authenticate user
+        Sanctum::actingAs($this->testUser);
+
+        // Make API request
+        $response = $this->getJson("/api/v1/categories/{$menu->id}?page=1");
+
+        // Assertions
+        $response->assertStatus(200);
+
+        $data = $response->json('data.data');
+
+        // Should return 1 category with ENTRADA subcategory
+        $this->assertCount(1, $data);
+
+        $categoryData = $data[0];
+
+        // Category should have products
+        $this->assertArrayHasKey('products', $categoryData);
+        $products = $categoryData['products'];
+
+        // Should only return 1 product (the active one)
+        $this->assertCount(
+            1,
+            $products,
+            'Should only return active products, inactive products should be filtered out'
+        );
+
+        // Verify the returned product is the active one
+        $this->assertEquals(
+            'TEST_ACTIVE_001',
+            $products[0]['code'],
+            'Returned product should be the active one'
+        );
+
+        // Verify inactive product is NOT in the response
+        $productCodes = collect($products)->pluck('code')->toArray();
+        $this->assertNotContains(
+            'TEST_INACTIVE_001',
+            $productCodes,
+            'Inactive product should NOT be returned'
+        );
+    }
+
+    /**
      * Test menu with products that DON'T have prices (like menu 188)
      * This menu should NOT return categories without priced products
      */

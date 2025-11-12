@@ -35,27 +35,29 @@ class CategoryMenuRepository
             'category' => function ($query) use ($user, $weekdayInEnglish) {
                 // Filter categories that have products with price list lines
                 $query->whereHas('products', function ($priceListQuery) use ($user) {
-                    $priceListQuery->whereHas('priceListLines', function ($subQuery) use ($user) {
-                        $subQuery->where('active', true)
-                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                $priceListQuery->where('id', $user->company->price_list_id);
-                            });
-                    });
+                    $priceListQuery->where('active', true)
+                        ->whereHas('priceListLines', function ($subQuery) use ($user) {
+                            $subQuery->where('active', true)
+                                ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                    $priceListQuery->where('id', $user->company->price_list_id);
+                                });
+                        });
                 });
 
                 // Eager load products with price list lines
                 $query->with(['products' => function ($query) use ($user) {
-                    $query->whereHas('priceListLines', function ($subQuery) use ($user) {
-                        $subQuery->where('active', true)
-                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                $priceListQuery->where('id', $user->company->price_list_id);
-                            });
-                    })->with(['priceListLines' => function ($query) use ($user) {
-                        $query->where('active', true)
-                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                $priceListQuery->where('id', $user->company->price_list_id);
-                            });
-                    }])
+                    $query->where('active', true)
+                        ->whereHas('priceListLines', function ($subQuery) use ($user) {
+                            $subQuery->where('active', true)
+                                ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                    $priceListQuery->where('id', $user->company->price_list_id);
+                                });
+                        })->with(['priceListLines' => function ($query) use ($user) {
+                            $query->where('active', true)
+                                ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                    $priceListQuery->where('id', $user->company->price_list_id);
+                                });
+                        }])
                         ->with(['ingredients']);
                 }]);
 
@@ -77,17 +79,18 @@ class CategoryMenuRepository
             'menu',
             // Eager load products directly on CategoryMenu with price list lines
             'products' => function ($query) use ($user) {
-                $query->whereHas('priceListLines', function ($subQuery) use ($user) {
-                    $subQuery->where('active', true)
-                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
-                })->with(['priceListLines' => function ($query) use ($user) {
-                    $query->where('active', true)
-                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('id', $user->company->price_list_id);
-                        });
-                }])->with(['ingredients']);
+                $query->where('active', true)
+                    ->whereHas('priceListLines', function ($subQuery) use ($user) {
+                        $subQuery->where('active', true)
+                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('id', $user->company->price_list_id);
+                            });
+                    })->with(['priceListLines' => function ($query) use ($user) {
+                        $query->where('active', true)
+                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('id', $user->company->price_list_id);
+                            });
+                    }])->with(['ingredients']);
             }
         ]);
 
@@ -149,10 +152,13 @@ class CategoryMenuRepository
                 // Case 1: show_all_products = true → Check category products
                 $query->where(function ($subQuery) use ($user) {
                     $subQuery->where('show_all_products', true)
-                        ->whereHas('category.products.priceListLines', function ($priceQuery) use ($user) {
-                            $priceQuery->where('active', true)
-                                ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                    $priceListQuery->where('id', $user->company->price_list_id);
+                        ->whereHas('category.products', function ($productQuery) use ($user) {
+                            $productQuery->where('active', true)
+                                ->whereHas('priceListLines', function ($priceQuery) use ($user) {
+                                    $priceQuery->where('active', true)
+                                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                            $priceListQuery->where('id', $user->company->price_list_id);
+                                        });
                                 });
                         });
                 })
@@ -160,10 +166,11 @@ class CategoryMenuRepository
                 ->orWhere(function ($subQuery) use ($user) {
                     $subQuery->where('show_all_products', false)
                         ->whereHas('products', function ($pivotQuery) use ($user) {
-                            $pivotQuery->whereHas('priceListLines', function ($priceListQuery) use ($user) {
-                                $priceListQuery->where('active', true)
-                                    ->where('price_list_id', $user->company->price_list_id);
-                            });
+                            $pivotQuery->where('active', true)
+                                ->whereHas('priceListLines', function ($priceListQuery) use ($user) {
+                                    $priceListQuery->where('active', true)
+                                        ->where('price_list_id', $user->company->price_list_id);
+                                });
                         });
                 });
             })

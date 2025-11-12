@@ -30,6 +30,12 @@ docs/
 delisoft_*.sql
 *_dump*.sql
 
+# Test files - Excel and CSV test files for imports
+tests/**/*.xlsx
+tests/**/*.csv
+**/test_order_*.xlsx
+**/*_test_manifest.csv
+
 # Documentation files - Internal use only
 CREAR_NUEVA_BASE_DE_DATOS.md
 RESOLVER_PROBLEMA_DNS_MCP_CHROME.md

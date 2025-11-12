@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Branch;
 use App\Models\ImportProcess;
 use App\Enums\OrderStatus;
+use App\Enums\OrderImportValidationMessage;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Classes\Orders\Validations\OrderStatusValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
@@ -17,6 +18,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
@@ -49,6 +51,7 @@ class OrderLinesImport implements
     private $importProcessId;
     private $errors = [];
     private $processedOrders = [];
+    private $currentExcelRowNumber = 0;
 
     /**
      * Header mapping between Excel file and internal system.
@@ -198,7 +201,21 @@ class OrderLinesImport implements
         return [
             '*.id_orden' => ['nullable', 'integer'],
             '*.codigo_de_pedido' => ['nullable'],
-            '*.estado' => ['required', 'string'],
+            '*.estado' => [
+                'required',
+                Rule::in([
+                    // Spanish labels - Primera letra mayúscula
+                    OrderStatus::PENDING->getLabel(),      // 'Pendiente'
+                    OrderStatus::PROCESSED->getLabel(),    // 'Procesado'
+                    OrderStatus::CANCELED->getLabel(),     // 'Cancelado'
+                    OrderStatus::PARTIALLY_SCHEDULED->getLabel(),  // 'Parcialmente Agendado'
+                    // Spanish labels - Todo en MAYÚSCULAS
+                    'PENDIENTE',
+                    'PROCESADO',
+                    'CANCELADO',
+                    'PARCIALMENTE AGENDADO',
+                ]),
+            ],
             '*.fecha_de_orden' => ['required'],               // Can be string or numeric (Excel serial date)
             '*.fecha_de_despacho' => ['required'],            // Can be string or numeric (Excel serial date)
             '*.codigo_de_empresa' => ['required', 'string'],     // Laravel Excel converts "Código de Empresa"
@@ -220,22 +237,23 @@ class OrderLinesImport implements
     private function getValidationMessages(): array
     {
         return [
-            '*.id_orden.integer' => 'El ID de orden debe ser un número entero.',
-            '*.estado.required' => 'El estado del pedido es obligatorio.',
-            '*.fecha_de_orden.required' => 'La fecha de orden es obligatoria.',
-            '*.fecha_de_despacho.required' => 'La fecha de despacho es obligatoria.',
-            '*.codigo_empresa.required' => 'El código de empresa es obligatorio.',
-            '*.codigo_empresa.string' => 'El código de empresa debe ser un texto.',
-            '*.codigo_sucursal.required' => 'El código de sucursal es obligatorio.',
-            '*.codigo_sucursal.string' => 'El código de sucursal debe ser un texto.',
-            '*.usuario.required' => 'El usuario es obligatorio.',
-            '*.usuario.string' => 'El usuario debe ser un texto (email o nickname).',
-            '*.codigo_de_producto.required' => 'El código de producto es obligatorio.',
-            '*.cantidad.required' => 'La cantidad es obligatoria.',
-            '*.cantidad.integer' => 'La cantidad debe ser un número entero.',
-            '*.cantidad.min' => 'La cantidad debe ser al menos 1.',
-            '*.precio_neto.numeric' => 'El precio neto debe ser un número.',
-            '*.parcialmente_programado.in' => 'El campo parcialmente programado debe tener un valor válido (0, 1, true, false, si, no).',
+            '*.id_orden.integer' => OrderImportValidationMessage::ID_ORDEN_INTEGER->value,
+            '*.estado.required' => OrderImportValidationMessage::ESTADO_REQUIRED->value,
+            '*.estado.in' => OrderImportValidationMessage::ESTADO_INVALID->value,
+            '*.fecha_de_orden.required' => OrderImportValidationMessage::FECHA_ORDEN_REQUIRED->value,
+            '*.fecha_de_despacho.required' => OrderImportValidationMessage::FECHA_DESPACHO_REQUIRED->value,
+            '*.codigo_de_empresa.required' => OrderImportValidationMessage::CODIGO_EMPRESA_REQUIRED->value,
+            '*.codigo_de_empresa.string' => OrderImportValidationMessage::CODIGO_EMPRESA_STRING->value,
+            '*.codigo_sucursal.required' => OrderImportValidationMessage::CODIGO_SUCURSAL_REQUIRED->value,
+            '*.codigo_sucursal.string' => OrderImportValidationMessage::CODIGO_SUCURSAL_STRING->value,
+            '*.usuario.required' => OrderImportValidationMessage::USUARIO_REQUIRED->value,
+            '*.usuario.string' => OrderImportValidationMessage::USUARIO_STRING->value,
+            '*.codigo_de_producto.required' => OrderImportValidationMessage::CODIGO_PRODUCTO_REQUIRED->value,
+            '*.cantidad.required' => OrderImportValidationMessage::CANTIDAD_REQUIRED->value,
+            '*.cantidad.integer' => OrderImportValidationMessage::CANTIDAD_INTEGER->value,
+            '*.cantidad.min' => OrderImportValidationMessage::CANTIDAD_MIN->value,
+            '*.precio_neto.numeric' => OrderImportValidationMessage::PRECIO_NETO_NUMERIC->value,
+            '*.parcialmente_programado.in' => OrderImportValidationMessage::PARCIALMENTE_PROGRAMADO_IN->value,
         ];
     }
 
@@ -275,7 +293,7 @@ class OrderLinesImport implements
                         } catch (\Exception $e) {
                             $validator->errors()->add(
                                 "{$index}.fecha_de_orden",
-                                'El formato de la fecha de orden debe ser DD/MM/YYYY o un número de fecha de Excel.'
+                                OrderImportValidationMessage::FECHA_ORDEN_FORMAT->value
                             );
                         }
                     }
@@ -290,7 +308,7 @@ class OrderLinesImport implements
                         } catch (\Exception $e) {
                             $validator->errors()->add(
                                 "{$index}.fecha_de_despacho",
-                                'El formato de la fecha de despacho debe ser DD/MM/YYYY o un número de fecha de Excel.'
+                                OrderImportValidationMessage::FECHA_DESPACHO_FORMAT->value
                             );
                         }
                     }
@@ -302,7 +320,7 @@ class OrderLinesImport implements
                     if (!$userExists) {
                         $validator->errors()->add(
                             "{$index}.usuario",
-                            'El usuario especificado no existe (buscado por email o nickname).'
+                            OrderImportValidationMessage::USUARIO_NOT_EXISTS->value
                         );
                     }
                 }
@@ -314,7 +332,7 @@ class OrderLinesImport implements
                     if (!$productExists) {
                         $validator->errors()->add(
                             "{$index}.codigo_de_producto",
-                            "El producto con código {$productCode} no existe en el sistema."
+                            OrderImportValidationMessage::PRODUCTO_NOT_EXISTS->message(['code' => $productCode])
                         );
                     }
                 }
@@ -402,17 +420,24 @@ class OrderLinesImport implements
                 $this->processOrderRows($cleanOrderNumber, $orderRows);
             }
         } catch (\Exception $e) {
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'general_validation',
-                'ImportProcess'
-            );
-
             Log::error('Error general en la importación', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
+
+            // Manually call logImportError with the row number
+            // Since we're catching the exception, onError() won't be automatically triggered
+            $this->logImportError(
+                $this->currentExcelRowNumber,
+                'general_validation',
+                [$e->getMessage()],
+                [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ]
+            );
         }
     }
 
@@ -435,6 +460,26 @@ class OrderLinesImport implements
                 'rows_count' => $rows->count(),
             ]);
         }
+
+        // TDD: Calculate Excel row number for error reporting
+        // Laravel Excel uses WithHeadingRow, so row 1 is headers, data starts at row 2
+        // rows->keys() gives us 0-indexed collection keys
+        // We need the last row number: last_key + 2 (+1 for header, +1 for 0-index)
+        $lastRowNumber = $rows->keys()->last() ?? 0;
+        $excelRowNumber = $lastRowNumber + 2;
+
+        // TDD: Set current Excel row number for error reporting in onError()
+        $this->currentExcelRowNumber = $excelRowNumber;
+
+        // TDD LOG: Debug row numbers for error reporting
+        Log::debug('TDD: processOrderRows - row number analysis', [
+            'order_number' => $orderNumber,
+            'rows_count' => $rows->count(),
+            'rows_keys' => $rows->keys()->toArray(),
+            'first_key' => $rows->keys()->first(),
+            'last_key' => $lastRowNumber,
+            'calculated_excel_row_number' => $excelRowNumber,
+        ]);
 
         // Start a transaction for this specific order
         DB::beginTransaction();
@@ -548,17 +593,24 @@ class OrderLinesImport implements
                 ]);
             }
 
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'order_' . $orderNumber,
-                'ImportProcess'
-            );
-
             Log::error("Error procesando pedido {$orderNumber} - Rollback ejecutado", [
                 'error' => $e->getMessage(),
-                'order_number' => $orderNumber
+                'order_number' => $orderNumber,
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
+
+            // Manually call logImportError with the row number
+            // Since we're catching the exception, onError() won't be automatically triggered
+            $this->logImportError(
+                $this->currentExcelRowNumber,
+                'order_' . $orderNumber,
+                [$e->getMessage()],
+                [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'order_number' => $orderNumber,
+                ]
+            );
 
             // DO NOT re-throw - allow processing to continue with next order
         }
@@ -627,19 +679,14 @@ class OrderLinesImport implements
                 'order_number' => $order->order_number
             ]);
         } catch (\Exception $e) {
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'update_order_' . $order->id,
-                'ImportProcess'
-            );
-
             Log::error("Error actualizando pedido existente", [
                 'order_id' => $order->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
 
             // Re-throw to trigger rollback in processOrderRows
+            // The error will be logged by processOrderRows catch block
             throw $e;
         }
     }
@@ -710,19 +757,14 @@ class OrderLinesImport implements
                 'order_number' => $orderNumber
             ]);
         } catch (\Exception $e) {
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'new_order_with_number_' . $orderNumber,
-                'ImportProcess'
-            );
-
             Log::error("Error creando nuevo pedido con order_number específico", [
                 'order_number' => $orderNumber,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
 
             // Re-throw to trigger rollback in processOrderRows
+            // The error will be logged by processOrderRows catch block
             throw $e;
         }
     }
@@ -786,18 +828,13 @@ class OrderLinesImport implements
                 'order_number' => $order->order_number
             ]);
         } catch (\Exception $e) {
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'new_order',
-                'ImportProcess'
-            );
-
             Log::error("Error creando nuevo pedido", [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
 
             // Re-throw to trigger rollback in processOrderRows
+            // The error will be logged by processOrderRows catch block
             throw $e;
         }
     }
@@ -969,16 +1006,14 @@ class OrderLinesImport implements
                 'chunk_fully_imported' => count($missingInDb) === 0,
             ]);
         } catch (\Exception $e) {
-            ExportErrorHandler::handle(
-                $e,
-                $this->importProcessId,
-                'order_lines_' . $orderId,
-                'ImportProcess'
-            );
-
             Log::error("Error procesando líneas de pedido para orden {$orderId}", [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'excel_row' => $this->currentExcelRowNumber,
             ]);
+
+            // Re-throw to trigger rollback in processOrderRows
+            // The error will be logged by processOrderRows catch block
+            throw $e;
         }
     }
 
@@ -1122,77 +1157,20 @@ class OrderLinesImport implements
     }
 
     /**
-     * Handle validation failures
-     * 
-     * @param Failure ...$failures
+     * Unified error logging function for both onFailure and onError
+     *
+     * @param int $row Excel row number (0 if not available)
+     * @param string $attribute Context or attribute name
+     * @param array $errors Array of error messages
+     * @param array $values Additional values (can include trace, file, line, etc.)
      */
-    public function onFailure(Failure ...$failures)
+    private function logImportError(int $row, string $attribute, array $errors, array $values = []): void
     {
-        Log::info('onFailure triggered', [
-            'import_process_id' => $this->importProcessId,
-            'total_failures' => count($failures),
-        ]);
-
-        foreach ($failures as $failure) {
-            $error = [
-                'row' => $failure->row(),
-                'attribute' => $failure->attribute(),
-                'errors' => $failure->errors(),
-                'values' => $failure->values(),
-            ];
-
-            // Check if this is the missing order
-            $orderNumber = $failure->values()['codigo_de_pedido'] ?? null;
-            if ($orderNumber === '20251111597579' || $orderNumber === 20251111597579) {
-                Log::critical('MISSING ORDER 20251111597579 DETECTED IN onFailure', [
-                    'row' => $failure->row(),
-                    'attribute' => $failure->attribute(),
-                    'errors' => $failure->errors(),
-                    'all_values' => $failure->values(),
-                ]);
-            }
-
-            // Obtener el proceso actual y sus errores existentes
-            $importProcess = ImportProcess::find($this->importProcessId);
-            $existingErrors = $importProcess->error_log ?? [];
-
-            // Agregar el nuevo error al array existente
-            $existingErrors[] = $error;
-
-            // Actualizar el error_log en el ImportProcess
-            $importProcess->update([
-                'error_log' => $existingErrors,
-                'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
-            ]);
-
-            Log::warning('Fallo en validación de importación de líneas de pedido', [
-                'import_process_id' => $this->importProcessId,
-                'row_number' => $failure->row(),
-                'attribute' => $failure->attribute(),
-                'errors' => $failure->errors(),
-                'values' => $failure->values(),
-            ]);
-        }
-    }
-
-    /**
-     * Handle import errors
-     * 
-     * @param Throwable $e
-     */
-    public function onError(Throwable $e)
-    {
-        Log::critical('onError triggered', [
-            'import_process_id' => $this->importProcessId,
-            'error_message' => $e->getMessage(),
-            'error_class' => get_class($e),
-        ]);
-
         $error = [
-            'error' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString()
+            'row' => $row,
+            'attribute' => $attribute,
+            'errors' => $errors,
+            'values' => $values,
         ];
 
         // Obtener el proceso actual y sus errores existentes
@@ -1207,13 +1185,84 @@ class OrderLinesImport implements
             'error_log' => $existingErrors,
             'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
         ]);
+    }
+
+    /**
+     * Handle validation failures
+     *
+     * @param Failure ...$failures
+     */
+    public function onFailure(Failure ...$failures)
+    {
+        Log::info('onFailure triggered', [
+            'import_process_id' => $this->importProcessId,
+            'total_failures' => count($failures),
+        ]);
+
+        foreach ($failures as $failure) {
+            // Check if this is the missing order
+            $orderNumber = $failure->values()['codigo_de_pedido'] ?? null;
+            if ($orderNumber === '20251111597579' || $orderNumber === 20251111597579) {
+                Log::critical('MISSING ORDER 20251111597579 DETECTED IN onFailure', [
+                    'row' => $failure->row(),
+                    'attribute' => $failure->attribute(),
+                    'errors' => $failure->errors(),
+                    'all_values' => $failure->values(),
+                ]);
+            }
+
+            // Use unified error logging function
+            $this->logImportError(
+                $failure->row(),
+                $failure->attribute(),
+                $failure->errors(),
+                $failure->values()
+            );
+
+            Log::warning('Fallo en validación de importación de líneas de pedido', [
+                'import_process_id' => $this->importProcessId,
+                'row_number' => $failure->row(),
+                'attribute' => $failure->attribute(),
+                'errors' => $failure->errors(),
+                'values' => $failure->values(),
+            ]);
+        }
+    }
+
+    /**
+     * Handle import errors
+     *
+     * @param Throwable $e
+     */
+    public function onError(Throwable $e)
+    {
+        Log::critical('onError triggered', [
+            'import_process_id' => $this->importProcessId,
+            'error_message' => $e->getMessage(),
+            'error_class' => get_class($e),
+            'current_excel_row_number' => $this->currentExcelRowNumber,
+        ]);
+
+        // Use unified error logging function
+        // If currentExcelRowNumber is set (from processOrderRows), use it; otherwise default to 0
+        $this->logImportError(
+            $this->currentExcelRowNumber,
+            'general_error',
+            [$e->getMessage()],
+            [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]
+        );
 
         Log::error('Error en importación de líneas de pedido', [
             'import_process_id' => $this->importProcessId,
             'error' => $e->getMessage(),
             'file' => $e->getFile(),
             'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
+            'excel_row' => $this->currentExcelRowNumber,
         ]);
     }
 }
