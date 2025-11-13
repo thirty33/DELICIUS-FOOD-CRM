@@ -20,7 +20,8 @@ class GenerateAdvanceOrderReport extends Command
                             {--hide-companies : Hide excluded companies columns in the report}
                             {--only-initial-adelanto : Show only initial adelanto column (hide other adelanto columns)}
                             {--hide-total-elaborado : Hide total elaborado column}
-                            {--hide-sobrantes : Hide sobrantes column}';
+                            {--hide-sobrantes : Hide sobrantes column}
+                            {--disk=s3 : Storage disk to use (s3 or local)}';
 
     /**
      * The console command description.
@@ -39,6 +40,7 @@ class GenerateAdvanceOrderReport extends Command
         $onlyInitialAdelanto = $this->option('only-initial-adelanto');
         $hideTotalElaborado = $this->option('hide-total-elaborado');
         $hideSobrantes = $this->option('hide-sobrantes');
+        $disk = $this->option('disk');
 
         // Validate that all advance orders exist
         $advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
@@ -79,24 +81,32 @@ class GenerateAdvanceOrderReport extends Command
                 !$hideSobrantes
             );
 
-            // Create filename
-            $fileName = 'advance-orders/reports/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
-
-            // Store the file directly to S3
-            $stored = Excel::store($export, $fileName, 's3');
-
-            if (!$stored) {
-                throw new \Exception('Error storing file to S3');
+            // Create filename based on disk
+            if ($disk === 'local') {
+                $fileName = 'test-exports/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
+            } else {
+                $fileName = 'advance-orders/reports/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
             }
 
-            // Get the signed temporary URL (valid for 24 hours)
-            $signedUrl = Storage::disk('s3')->temporaryUrl($fileName, now()->addHours(24));
+            // Store the file to specified disk
+            $stored = Excel::store($export, $fileName, $disk);
+
+            if (!$stored) {
+                throw new \Exception("Error storing file to {$disk}");
+            }
 
             $this->info('Report generated successfully!');
             $this->line('');
-            $this->line('S3 Path: ' . $fileName);
-            $this->line('Signed URL (valid for 24 hours):');
-            $this->line($signedUrl);
+
+            if ($disk === 's3') {
+                // Get the signed temporary URL (valid for 24 hours)
+                $signedUrl = Storage::disk('s3')->temporaryUrl($fileName, now()->addHours(24));
+                $this->line('S3 Path: ' . $fileName);
+                $this->line('Signed URL (valid for 24 hours):');
+                $this->line($signedUrl);
+            } else {
+                $this->line('Local Path: ' . storage_path('app/' . $fileName));
+            }
             $this->line('');
 
             return Command::SUCCESS;

@@ -22,6 +22,7 @@ use App\Repositories\WarehouseRepository;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Helpers\AdvanceOrderReportTestHelper;
 use Tests\TestCase;
 
 /**
@@ -46,6 +47,7 @@ use Tests\TestCase;
 class PartiallyScheduledOrderFlowTest extends TestCase
 {
     use RefreshDatabase;
+    use AdvanceOrderReportTestHelper;
 
     // Test date
     private Carbon $dateFA;
@@ -302,6 +304,47 @@ class PartiallyScheduledOrderFlowTest extends TestCase
         $this->assertEquals(0, $productC['pending_quantity']);
         $this->assertEquals(100, $productC['coverage_percentage']);
         $this->assertEquals(OrderProductionStatus::FULLY_PRODUCED->value, $productC['status']);
+    }
+
+    /**
+     * Test consolidated report date range validation
+     *
+     * This test runs the complete partially scheduled order flow scenario
+     * and validates that the final consolidated report (with all 4 OPs)
+     * has the correct date range in the header.
+     *
+     * VALIDATION:
+     * - Report header should show: "Desde: [earliest dispatch date] - Hasta: [latest dispatch date]"
+     * - Date range should match the dispatch dates from all orders included in the 4 OPs
+     */
+    public function test_consolidated_report_date_range_is_correct_after_all_ops(): void
+    {
+        // Run the complete scenario and get all 4 OPs
+        [$op1, $op2, $op3, $op4] = $this->runPartiallyScheduledOrderScenario();
+
+        // Get IDs of all OPs
+        $opIds = [$op1->id, $op2->id, $op3->id, $op4->id];
+
+        // Generate consolidated report with all parameters set to true
+        $filePath = $this->generateConsolidatedReport(
+            $opIds,
+            showExcludedCompanies: true,
+            showAllAdelantos: true,
+            showTotalElaborado: true,
+            showSobrantes: true
+        );
+
+        // Load the Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+
+        // Extract date range from report header
+        $dateRange = $this->extractDateRangeFromReport($spreadsheet);
+
+        // Validate that date range matches the advance orders' dispatch dates
+        $this->validateDateRangeMatchesAdvanceOrders($opIds, $dateRange);
+
+        // Clean up test file
+        // $this->cleanupTestFile($filePath);  // Commented to keep the file for inspection
     }
 
     // ==================================================================
@@ -811,6 +854,54 @@ class PartiallyScheduledOrderFlowTest extends TestCase
             $advanceOrderProduct->save();
             $advanceOrderProduct->refresh();
         }
+    }
+
+    /**
+     * Run the complete partially scheduled order flow scenario
+     *
+     * This encapsulates the entire 8-moment flow:
+     * - MOMENT 1: Create Order A (PARTIALLY_SCHEDULED) with 3 products
+     * - MOMENT 2: Create OP #1 (only Product A has partially_scheduled = true)
+     * - MOMENT 3: Update Order A - Product A quantity increases
+     * - MOMENT 4: Create OP #2 (still only Product A)
+     * - MOMENT 5: Update Order A - Product B becomes partially_scheduled = true
+     * - MOMENT 6: Create OP #3 (Products A and B)
+     * - MOMENT 7: Update Order A - Change to PROCESSED
+     * - MOMENT 8: Create OP #4 (all products included)
+     *
+     * @return array Array of created and executed OPs [$op1, $op2, $op3, $op4]
+     */
+    protected function runPartiallyScheduledOrderScenario(): array
+    {
+        // MOMENT 1: Create Order A (PARTIALLY_SCHEDULED)
+        $this->createMoment1Order();
+
+        // MOMENT 2: Create OP #1 (only Product A has partially_scheduled = true)
+        $op1 = $this->createOp1();
+        $this->executeOp($op1);
+
+        // MOMENT 3: Update Order A - Product A quantity increases
+        $this->updateMoment3Order();
+
+        // MOMENT 4: Create OP #2 (still only Product A has partially_scheduled = true)
+        $op2 = $this->createOp2();
+        $this->executeOp($op2);
+
+        // MOMENT 5: Update Order A - Product B becomes partially_scheduled = true
+        $this->updateMoment5Order();
+
+        // MOMENT 6: Create OP #3 (Products A and B have partially_scheduled = true)
+        $op3 = $this->createOp3();
+        $this->executeOp($op3);
+
+        // MOMENT 7: Update Order A - Change to PROCESSED
+        $this->updateMoment7Order();
+
+        // MOMENT 8: Create OP #4 (all products included because order is PROCESSED)
+        $op4 = $this->createOp4();
+        $this->executeOp($op4);
+
+        return [$op1, $op2, $op3, $op4];
     }
 
     private function executeOp(AdvanceOrder $op): void

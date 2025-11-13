@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Maatwebsite\Excel\Facades\Excel;
 use Tests\TestCase;
+use Tests\Traits\ConfiguresImportTests;
 
 /**
  * Pilot Test for PriceListImport - Single Price List
@@ -27,10 +28,14 @@ use Tests\TestCase;
 class PriceListImportPilotTest extends TestCase
 {
     use RefreshDatabase;
+    use ConfiguresImportTests;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Configure test environment for imports (from trait)
+        $this->configureImportTest();
 
         // Seed test data (products only, price list will be created by import)
         $this->seed(PriceListImportTestSeeder::class);

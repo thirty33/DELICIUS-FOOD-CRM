@@ -9,6 +9,7 @@ use Database\Seeders\OrderLinesImportTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Maatwebsite\Excel\Facades\Excel;
 use Tests\TestCase;
+use Tests\Traits\ConfiguresImportTests;
 
 /**
  * Order Lines Import Validation Tests
@@ -26,10 +27,14 @@ use Tests\TestCase;
 class OrderLinesImportValidationsTest extends TestCase
 {
     use RefreshDatabase;
+    use ConfiguresImportTests;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Configure test environment for imports (from trait)
+        $this->configureImportTest();
 
         // Seed test data (users, products, companies, branches, etc.)
         $this->seed(OrderLinesImportTestSeeder::class);

@@ -39,19 +39,30 @@ class AdvanceOrderReportExport implements
 
     public function __construct(
         array $advanceOrderIds,
-        int $exportProcessId,
-        bool $showExcludedCompanies = true,
-        bool $showAllAdelantos = true,
-        bool $showTotalElaborado = true,
+        int|bool $exportProcessIdOrShowExcludedCompanies = 0,
+        bool $showExcludedCompaniesOrAllAdelantos = true,
+        bool $showAllAdelantosOrTotalElaborado = true,
+        bool $showTotalElaboradoOrSobrantes = true,
         bool $showSobrantes = true
     )
     {
-        $this->advanceOrderIds = $advanceOrderIds;
-        $this->exportProcessId = $exportProcessId;
-        $this->showExcludedCompanies = $showExcludedCompanies;
-        $this->showAllAdelantos = $showAllAdelantos;
-        $this->showTotalElaborado = $showTotalElaborado;
-        $this->showSobrantes = $showSobrantes;
+        // Handle backward compatibility: if second param is bool, it's the old 5-param signature
+        if (is_bool($exportProcessIdOrShowExcludedCompanies)) {
+            $this->advanceOrderIds = $advanceOrderIds;
+            $this->exportProcessId = 0;
+            $this->showExcludedCompanies = $exportProcessIdOrShowExcludedCompanies;
+            $this->showAllAdelantos = $showExcludedCompaniesOrAllAdelantos;
+            $this->showTotalElaborado = $showAllAdelantosOrTotalElaborado;
+            $this->showSobrantes = $showTotalElaboradoOrSobrantes;
+        } else {
+            // New 6-param signature
+            $this->advanceOrderIds = $advanceOrderIds;
+            $this->exportProcessId = $exportProcessIdOrShowExcludedCompanies;
+            $this->showExcludedCompanies = $showExcludedCompaniesOrAllAdelantos;
+            $this->showAllAdelantos = $showAllAdelantosOrTotalElaborado;
+            $this->showTotalElaborado = $showTotalElaboradoOrSobrantes;
+            $this->showSobrantes = $showSobrantes;
+        }
 
         // Load advance orders ordered by created_at
         $this->advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)

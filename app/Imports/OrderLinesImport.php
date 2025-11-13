@@ -14,6 +14,7 @@ use App\Enums\OrderImportValidationMessage;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Classes\Orders\Validations\OrderStatusValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
+use App\Repositories\ImportOrderLineTrackingRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -52,6 +53,7 @@ class OrderLinesImport implements
     private $errors = [];
     private $processedOrders = [];
     private $currentExcelRowNumber = 0;
+    private ImportOrderLineTrackingRepository $trackingRepository;
 
     /**
      * Header mapping between Excel file and internal system.
@@ -86,6 +88,7 @@ class OrderLinesImport implements
     public function __construct(int $importProcessId)
     {
         $this->importProcessId = $importProcessId;
+        $this->trackingRepository = new ImportOrderLineTrackingRepository();
     }
 
     public function chunkSize(): int
@@ -107,6 +110,9 @@ class OrderLinesImport implements
             },
 
             AfterImport::class => function (AfterImport $event) {
+                // Clean up order lines that were not in the import file
+                $this->cleanupOldOrderLines();
+
                 $importProcess = ImportProcess::find($this->importProcessId);
 
                 if ($importProcess->status !== ImportProcess::STATUS_PROCESSED_WITH_ERRORS) {
@@ -668,7 +674,11 @@ class OrderLinesImport implements
                 $order->save();
             }
 
+            // Process order lines (tracking will happen inside processOrderLines)
+            $this->processOrderLines($order->id, $rows);
+
             // Guardar los datos procesados para comparaciones futuras
+            // AFTER processOrderLines() so first chunk can be detected
             $processKey = "{$order->id}_{$order->order_number}";
             $this->processedOrders[$processKey] = [
                 'order_id' => $order->id,
@@ -677,9 +687,6 @@ class OrderLinesImport implements
                 'dispatch_date' => $firstRow['fecha_de_despacho'],
                 'user_email' => $firstRow['usuario']
             ];
-
-            // Procesar las líneas de pedido
-            $this->processOrderLines($order->id, $rows);
 
             // Execute validation chain
             $this->executeValidationChain($order, $this->buildImportValidationChain());
@@ -851,7 +858,7 @@ class OrderLinesImport implements
 
     /**
      * Process order lines for an order
-     * 
+     *
      * @param int $orderId
      * @param Collection $rows
      */
@@ -883,8 +890,8 @@ class OrderLinesImport implements
                 'excel_products' => $excelProducts,
             ]);
 
-            // INTELLIGENT MERGE: Instead of deleting all lines, we'll use updateOrCreate
-            // This allows chunks to be processed independently without losing data
+            // Process lines normally - create new ones and track them
+            // Cleanup of old lines will happen in AfterImport event
             $createdLines = [];
             $updatedLines = [];
             $skippedProducts = [];
@@ -922,12 +929,7 @@ class OrderLinesImport implements
                 // Convertir parcialmente programado a booleano
                 $partiallyScheduled = $this->convertToBoolean($row['parcialmente_programado'] ?? false);
 
-                // Check if this order line already exists
-                $existingLine = OrderLine::where('order_id', $orderId)
-                    ->where('product_id', $product->id)
-                    ->first();
-
-                // Use updateOrCreate to merge intelligently
+                // Update or create order line
                 $orderLine = OrderLine::updateOrCreate(
                     [
                         'order_id' => $orderId,
@@ -940,6 +942,13 @@ class OrderLinesImport implements
                     ]
                 );
 
+                // Track this order line for cleanup
+                $this->trackingRepository->track(
+                    $this->importProcessId,
+                    $orderId,
+                    $orderLine->id
+                );
+
                 $lineData = [
                     'row_index' => $rowIndex,
                     'product_code' => $productCode,
@@ -948,23 +957,15 @@ class OrderLinesImport implements
                     'quantity_saved_db' => $orderLine->quantity,
                     'unit_price' => $unitPrice,
                     'order_line_id' => $orderLine->id,
-                    'was_updated' => $existingLine !== null,
                 ];
 
-                if ($existingLine) {
-                    $updatedLines[] = $lineData;
-                } else {
-                    $createdLines[] = $lineData;
-                }
+                $createdLines[] = $lineData;
             }
 
-            Log::info('ORDER LINES IMPORT - Lines processed (merge)', [
+            Log::info('ORDER LINES IMPORT - Lines processed', [
                 'order_number' => $orderNumber,
                 'created_lines' => $createdLines,
                 'created_count' => count($createdLines),
-                'updated_lines' => $updatedLines,
-                'updated_count' => count($updatedLines),
-                'total_processed' => count($createdLines) + count($updatedLines),
                 'skipped_products' => $skippedProducts,
                 'skipped_count' => count($skippedProducts),
             ]);
@@ -1240,6 +1241,64 @@ class OrderLinesImport implements
     }
 
     /**
+     * Clean up old order lines that are not in the import file
+     * This runs after all chunks have been processed
+     */
+    private function cleanupOldOrderLines(): void
+    {
+        try {
+            // Get all order lines that were created/updated during this import
+            $trackedOrderLineIds = $this->trackingRepository->getTrackedOrderLineIds($this->importProcessId);
+
+            if (empty($trackedOrderLineIds)) {
+                Log::info('No tracked order lines found for cleanup', [
+                    'import_process_id' => $this->importProcessId
+                ]);
+                return;
+            }
+
+            // Get distinct order IDs from tracked lines
+            $orderIds = $this->trackingRepository->getAffectedOrderIds($this->importProcessId);
+
+            Log::info('Starting cleanup of old order lines', [
+                'import_process_id' => $this->importProcessId,
+                'tracked_lines_count' => count($trackedOrderLineIds),
+                'affected_orders_count' => count($orderIds),
+            ]);
+
+            // For each order, delete lines that are NOT in the tracking table
+            $totalDeleted = 0;
+            foreach ($orderIds as $orderId) {
+                $deleted = OrderLine::where('order_id', $orderId)
+                    ->whereNotIn('id', $trackedOrderLineIds)
+                    ->delete();
+
+                if ($deleted > 0) {
+                    Log::info('Deleted old order lines', [
+                        'order_id' => $orderId,
+                        'deleted_count' => $deleted,
+                    ]);
+                    $totalDeleted += $deleted;
+                }
+            }
+
+            Log::info('Cleanup completed', [
+                'import_process_id' => $this->importProcessId,
+                'total_deleted' => $totalDeleted,
+            ]);
+
+            // Clean up tracking table
+            $this->trackingRepository->cleanup($this->importProcessId);
+
+        } catch (\Exception $e) {
+            Log::error('Error during cleanup of old order lines', [
+                'import_process_id' => $this->importProcessId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Handle import errors
      *
      * @param Throwable $e
@@ -1252,6 +1311,16 @@ class OrderLinesImport implements
             'error_class' => get_class($e),
             'current_excel_row_number' => $this->currentExcelRowNumber,
         ]);
+
+        // Clean up tracking table on error to prevent orphaned records
+        try {
+            $this->trackingRepository->cleanup($this->importProcessId);
+        } catch (\Exception $cleanupException) {
+            Log::error('Failed to cleanup tracking table after error', [
+                'import_process_id' => $this->importProcessId,
+                'cleanup_error' => $cleanupException->getMessage()
+            ]);
+        }
 
         // Use unified error logging function
         // If currentExcelRowNumber is set (from processOrderRows), use it; otherwise default to 0

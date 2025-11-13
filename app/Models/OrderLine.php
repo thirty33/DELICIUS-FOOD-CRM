@@ -149,11 +149,21 @@ class OrderLine extends Model
             // Si no tiene precio unitario y tiene producto y orden, calcularlo
             if ($orderLine->unit_price === null && $orderLine->product_id && $orderLine->order_id) {
                 $orderLine->unit_price = self::calculateUnitPrice($orderLine->product_id, $orderLine->order_id);
+
+                // If calculateUnitPrice returns NULL (product not in price list), set to 0
+                // to prevent database constraint violation: "Column 'unit_price' cannot be null"
+                if ($orderLine->unit_price === null) {
+                    $orderLine->unit_price = 0;
+                }
             }
 
             // Calcular el precio con impuesto
             if ($orderLine->unit_price !== null) {
                 $orderLine->unit_price_with_tax = self::calculateUnitPriceWithTax($orderLine->unit_price);
+            } else {
+                // If unit_price is still NULL, set unit_price_with_tax to 0
+                // to prevent database constraint violation
+                $orderLine->unit_price_with_tax = 0;
             }
         });
 

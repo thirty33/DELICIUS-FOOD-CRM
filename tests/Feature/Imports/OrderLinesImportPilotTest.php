@@ -8,12 +8,16 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\User;
 use App\Models\Product;
+use App\Models\Category;
+use App\Models\PriceList;
+use App\Models\PriceListLine;
 use App\Enums\OrderStatus;
 use Database\Seeders\OrderLinesImportTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Maatwebsite\Excel\Facades\Excel;
 use Tests\TestCase;
+use Tests\Traits\ConfiguresImportTests;
 
 /**
  * Pilot Test for OrderLinesImport - Single Order
@@ -31,10 +35,14 @@ use Tests\TestCase;
 class OrderLinesImportPilotTest extends TestCase
 {
     use RefreshDatabase;
+    use ConfiguresImportTests;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Configure test environment for imports (from trait)
+        $this->configureImportTest();
 
         // Seed test data
         $this->seed(OrderLinesImportTestSeeder::class);
@@ -628,5 +636,258 @@ class OrderLinesImportPilotTest extends TestCase
         // Additional: Verify order was created correctly (sanity check)
         $this->assertEquals('20251103510024', $order->order_number);
         $this->assertEquals(4, $order->orderLines->count());
+    }
+
+    /**
+     * TDD Test - Existing Order Update: Import Should Replace Products
+     *
+     * SCENARIO:
+     * - Order ALREADY EXISTS in database with products A, B, C
+     * - Import file has DIFFERENT products for same order:
+     *   - Chunk 1 (lines 1-100): products C, D, E, F
+     *   - Chunk 2 (lines 101-150): products G, H, J, K
+     *
+     * EXPECTED BEHAVIOR (TDD):
+     * - Import should REPLACE/UPDATE the order's products
+     * - Products A and B should be REMOVED (not in import file)
+     * - Product C should remain (exists in both original order and import)
+     * - Final products should be ONLY: C, D, E, F, G, H, J, K (8 products)
+     *
+     * CURRENT BEHAVIOR (will fail):
+     * - Import likely ADDS products instead of replacing
+     * - Products A and B remain in the order
+     * - Final products would be: A, B, C, D, E, F, G, H, J, K (10+ products)
+     *
+     * CHUNK SIZE: 100 (real chunk size from OrderLinesImport::chunkSize())
+     */
+    public function test_existing_order_import_replaces_products_across_chunks(): void
+    {
+        // Note: setUp() already ran OrderLinesImportTestSeeder
+        // Now seed additional multi-chunk test data
+        $this->seed(\Database\Seeders\OrderLinesMultiChunkTestSeeder::class);
+
+        // Mock S3 storage for testing
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        // Get seeded data
+        $user = User::where('email', 'MULTICHUNK@TEST.CL')->first();
+        $this->assertNotNull($user, 'Multi-chunk test user should exist');
+
+        $category = Category::where('name', 'PRODUCTOS TEST MULTI-CHUNK')->first();
+        $priceList = PriceList::where('name', 'Lista Multi-Chunk Test')->first();
+
+        // Step 1: CREATE EXISTING ORDER with products A, B, C
+        // Product A and B: Use codes NOT in import file (TEST00000001-150)
+        $productA = Product::create([
+            'code' => 'TEST99999998',
+            'name' => 'Producto A (NO en import)',
+            'description' => 'Producto que NO está en archivo import',
+            'category_id' => $category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'active' => true,
+            'allow_sales_without_stock' => true,
+        ]);
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productA->id,
+            'unit_price' => 9998,
+        ]);
+
+        $productB = Product::create([
+            'code' => 'TEST99999999',
+            'name' => 'Producto B (NO en import)',
+            'description' => 'Producto que NO está en archivo import',
+            'category_id' => $category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'active' => true,
+            'allow_sales_without_stock' => true,
+        ]);
+        PriceListLine::create([
+            'price_list_id' => $priceList->id,
+            'product_id' => $productB->id,
+            'unit_price' => 9999,
+        ]);
+
+        // Product C: Use code that IS in import file (for update validation)
+        $productC = Product::where('code', 'TEST00000003')->first();
+        $this->assertNotNull($productC, 'Product C should exist');
+
+        // Create existing order with products A, B, C
+        $existingOrder = Order::create([
+            'order_number' => '20251103999999', // Same order number as multi-chunk file
+            'date' => '2025-11-03',
+            'user_id' => $user->id,
+            'status' => OrderStatus::PENDING->value,
+            'total' => 3000, // 3 products × 1000
+            'grand_total' => 3000,
+        ]);
+
+        // Create order lines for products A, B, C (without triggering events)
+        $orderLineA = new OrderLine([
+            'order_id' => $existingOrder->id,
+            'product_id' => $productA->id,
+            'quantity' => 1,
+            'unit_price' => 1001,
+            'unit_price_with_tax' => 1001,
+        ]);
+        $orderLineA->saveQuietly();
+
+        $orderLineB = new OrderLine([
+            'order_id' => $existingOrder->id,
+            'product_id' => $productB->id,
+            'quantity' => 1,
+            'unit_price' => 1002,
+            'unit_price_with_tax' => 1002,
+        ]);
+        $orderLineB->saveQuietly();
+
+        $orderLineC = new OrderLine([
+            'order_id' => $existingOrder->id,
+            'product_id' => $productC->id,
+            'quantity' => 99, // DIFFERENT quantity - import will have 1
+            'unit_price' => 1003,
+            'unit_price_with_tax' => 1003,
+        ]);
+        $orderLineC->saveQuietly();
+
+        // Refresh order to load the newly created order lines
+        $existingOrder->refresh();
+
+        // Verify initial state BEFORE import
+        $this->assertEquals(1, Order::count(), 'Should start with 1 existing order');
+        $this->assertEquals(3, OrderLine::count(), 'Existing order should have 3 order lines (A, B, C)');
+        $this->assertEquals(3, $existingOrder->orderLines->count(), 'Existing order should have 3 products');
+
+        // Verify products A, B, C are in the order
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productA->id),
+            'Existing order should contain product A'
+        );
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productB->id),
+            'Existing order should contain product B'
+        );
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productC->id),
+            'Existing order should contain product C'
+        );
+
+        // Step 2: IMPORT FILE with products C, D, E, F (chunk 1) and G, H, J, K (chunk 2)
+        // The multi-chunk file has 150 products (TEST00000001 to TEST00000150)
+        // Chunk 1: lines 1-100 (products TEST00000001 to TEST00000100)
+        // Chunk 2: lines 101-150 (products TEST00000101 to TEST00000150)
+
+        // Create import process
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_ORDERS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        // Get test Excel file with 150 lines
+        $testFile = base_path('tests/Fixtures/test_multi_chunk_order.xlsx');
+        $this->assertFileExists($testFile, 'Multi-chunk test Excel file should exist');
+
+        // Act: Import the Excel file
+        // This will process in 2 chunks (chunk size = 100):
+        // - Chunk 1: lines 1-100 (products TEST00000001 to TEST00000100)
+        // - Chunk 2: lines 101-150 (products TEST00000101 to TEST00000150)
+        Excel::import(
+            new OrderLinesImport($importProcess->id),
+            $testFile
+        );
+
+        // Assert: Verify import was successful
+        $importProcess->refresh();
+
+        $this->assertEquals(
+            ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete without errors'
+        );
+
+        // Refresh order to get updated data
+        $existingOrder->refresh();
+
+        // CRITICAL TDD ASSERTION: Order should have ONLY products from import file (150 products)
+        // NOT the original 3 products + 150 new products = 153
+        // This test will FAIL because current implementation likely ADDS products instead of REPLACING
+
+        // Verify still only 1 order exists (not duplicated)
+        $this->assertEquals(1, Order::count(), 'Should still have exactly 1 order (updated, not duplicated)');
+
+        // TDD: Products A and B should be REMOVED (not in import file)
+        $this->assertFalse(
+            $existingOrder->orderLines->contains('product_id', $productA->id),
+            'Product A should be REMOVED (not in import file) - TDD will FAIL'
+        );
+
+        $this->assertFalse(
+            $existingOrder->orderLines->contains('product_id', $productB->id),
+            'Product B should be REMOVED (not in import file) - TDD will FAIL'
+        );
+
+        // TDD: Product C should REMAIN (exists in both original and import)
+        $productCFromImport = Product::where('code', 'TEST00000003')->first();
+
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productCFromImport->id),
+            'Product C (TEST00000003) should REMAIN (in both original and import)'
+        );
+
+        // CRITICAL TDD ASSERTION: Product C should have UPDATED data from import, not original data
+        // Original data: quantity=99 (set above)
+        // Import data: quantity=1 (from test file, line 3)
+        $orderLineC = $existingOrder->orderLines->where('product_id', $productCFromImport->id)->first();
+        $this->assertNotNull($orderLineC, 'Order line for Product C should exist');
+
+        // The import file has quantity=1 for TEST00000003 (line 3)
+        // This should be 1 (from import), NOT 99 (from original), confirming the update occurred
+        $this->assertEquals(
+            1,
+            $orderLineC->quantity,
+            'Product C quantity should be 1 (from IMPORT), not 99 (original) - TDD will FAIL if not updated'
+        );
+
+        // This assertion proves that the import UPDATED the existing product C
+        // rather than keeping the original data or creating a duplicate
+
+        // TDD: Final count should be ONLY products from import (150 products)
+        $this->assertEquals(
+            150,
+            $existingOrder->orderLines->count(),
+            'Order should have ONLY 150 products from import (replaced, not added) - TDD will FAIL'
+        );
+
+        // TDD: Total order lines in database should be 150 (not 153)
+        $this->assertEquals(
+            150,
+            OrderLine::count(),
+            'Database should have ONLY 150 order lines (old ones removed) - TDD will FAIL'
+        );
+
+        // Verify products from both chunks exist in final order
+        // Sample from Chunk 1 (line 50)
+        $productChunk1 = Product::where('code', 'TEST00000050')->first();
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productChunk1->id),
+            'Product from Chunk 1 should exist in order'
+        );
+
+        // Sample from Chunk 2 (line 125)
+        $productChunk2 = Product::where('code', 'TEST00000125')->first();
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productChunk2->id),
+            'Product from Chunk 2 should exist in order'
+        );
+
+        // Last product from Chunk 2 (line 150)
+        $productLast = Product::where('code', 'TEST00000150')->first();
+        $this->assertTrue(
+            $existingOrder->orderLines->contains('product_id', $productLast->id),
+            'Last product from Chunk 2 should exist in order'
+        );
     }
 }
