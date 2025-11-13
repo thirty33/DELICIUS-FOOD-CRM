@@ -34,4 +34,13 @@ enum OrderProductionStatus: string
             self::NOT_PRODUCED => 'fi-badge flex items-center justify-center gap-x-1 rounded-md text-xs font-medium ring-1 ring-inset px-1.5 min-w-[theme(spacing.6)] py-1 fi-color-danger bg-danger-50 text-danger-600 ring-danger-600 dark:bg-danger-400/10 dark:text-danger-400 dark:ring-danger-400',
         };
     }
+
+    public static function getSelectOptions(): array
+    {
+        return [
+            self::FULLY_PRODUCED->value => self::FULLY_PRODUCED->label(),
+            self::PARTIALLY_PRODUCED->value => self::PARTIALLY_PRODUCED->label(),
+            self::NOT_PRODUCED->value => self::NOT_PRODUCED->label(),
+        ];
+    }
 }

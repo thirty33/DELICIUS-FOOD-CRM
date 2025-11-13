@@ -30,6 +30,15 @@ class OrderLineProductionStatusObserver
      */
     public function created(OrderLine $orderLine): void
     {
+        // Skip observer execution during bulk imports
+        if (OrderLine::$importMode) {
+            Log::info('OrderLineProductionStatusObserver: SKIPPED (import mode)', [
+                'order_line_id' => $orderLine->id,
+                'order_id' => $orderLine->order_id,
+            ]);
+            return;
+        }
+
         Log::info('OrderLineProductionStatusObserver: created', [
             'order_line_id' => $orderLine->id,
             'order_id' => $orderLine->order_id,
@@ -46,6 +55,15 @@ class OrderLineProductionStatusObserver
      */
     public function updated(OrderLine $orderLine): void
     {
+        // Skip observer execution during bulk imports
+        if (OrderLine::$importMode) {
+            Log::info('OrderLineProductionStatusObserver: SKIPPED (import mode)', [
+                'order_line_id' => $orderLine->id,
+                'order_id' => $orderLine->order_id,
+            ]);
+            return;
+        }
+
         // Only mark if quantity changed
         if (!$orderLine->wasChanged('quantity') && !$orderLine->wasChanged('partially_scheduled')) {
             return;

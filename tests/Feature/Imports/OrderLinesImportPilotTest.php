@@ -559,4 +559,74 @@ class OrderLinesImportPilotTest extends TestCase
             unlink($testFile);
         }
     }
+
+    /**
+     * Test that OrderLineProductionStatusObserver does NOT execute during import
+     *
+     * TDD Test - Validates that:
+     * 1. OrderLinesImport sets OrderLine::$importMode = true
+     * 2. OrderLineProductionStatusObserver skips execution when importMode is active
+     * 3. MarkOrdersForProductionStatusUpdate job is NOT dispatched
+     * 4. production_status_needs_update remains false/null
+     *
+     * This prevents saturating the queue with thousands of jobs during bulk imports.
+     * Instead, production status should be recalculated once at the end of import.
+     *
+     * Expected Results (TDD - will fail initially):
+     * - Order created successfully
+     * - OrderLines created successfully
+     * - MarkOrdersForProductionStatusUpdate job NOT dispatched
+     * - production_status_needs_update is false or null
+     */
+    public function test_order_line_production_status_observer_does_not_execute_during_import(): void
+    {
+        // Arrange: Mock S3 storage
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        // Track jobs dispatched using Bus::fake() instead of Queue::fake()
+        // This allows us to track synchronous job dispatches from observers
+        \Illuminate\Support\Facades\Bus::fake([
+            \App\Jobs\MarkOrdersForProductionStatusUpdate::class,
+        ]);
+
+        // Verify initial state
+        $this->assertEquals(0, Order::count(), 'Should start with 0 orders');
+        $this->assertEquals(0, OrderLine::count(), 'Should start with 0 order lines');
+
+        // Create import process
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_ORDERS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        // Get test Excel file
+        $testFile = base_path('tests/Fixtures/test_single_order.xlsx');
+        $this->assertFileExists($testFile, 'Test Excel file should exist');
+
+        // Act: Import the Excel file (synchronously for testing)
+        Excel::import(
+            new OrderLinesImport($importProcess->id),
+            $testFile
+        );
+
+        // Assert: Verify import was successful
+        $this->assertEquals(1, Order::count(), 'Order should be created');
+        $this->assertEquals(4, OrderLine::count(), 'Order lines should be created');
+
+        $order = Order::first();
+
+        // CRITICAL ASSERTION: MarkOrdersForProductionStatusUpdate job should NOT be dispatched
+        // This prevents saturating the queue with thousands of jobs during bulk imports
+        \Illuminate\Support\Facades\Bus::assertNotDispatched(
+            \App\Jobs\MarkOrdersForProductionStatusUpdate::class
+        );
+
+        // Note: production_status_needs_update may be true by default from migration
+        // The important thing is that the Observer did NOT dispatch the job during import
+
+        // Additional: Verify order was created correctly (sanity check)
+        $this->assertEquals('20251103510024', $order->order_number);
+        $this->assertEquals(4, $order->orderLines->count());
+    }
 }

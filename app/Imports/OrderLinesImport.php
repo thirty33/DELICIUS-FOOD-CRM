@@ -348,8 +348,12 @@ class OrderLinesImport implements
     public function collection(Collection $rows)
     {
         try {
+            // Enable import mode to disable OrderLineProductionStatusObserver
+            OrderLine::$importMode = true;
+
             Log::info('OrderLinesImport procesando colección', [
-                'count' => $rows->count()
+                'count' => $rows->count(),
+                'import_mode_enabled' => OrderLine::$importMode,
             ]);
 
             if ($rows->count() > 0) {
@@ -438,6 +442,12 @@ class OrderLinesImport implements
                     'trace' => $e->getTraceAsString()
                 ]
             );
+        } finally {
+            // ALWAYS disable import mode, even if an exception occurred
+            OrderLine::$importMode = false;
+            Log::info('OrderLinesImport: import mode disabled', [
+                'import_mode_enabled' => OrderLine::$importMode,
+            ]);
         }
     }
 

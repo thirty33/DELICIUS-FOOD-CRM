@@ -58,7 +58,7 @@ class AppServiceProvider extends ServiceProvider
         // Register Observers for production status updates
         AdvanceOrder::observe(AdvanceOrderProductionStatusObserver::class);
         AdvanceOrderProduct::observe(AdvanceOrderProductProductionStatusObserver::class);
-        // OrderLine::observe(OrderLineProductionStatusObserver::class);
+        OrderLine::observe(OrderLineProductionStatusObserver::class);
 
         // Register event listeners for warehouse transactions
         Event::listen(

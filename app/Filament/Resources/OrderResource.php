@@ -202,9 +202,12 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('id')
                     ->label(__('ID / Número'))
                     ->sortable()
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->where('id', 'like', "%{$search}%")
+                            ->orWhere('order_number', 'like', "%{$search}%");
+                    })
                     ->formatStateUsing(fn(string $state) => 'ID: ' . $state)
-                    ->description(fn(Order $order) => 'N°: ' . ($order->order_number ?? 'Sin número')),
+                    ->description(fn(Order $order) => 'N°: ' . ($order->order_number ? '...' . substr($order->order_number, -10) : 'Sin número')),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label(__('Cliente / Empresa'))
                     ->sortable()
@@ -268,6 +271,22 @@ class OrderResource extends Resource
                 DateRangeFilter::make('dispatch_date')
                     ->label(__('Fecha de despacho'))
                     ->columnSpan(1),
+                Tables\Filters\SelectFilter::make('company_id')
+                    ->label(__('Empresa'))
+                    ->relationship('user.company', 'fantasy_name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) =>
+                        ($record->company_code ?? 'N/A') . ' - ' . $record->fantasy_name
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->columnSpan(1)
+                    ->query(function (Builder $query, array $data) {
+                        if (!empty($data['value'])) {
+                            $query->whereHas('user.company', function (Builder $q) use ($data) {
+                                $q->where('companies.id', $data['value']);
+                            });
+                        }
+                    }),
                 Tables\Filters\SelectFilter::make('branch_id')
                     ->label(__('Sucursal'))
                     ->relationship('user.branch', 'fantasy_name')
@@ -288,6 +307,11 @@ class OrderResource extends Resource
                     ->label(__('Estado'))
                     ->multiple()
                     ->options(OrderStatus::getSelectOptions())
+                    ->columnSpan(1),
+                Tables\Filters\SelectFilter::make('production_status')
+                    ->label(__('Estado de producción'))
+                    ->multiple()
+                    ->options(OrderProductionStatus::getSelectOptions())
                     ->columnSpan(1),
                 Tables\Filters\SelectFilter::make('role')
                     ->label(__('Tipo de usuario'))

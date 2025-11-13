@@ -8,6 +8,15 @@ use Illuminate\Support\Facades\Log;
 
 class OrderLine extends Model
 {
+    /**
+     * Flag to disable OrderLineProductionStatusObserver during bulk imports.
+     * When true, the observer will skip execution to avoid saturating the queue
+     * with thousands of jobs during import operations.
+     *
+     * @var bool
+     */
+    public static bool $importMode = false;
+
     protected $fillable = [
         'quantity',
         'unit_price',
