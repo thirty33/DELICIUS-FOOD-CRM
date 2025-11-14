@@ -197,7 +197,7 @@ class AdvanceOrderResource extends Resource
                     ->modalDescription(__('¿Está seguro de que desea eliminar esta orden de producción cancelada? Esta acción eliminará la orden y todos sus registros relacionados de forma permanente.'))
                     ->modalSubmitActionLabel(__('Sí, eliminar'))
                     ->before(function (\App\Models\AdvanceOrder $record) {
-                        $repository = new \App\Repositories\AdvanceOrderRepository();
+                        $repository = app(\App\Repositories\AdvanceOrderRepository::class);
                         $repository->deleteAdvanceOrder($record);
                     })
                     ->successNotificationTitle(__('Orden de producción eliminada exitosamente')),
@@ -239,7 +239,7 @@ class AdvanceOrderResource extends Resource
                                 }
 
                                 // Generate description using repository
-                                $repository = new \App\Repositories\AdvanceOrderRepository();
+                                $repository = app(\App\Repositories\AdvanceOrderRepository::class);
                                 $description = $repository->generateExportDescription($advanceOrderIds);
 
                                 // Create export process (QUEUED status only)
@@ -402,7 +402,7 @@ class AdvanceOrderResource extends Resource
 
                 // For EXECUTED orders, check if can be cancelled
                 if ($record->status === AdvanceOrderStatus::EXECUTED) {
-                    $repository = new \App\Repositories\AdvanceOrderRepository();
+                    $repository = app(\App\Repositories\AdvanceOrderRepository::class);
                     if (!$repository->canCancelAdvanceOrder($record)) {
                         \Filament\Notifications\Notification::make()
                             ->danger()
@@ -449,7 +449,7 @@ class AdvanceOrderResource extends Resource
             ->modalDescription(__('¿Está seguro de que desea eliminar esta orden de producción cancelada? Esta acción eliminará la orden y todos sus registros relacionados (productos, pivots de orders y order_lines) de forma permanente.'))
             ->modalSubmitActionLabel(__('Sí, eliminar'))
             ->action(function (\App\Models\AdvanceOrder $record) {
-                $repository = new \App\Repositories\AdvanceOrderRepository();
+                $repository = app(\App\Repositories\AdvanceOrderRepository::class);
 
                 if (!$repository->canDeleteAdvanceOrder($record)) {
                     \Filament\Notifications\Notification::make()

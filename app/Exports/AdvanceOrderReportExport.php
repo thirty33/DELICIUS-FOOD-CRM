@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Contracts\ReportColumnDataProviderInterface;
 use App\Models\ExportProcess;
 use App\Repositories\AdvanceOrderRepository;
 use App\Models\AdvanceOrder;
@@ -28,9 +29,8 @@ class AdvanceOrderReportExport implements
 {
     private array $advanceOrderIds;
     private array $advanceOrders = [];
-    private array $excludedCompanies = [];
-    private array $companyHeaders = [];
-    private bool $excludedCompaniesLoaded = false;
+    private array $columnHeaders = [];
+    private ReportColumnDataProviderInterface $columnProvider;
     private bool $showExcludedCompanies = true; // Control visibility of excluded companies columns
     private bool $showAllAdelantos = true; // Show all adelanto columns (false = only initial)
     private bool $showTotalElaborado = true; // Control visibility of total elaborado column
@@ -64,6 +64,12 @@ class AdvanceOrderReportExport implements
             $this->showSobrantes = $showSobrantes;
         }
 
+        // Inject column provider service from container
+        $this->columnProvider = app(ReportColumnDataProviderInterface::class);
+
+        // Load column headers from service (companies, groupers, etc.)
+        $this->columnHeaders = $this->columnProvider->getColumnHeaders($advanceOrderIds);
+
         // Load advance orders ordered by created_at
         $this->advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
             ->orderBy('created_at', 'asc')
@@ -71,84 +77,23 @@ class AdvanceOrderReportExport implements
             ->keyBy('id')
             ->toArray();
 
-        // ALWAYS pre-load excluded companies (needed for headings()) - works for both single and multiple OPs
-        $repository = new AdvanceOrderRepository();
-        $productionAreas = $repository->getAdvanceOrderProductsGroupedByProductionArea($advanceOrderIds);
-        $this->loadExcludedCompanies($productionAreas);
-
         \Log::info('Constructor finished', [
             'advance_order_ids' => $advanceOrderIds,
             'show_excluded_companies' => $this->showExcludedCompanies,
             'show_all_adelantos' => $this->showAllAdelantos,
             'show_total_elaborado' => $this->showTotalElaborado,
             'show_sobrantes' => $this->showSobrantes,
-            'excluded_companies_loaded' => $this->excludedCompaniesLoaded,
-            'company_headers_count' => count($this->companyHeaders)
+            'column_headers_count' => count($this->columnHeaders)
         ]);
     }
 
-    /**
-     * Load excluded companies from products data
-     */
-    private function loadExcludedCompanies(Collection $productionAreas)
-    {
-        if ($this->excludedCompaniesLoaded) {
-            return;
-        }
-
-        \Log::info('=== LOADING EXCLUDED COMPANIES ===');
-
-        $companiesFound = [];
-
-        // Extract all company data from all production areas and products
-        foreach ($productionAreas as $area) {
-            foreach ($area['products'] as $product) {
-                if (isset($product['companies']) && !empty($product['companies'])) {
-                    \Log::info('Product ' . $product['product_code'] . ' has companies data', [
-                        'companies_keys' => array_keys($product['companies'])
-                    ]);
-
-                    foreach ($product['companies'] as $companyKey => $companyData) {
-                        if (!isset($companiesFound[$companyKey])) {
-                            $displayName = !empty($companyData['company_fantasy_name'])
-                                ? $companyData['company_fantasy_name']
-                                : $companyData['company_name'];
-
-                            $companiesFound[$companyKey] = [
-                                'company_id' => $companyData['company_id'],
-                                'company_name' => $companyData['company_name'],
-                                'company_fantasy_name' => $companyData['company_fantasy_name'],
-                                'column_key' => $companyKey,
-                                'display_name' => $displayName
-                            ];
-
-                            $this->companyHeaders[$companyKey] = $displayName;
-
-                            \Log::info('Added excluded company', [
-                                'key' => $companyKey,
-                                'display_name' => $displayName
-                            ]);
-                        }
-                    }
-                }
-            }
-        }
-
-        \Log::info('Total excluded companies loaded', [
-            'count' => count($companiesFound),
-            'companies' => $companiesFound
-        ]);
-
-        $this->excludedCompanies = $companiesFound;
-        $this->excludedCompaniesLoaded = true;
-    }
 
     /**
      * Return the collection of data to export
      */
     public function collection()
     {
-        $repository = new AdvanceOrderRepository();
+        $repository = app(AdvanceOrderRepository::class);
 
         \Log::info('Starting collection generation', [
             'advance_order_ids' => $this->advanceOrderIds,
@@ -159,7 +104,7 @@ class AdvanceOrderReportExport implements
         if (count($this->advanceOrderIds) === 1) {
             \Log::info('Single OP detected - using grouped method for consistency');
             // Use the grouped method even for single OP to maintain consistency
-            // and support excluded companies + total rows
+            // and support columns (companies/groupers) + total rows
         }
 
         // Use the grouped by production area method (works for single or multiple OPs)
@@ -170,12 +115,9 @@ class AdvanceOrderReportExport implements
             'areas' => $productionAreas->pluck('production_area_name')
         ]);
 
-        // Load excluded companies from the products data
-        $this->loadExcludedCompanies($productionAreas);
-
-        \Log::info('Excluded companies after loading', [
-            'count' => count($this->excludedCompanies),
-            'companies' => array_values($this->companyHeaders)
+        \Log::info('Column headers loaded', [
+            'count' => count($this->columnHeaders),
+            'headers' => array_values($this->columnHeaders)
         ]);
 
         $rows = collect();
@@ -193,7 +135,7 @@ class AdvanceOrderReportExport implements
         // Order: Category, Code, Name, Total, Companies, OPs, Total Elaborado, Sobrantes
         $dateHeaderRow = ['RANGO DE FECHAS DE DESPACHO:', '', '', ''];
         // Add empty values for excluded companies
-        foreach ($this->excludedCompanies as $companyKey => $companyData) {
+        foreach ($this->columnHeaders as $columnKey => $displayName) {
             $dateHeaderRow[] = '';
         }
         // Add empty values for OPs columns
@@ -207,7 +149,7 @@ class AdvanceOrderReportExport implements
 
         $dateValueRow = ['Desde: ' . \Carbon\Carbon::parse($minDate)->format('d/m/Y') . ' - Hasta: ' . \Carbon\Carbon::parse($maxDate)->format('d/m/Y'), '', '', ''];
         // Add empty values for excluded companies
-        foreach ($this->excludedCompanies as $companyKey => $companyData) {
+        foreach ($this->columnHeaders as $columnKey => $displayName) {
             $dateValueRow[] = '';
         }
         // Add empty values for OPs columns
@@ -222,7 +164,7 @@ class AdvanceOrderReportExport implements
         // Add empty row separator
         $emptyRow = ['', '', '', ''];
         // Add empty values for excluded companies
-        foreach ($this->excludedCompanies as $companyKey => $companyData) {
+        foreach ($this->columnHeaders as $columnKey => $displayName) {
             $emptyRow[] = '';
         }
         // Add empty values for OPs columns
@@ -240,7 +182,7 @@ class AdvanceOrderReportExport implements
             $headerRow = [strtoupper($area['production_area_name']), '', '', ''];
 
             // Add empty columns for excluded companies
-            foreach ($this->excludedCompanies as $companyKey => $companyData) {
+            foreach ($this->columnHeaders as $columnKey => $displayName) {
                 $headerRow[] = '';
             }
 
@@ -264,12 +206,12 @@ class AdvanceOrderReportExport implements
                 ];
 
                 // Add columns for excluded companies IMMEDIATELY AFTER total_ordered_quantity
-                foreach ($this->excludedCompanies as $companyKey => $companyData) {
-                    if (isset($product['companies'][$companyKey])) {
-                        $companyQty = $product['companies'][$companyKey]['total_quantity'];
-                        $row[$companyKey] = $companyQty == 0 ? ' 0' : $companyQty;
+                foreach ($this->columnHeaders as $columnKey => $displayName) {
+                    if (isset($product['columns'][$columnKey])) {
+                        $companyQty = $product['columns'][$columnKey]['total_quantity'];
+                        $row[$columnKey] = $companyQty == 0 ? ' 0' : $companyQty;
                     } else {
-                        $row[$companyKey] = ' 0';
+                        $row[$columnKey] = ' 0';
                     }
                 }
 
@@ -312,7 +254,7 @@ class AdvanceOrderReportExport implements
                         'product_code' => $product['product_code'],
                         'row_keys' => array_keys($row),
                         'row_values' => $row,
-                        'excluded_companies_keys' => array_keys($this->excludedCompanies)
+                        'column_headers_keys' => array_keys($this->columnHeaders)
                     ]);
                     $firstProductLogged = true;
                 }
@@ -341,12 +283,12 @@ class AdvanceOrderReportExport implements
                 ];
 
                 // Add company totals
-                foreach ($this->excludedCompanies as $companyKey => $companyData) {
-                    if (isset($area['total_row']['companies'][$companyKey])) {
-                        $companyQty = $area['total_row']['companies'][$companyKey]['total_quantity'];
-                        $totalRow[$companyKey] = $companyQty == 0 ? ' 0' : $companyQty;
+                foreach ($this->columnHeaders as $columnKey => $displayName) {
+                    if (isset($area['total_row']['columns'][$columnKey])) {
+                        $companyQty = $area['total_row']['columns'][$columnKey]['total_quantity'];
+                        $totalRow[$columnKey] = $companyQty == 0 ? ' 0' : $companyQty;
                     } else {
-                        $totalRow[$companyKey] = ' 0';
+                        $totalRow[$columnKey] = ' 0';
                     }
                 }
 
@@ -391,8 +333,8 @@ class AdvanceOrderReportExport implements
         \Log::info('Generating headings', [
             'advance_order_ids' => $this->advanceOrderIds,
             'is_single_op' => count($this->advanceOrderIds) === 1,
-            'company_headers_count' => count($this->companyHeaders),
-            'company_headers' => $this->companyHeaders
+            'company_headers_count' => count($this->columnHeaders),
+            'company_headers' => $this->columnHeaders
         ]);
 
         // Use the same dynamic header structure for both single and multiple OPs
@@ -405,7 +347,7 @@ class AdvanceOrderReportExport implements
         ];
 
         // Add headers for excluded companies AFTER "TOTAL PEDIDOS"
-        foreach ($this->companyHeaders as $companyKey => $companyName) {
+        foreach ($this->columnHeaders as $companyKey => $companyName) {
             $headers[] = strtoupper($companyName);
         }
 
@@ -429,7 +371,7 @@ class AdvanceOrderReportExport implements
         \Log::info('Headers generated', [
             'total_headers' => count($headers),
             'headers' => $headers,
-            'company_headers' => $this->companyHeaders
+            'company_headers' => $this->columnHeaders
         ]);
 
         return $headers;
@@ -530,13 +472,13 @@ class AdvanceOrderReportExport implements
 
         \Log::info('Applying column colors', [
             'start_column_index' => $columnIndex,
-            'excluded_companies_count' => count($this->excludedCompanies),
+            'excluded_companies_count' => count($this->columnHeaders),
             'ops_count' => count($this->advanceOrders)
         ]);
 
         // Apply light yellow color to excluded company columns FIRST (columns E, F, G, etc.)
-        if (!empty($this->excludedCompanies)) {
-            $companyCount = count($this->excludedCompanies);
+        if (!empty($this->columnHeaders)) {
+            $companyCount = count($this->columnHeaders);
 
             for ($i = 0; $i < $companyCount; $i++) {
                 $companyColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex);
@@ -597,8 +539,8 @@ class AdvanceOrderReportExport implements
         $currentColumnIndex = 5; // Start at E (after TOTAL PEDIDOS - column D is index 4)
 
         // 1. Hide excluded companies columns if showExcludedCompanies is false
-        if (!$this->showExcludedCompanies && !empty($this->excludedCompanies)) {
-            $companyCount = count($this->excludedCompanies);
+        if (!$this->showExcludedCompanies && !empty($this->columnHeaders)) {
+            $companyCount = count($this->columnHeaders);
 
             \Log::info('Hiding company columns', [
                 'show_excluded_companies' => $this->showExcludedCompanies,
@@ -618,7 +560,7 @@ class AdvanceOrderReportExport implements
         }
 
         // Move index past company columns
-        $currentColumnIndex += count($this->excludedCompanies);
+        $currentColumnIndex += count($this->columnHeaders);
 
         // 2. Hide non-initial adelanto columns if showAllAdelantos is false
         if (!$this->showAllAdelantos && count($this->advanceOrders) > 1) {

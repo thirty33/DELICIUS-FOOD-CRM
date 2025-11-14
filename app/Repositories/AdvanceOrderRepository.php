@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Contracts\ReportColumnDataProviderInterface;
 use App\Enums\AdvanceOrderStatus;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
@@ -10,6 +11,19 @@ use Illuminate\Support\Facades\DB;
 
 class AdvanceOrderRepository
 {
+    /**
+     * Report column data provider service
+     */
+    private ReportColumnDataProviderInterface $columnProvider;
+
+    /**
+     * Constructor with dependency injection
+     */
+    public function __construct(ReportColumnDataProviderInterface $columnProvider)
+    {
+        $this->columnProvider = $columnProvider;
+    }
+
     /**
      * Create an AdvanceOrder without triggering Observer events
      *
@@ -362,14 +376,39 @@ class AdvanceOrderRepository
      */
     public function getAdvanceOrderProductsGroupedByProductionArea(array $advanceOrderIds): Collection
     {
-        // First, get all advance orders ordered by created_at
+        // Get all advance orders ordered by created_at
         $advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
             ->orderBy('created_at', 'asc')
             ->get()
             ->keyBy('id');
 
-        // Get all products from all OPs with their production areas and warehouse stock (WITHOUT order_lines JOIN)
-        $allProducts = DB::table('advance_order_products')
+        // Get all products from all OPs with their production areas and warehouse stock
+        $allProducts = $this->getAdvanceOrderProductsWithDetails($advanceOrderIds);
+
+        // Get column data from service (companies, groupers, etc.)
+        $columnData = $this->columnProvider->getColumnData($advanceOrderIds);
+
+        // Group by production area, then by product
+        $groupedByArea = $allProducts->groupBy('production_area_name');
+
+        // Build result grouped by production area
+        $result = $groupedByArea->map(function ($areaProducts, $areaName) use ($advanceOrders, $columnData) {
+            return $this->buildProductionAreaData($areaProducts, $areaName, $advanceOrders, $columnData);
+        });
+
+        // Sort production areas by name
+        return $result->sortBy('production_area_name')->values();
+    }
+
+    /**
+     * Get all products from advance orders with production areas and warehouse stock
+     *
+     * @param array $advanceOrderIds
+     * @return Collection
+     */
+    private function getAdvanceOrderProductsWithDetails(array $advanceOrderIds): Collection
+    {
+        return DB::table('advance_order_products')
             ->join('products', 'advance_order_products.product_id', '=', 'products.id')
             ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
             ->leftJoin('production_area_product', 'products.id', '=', 'production_area_product.product_id')
@@ -400,162 +439,181 @@ class AdvanceOrderRepository
                 DB::raw('COALESCE(warehouse_product.stock, 0) as current_stock')
             )
             ->get();
+    }
 
-        // Get excluded companies data with unique orders (avoid counting duplicates from overlapping OPs)
-        // First, get unique order_id + product_id combinations, then sum their quantities
-        $uniqueOrderLines = DB::table('advance_order_order_lines')
-            ->join('order_lines', 'advance_order_order_lines.order_line_id', '=', 'order_lines.id')
-            ->join('orders', 'order_lines.order_id', '=', 'orders.id')
-            ->join('users', 'orders.user_id', '=', 'users.id')
-            ->join('companies', 'users.company_id', '=', 'companies.id')
-            ->whereIn('advance_order_order_lines.advance_order_id', $advanceOrderIds)
-            ->where('companies.exclude_from_consolidated_report', true)
-            ->select(
-                'orders.id as order_id',
-                'order_lines.product_id',
-                'companies.id as company_id',
-                'companies.name as company_name',
-                'companies.fantasy_name as company_fantasy_name',
-                'order_lines.quantity'
-            )
-            ->distinct() // Get unique combinations of order + product + company
-            ->get();
 
-        // Group by product and company, summing unique order quantities
-        $excludedCompaniesData = $uniqueOrderLines->groupBy('product_id')
-            ->map(function ($productOrders) {
-                return $productOrders->groupBy('company_id')
-                    ->map(function ($companyOrders) {
-                        $first = $companyOrders->first();
-                        return (object) [
-                            'company_id' => $first->company_id,
-                            'company_name' => $first->company_name,
-                            'company_fantasy_name' => $first->company_fantasy_name,
-                            'total_quantity' => $companyOrders->sum('quantity')
-                        ];
-                    })->values();
-            });
+    /**
+     * Build production area data with products and totals
+     *
+     * @param Collection $areaProducts Products in this production area
+     * @param string $areaName Production area name
+     * @param Collection $advanceOrders Keyed collection of advance orders
+     * @param Collection $columnData Column data from service (companies, groupers, etc.)
+     * @return array Production area data structure
+     */
+    private function buildProductionAreaData(
+        Collection $areaProducts,
+        string $areaName,
+        Collection $advanceOrders,
+        Collection $columnData
+    ): array {
+        // Group products within this area
+        $groupedProducts = $areaProducts->groupBy('product_id');
 
-        // Group by production area, then by product
-        $groupedByArea = $allProducts->groupBy('production_area_name');
-
-        // Build result grouped by production area
-        $result = $groupedByArea->map(function ($areaProducts, $areaName) use ($advanceOrders, $excludedCompaniesData) {
-            // Group products within this area
-            $groupedProducts = $areaProducts->groupBy('product_id');
-
-            $products = $groupedProducts->map(function ($productGroup) use ($advanceOrders, $excludedCompaniesData) {
-                $firstProduct = $productGroup->first();
-                $productId = $firstProduct->product_id;
-
-                // Calculate total ordered_quantity using ordered_quantity_new to avoid counting duplicates from overlapping OPs
-                $totalOrderedQuantity = $productGroup->sum('ordered_quantity_new');
-
-                // Build data array
-                $productData = [
-                    'product_id' => $productId,
-                    'product_code' => $firstProduct->product_code,
-                    'product_name' => $firstProduct->product_name,
-                    'category_id' => $firstProduct->category_id,
-                    'category_name' => $firstProduct->category_name ?? 'Sin Categoría',
-                    'total_ordered_quantity' => $totalOrderedQuantity,
-                    'current_stock' => $firstProduct->current_stock ?? 0,
-                    'ops' => [],
-                    'companies' => []
-                ];
-
-                // Add excluded companies data if exists for this product
-                if (isset($excludedCompaniesData[$productId])) {
-                    foreach ($excludedCompaniesData[$productId] as $companyData) {
-                        $companyKey = 'company_' . $companyData->company_id;
-
-                        $productData['companies'][$companyKey] = [
-                            'company_id' => $companyData->company_id,
-                            'company_name' => $companyData->company_name,
-                            'company_fantasy_name' => $companyData->company_fantasy_name,
-                            'total_quantity' => $companyData->total_quantity
-                        ];
-                    }
-                }
-
-                // Add data for each OP
-                foreach ($productGroup as $product) {
-                    $opOrder = array_search($product->advance_order_id, array_keys($advanceOrders->toArray()));
-
-                    $productData['ops'][$product->advance_order_id] = [
-                        'op_order' => $opOrder + 1, // 1-indexed
-                        'manual_quantity' => $product->manual_quantity,
-                        'total_to_produce' => $product->total_to_produce,
-                    ];
-                }
-
-                return $productData;
-            });
-
-            // Sort products within area by category and code
-            $sortedProducts = $products->sortBy([
-                ['category_name', 'asc'],
-                ['product_code', 'asc']
-            ])->values();
-
-            // Calculate total_ordered_quantity for this production area
-            $areaTotalOrderedQuantity = $products->sum('total_ordered_quantity');
-
-            // Calculate totals for each excluded company in this area
-            $companyTotals = [];
-            foreach ($products as $product) {
-                if (isset($product['companies'])) {
-                    foreach ($product['companies'] as $companyKey => $companyData) {
-                        if (!isset($companyTotals[$companyKey])) {
-                            $companyTotals[$companyKey] = [
-                                'company_id' => $companyData['company_id'],
-                                'company_name' => $companyData['company_name'],
-                                'company_fantasy_name' => $companyData['company_fantasy_name'],
-                                'total_quantity' => 0
-                            ];
-                        }
-                        $companyTotals[$companyKey]['total_quantity'] += $companyData['total_quantity'];
-                    }
-                }
-            }
-
-            // Calculate totals for each OP in this area
-            $opTotals = [];
-            foreach ($products as $product) {
-                if (isset($product['ops'])) {
-                    foreach ($product['ops'] as $opId => $opData) {
-                        if (!isset($opTotals[$opId])) {
-                            $opTotals[$opId] = [
-                                'op_order' => $opData['op_order'],
-                                'manual_quantity' => 0,
-                                'total_to_produce' => 0
-                            ];
-                        }
-                        $opTotals[$opId]['manual_quantity'] += $opData['manual_quantity'];
-                        $opTotals[$opId]['total_to_produce'] += $opData['total_to_produce'];
-                    }
-                }
-            }
-
-            return [
-                'production_area_name' => $areaName ?? 'Sin Área Productiva',
-                'products' => $sortedProducts,
-                'total_row' => [
-                    'product_id' => null,
-                    'product_code' => null,
-                    'product_name' => 'TOTAL',
-                    'category_id' => null,
-                    'category_name' => null,
-                    'total_ordered_quantity' => $areaTotalOrderedQuantity,
-                    'current_stock' => null,
-                    'ops' => $opTotals,
-                    'companies' => $companyTotals
-                ]
-            ];
+        // Build product data for each product
+        $products = $groupedProducts->map(function ($productGroup) use ($advanceOrders, $columnData) {
+            return $this->buildProductData($productGroup, $advanceOrders, $columnData);
         });
 
-        // Sort production areas by name
-        return $result->sortBy('production_area_name')->values();
+        // Sort products within area by category and code
+        $sortedProducts = $products->sortBy([
+            ['category_name', 'asc'],
+            ['product_code', 'asc']
+        ])->values();
+
+        // Calculate totals for this production area
+        $areaTotalOrderedQuantity = $products->sum('total_ordered_quantity');
+        $columnTotals = $this->calculateColumnTotals($products);
+        $opTotals = $this->calculateOpTotals($products);
+
+        return [
+            'production_area_name' => $areaName ?? 'Sin Área Productiva',
+            'products' => $sortedProducts,
+            'total_row' => [
+                'product_id' => null,
+                'product_code' => null,
+                'product_name' => 'TOTAL',
+                'category_id' => null,
+                'category_name' => null,
+                'total_ordered_quantity' => $areaTotalOrderedQuantity,
+                'current_stock' => null,
+                'ops' => $opTotals,
+                'columns' => $columnTotals
+            ]
+        ];
+    }
+
+    /**
+     * Build product data with OP details and column data
+     *
+     * @param Collection $productGroup Products grouped by product_id
+     * @param Collection $advanceOrders Keyed collection of advance orders
+     * @param Collection $columnData Column data from service (companies, groupers, etc.)
+     * @return array Product data structure
+     */
+    private function buildProductData(
+        Collection $productGroup,
+        Collection $advanceOrders,
+        Collection $columnData
+    ): array {
+        $firstProduct = $productGroup->first();
+        $productId = $firstProduct->product_id;
+
+        // Calculate total ordered_quantity using ordered_quantity_new to avoid counting duplicates
+        $totalOrderedQuantity = $productGroup->sum('ordered_quantity_new');
+
+        // Build base product data
+        $productData = [
+            'product_id' => $productId,
+            'product_code' => $firstProduct->product_code,
+            'product_name' => $firstProduct->product_name,
+            'category_id' => $firstProduct->category_id,
+            'category_name' => $firstProduct->category_name ?? 'Sin Categoría',
+            'total_ordered_quantity' => $totalOrderedQuantity,
+            'current_stock' => $firstProduct->current_stock ?? 0,
+            'ops' => [],
+            'columns' => []
+        ];
+
+        // Add column data if exists for this product (from service)
+        if (isset($columnData[$productId])) {
+            foreach ($columnData[$productId] as $column) {
+                $columnKey = $this->columnProvider->getColumnKeyPrefix() . $column->column_id;
+
+                $productData['columns'][$columnKey] = [
+                    'column_id' => $column->column_id,
+                    'column_name' => $column->column_name,
+                    'display_name' => $column->display_name,
+                    'display_order' => $column->display_order,
+                    'total_quantity' => $column->total_quantity,
+                    'metadata' => $column->metadata ?? []
+                ];
+            }
+        }
+
+        // Add data for each OP
+        foreach ($productGroup as $product) {
+            $opOrder = array_search($product->advance_order_id, array_keys($advanceOrders->toArray()));
+
+            $productData['ops'][$product->advance_order_id] = [
+                'op_order' => $opOrder + 1, // 1-indexed
+                'manual_quantity' => $product->manual_quantity,
+                'total_to_produce' => $product->total_to_produce,
+            ];
+        }
+
+        return $productData;
+    }
+
+    /**
+     * Calculate column totals for a production area
+     *
+     * Generic method that works with companies, groupers, regions, etc.
+     *
+     * @param Collection $products Products in the area
+     * @return array Column totals keyed by column_key
+     */
+    private function calculateColumnTotals(Collection $products): array
+    {
+        $columnTotals = [];
+
+        foreach ($products as $product) {
+            if (isset($product['columns'])) {
+                foreach ($product['columns'] as $columnKey => $columnData) {
+                    if (!isset($columnTotals[$columnKey])) {
+                        $columnTotals[$columnKey] = [
+                            'column_id' => $columnData['column_id'],
+                            'column_name' => $columnData['column_name'],
+                            'display_name' => $columnData['display_name'],
+                            'display_order' => $columnData['display_order'],
+                            'total_quantity' => 0
+                        ];
+                    }
+                    $columnTotals[$columnKey]['total_quantity'] += $columnData['total_quantity'];
+                }
+            }
+        }
+
+        return $columnTotals;
+    }
+
+    /**
+     * Calculate OP totals for a production area
+     *
+     * @param Collection $products Products in the area
+     * @return array OP totals keyed by advance_order_id
+     */
+    private function calculateOpTotals(Collection $products): array
+    {
+        $opTotals = [];
+
+        foreach ($products as $product) {
+            if (isset($product['ops'])) {
+                foreach ($product['ops'] as $opId => $opData) {
+                    if (!isset($opTotals[$opId])) {
+                        $opTotals[$opId] = [
+                            'op_order' => $opData['op_order'],
+                            'manual_quantity' => 0,
+                            'total_to_produce' => 0
+                        ];
+                    }
+                    $opTotals[$opId]['manual_quantity'] += $opData['manual_quantity'];
+                    $opTotals[$opId]['total_to_produce'] += $opData['total_to_produce'];
+                }
+            }
+        }
+
+        return $opTotals;
     }
 
     /**

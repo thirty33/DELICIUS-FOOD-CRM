@@ -132,11 +132,17 @@ class AdvanceOrderReportCalculationsTest extends TestCase
         ]);
 
         $this->orderRepository = new OrderRepository();
-        $this->advanceOrderRepository = new AdvanceOrderRepository();
+
+        // Note: This test uses the LEGACY DiscriminatedCompanyColumnProvider
+        // to validate backward compatibility with exclude_from_consolidated_report
+        // The repository is instantiated in the test method with explicit service binding
     }
 
     /**
      * Test that report calculations are correct when creating OP from orders.
+     *
+     * LEGACY TEST: Uses DiscriminatedCompanyColumnProvider (exclude_from_consolidated_report)
+     * This test validates the OLD reporting system for backward compatibility.
      *
      * SCENARIO:
      * - Create 5 PROCESSED orders from Company A with 1 LASAÑA BOLONESA each (total: 5)
@@ -155,6 +161,10 @@ class AdvanceOrderReportCalculationsTest extends TestCase
      */
     public function test_report_calculations_match_actual_orders(): void
     {
+        // IMPORTANT: Use LEGACY service for backward compatibility testing
+        $legacyProvider = new \App\Services\Reports\DiscriminatedCompanyColumnProvider();
+        $this->advanceOrderRepository = new \App\Repositories\AdvanceOrderRepository($legacyProvider);
+
         // Create orders for Company A (5 orders with 1 LASAÑA BOLONESA each)
         $ordersCompanyA = [];
         for ($i = 1; $i <= 5; $i++) {
@@ -366,12 +376,12 @@ class AdvanceOrderReportCalculationsTest extends TestCase
 
         // === VALIDATION 6: Report - Company B (excluded) ===
         $companyKey = 'company_' . $this->companyB->id;
-        $this->assertArrayHasKey('companies', $reportBolonesa,
-            'Report should have companies data for LASAÑA BOLONESA');
-        $this->assertArrayHasKey($companyKey, $reportBolonesa['companies'],
-            'Report should have Company B data');
+        $this->assertArrayHasKey('columns', $reportBolonesa,
+            'Report should have columns data for LASAÑA BOLONESA');
+        $this->assertArrayHasKey($companyKey, $reportBolonesa['columns'],
+            'Report should have Company B column');
 
-        $companyBData = $reportBolonesa['companies'][$companyKey];
+        $companyBData = $reportBolonesa['columns'][$companyKey];
         $this->assertEquals(2, $companyBData['total_quantity'],
             'Report: Company B should show 2 for LASAÑA BOLONESA');
 

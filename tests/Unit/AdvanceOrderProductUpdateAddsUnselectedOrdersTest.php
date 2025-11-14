@@ -106,7 +106,7 @@ class AdvanceOrderProductUpdateAddsUnselectedOrdersTest extends TestCase
         ]);
 
         $this->orderRepository = new OrderRepository();
-        $this->advanceOrderRepository = new AdvanceOrderRepository();
+        $this->advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
     }
 
     /**

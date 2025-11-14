@@ -56,9 +56,9 @@ class AdvanceOrder extends Model
                 // Delete existing products before reloading
                 $advanceOrder->advanceOrderProducts()->delete();
 
-                $orderRepository = new OrderRepository();
-                $advanceOrderProductRepository = new AdvanceOrderProductRepository();
-                $advanceOrderRepository = new AdvanceOrderRepository();
+                $orderRepository = app(OrderRepository::class);
+                $advanceOrderProductRepository = app(AdvanceOrderProductRepository::class);
+                $advanceOrderRepository = app(AdvanceOrderRepository::class);
 
                 // Get products from orders in the date range with quantities
                 $productsData = $orderRepository->getProductsFromOrdersInDateRange(

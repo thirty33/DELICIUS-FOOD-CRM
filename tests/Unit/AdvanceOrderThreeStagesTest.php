@@ -70,7 +70,7 @@ class AdvanceOrderThreeStagesTest extends TestCase
         ]);
 
         $this->warehouseRepository = new WarehouseRepository();
-        $this->advanceOrderRepository = new AdvanceOrderRepository();
+        $this->advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
     }
 
     /**

@@ -150,7 +150,7 @@ class AdvanceOrderReportOverlapTest extends TestCase
         ]);
 
         $this->orderRepository = new OrderRepository();
-        $this->advanceOrderRepository = new AdvanceOrderRepository();
+        $this->advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
     }
 
     protected function tearDown(): void

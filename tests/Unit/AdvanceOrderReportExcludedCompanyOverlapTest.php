@@ -24,6 +24,9 @@ use Tests\TestCase;
 /**
  * Test Report Excluded Company Calculation with Overlapping OPs
  *
+ * LEGACY TEST: Uses DiscriminatedCompanyColumnProvider (exclude_from_consolidated_report)
+ * This test validates the OLD reporting system for backward compatibility.
+ *
  * SCENARIO (replicates production bug - DELICIUS FOOD COLACIONES):
  * 1. Create 5 orders from excluded company for LASAÑA on 2025-11-05:
  *    - Order #1, #2, #3 (will be in all OPs)
@@ -140,7 +143,6 @@ class AdvanceOrderReportExcludedCompanyOverlapTest extends TestCase
         }
 
         $this->orderRepository = new OrderRepository();
-        $this->advanceOrderRepository = new AdvanceOrderRepository();
     }
 
     protected function tearDown(): void
@@ -151,6 +153,10 @@ class AdvanceOrderReportExcludedCompanyOverlapTest extends TestCase
 
     public function test_report_shows_correct_excluded_company_total_with_overlap(): void
     {
+        // IMPORTANT: Use LEGACY service for backward compatibility testing
+        $legacyProvider = new \App\Services\Reports\DiscriminatedCompanyColumnProvider();
+        $this->advanceOrderRepository = new \App\Repositories\AdvanceOrderRepository($legacyProvider);
+
         $dispatchDate = Carbon::parse('2025-11-05');
         $preparationDate = $dispatchDate->copy()->subDays(3);
 
@@ -206,19 +212,14 @@ class AdvanceOrderReportExcludedCompanyOverlapTest extends TestCase
         $this->assertNotNull($productData, 'Product should be in report');
 
         // Verify excluded company data
-        $this->assertArrayHasKey('companies', $productData, 'Product should have companies data');
-        $this->assertNotEmpty($productData['companies'], 'Product should have at least one excluded company');
+        $this->assertArrayHasKey('columns', $productData, 'Product should have columns data');
+        $this->assertNotEmpty($productData['columns'], 'Product should have at least one excluded company column');
 
         // Find our excluded company in the data
-        $companyData = null;
-        foreach ($productData['companies'] as $company) {
-            if ($company['company_id'] === $this->excludedCompany->id) {
-                $companyData = $company;
-                break;
-            }
-        }
+        $companyKey = 'company_' . $this->excludedCompany->id;
+        $this->assertArrayHasKey($companyKey, $productData['columns'], 'Excluded company column should exist');
 
-        $this->assertNotNull($companyData, 'Excluded company should be in report');
+        $companyData = $productData['columns'][$companyKey];
 
         // CRITICAL ASSERTION: Company total should be 5 (unique orders)
         // NOT 11 (3 + 3 + 5 with duplicates)

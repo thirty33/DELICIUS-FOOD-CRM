@@ -6,6 +6,8 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
 use App\Contracts\API\Auth\AuthServiceInterface;
 use App\Services\API\V1\AuthSanctumService;
+use App\Contracts\ReportColumnDataProviderInterface;
+use App\Services\Reports\ReportGrouperColumnProvider;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
@@ -38,11 +40,18 @@ class AppServiceProvider extends ServiceProvider
             AuthSanctumService::class,
         );
 
+        // Bind report column data provider
+        // Using ReportGrouperColumnProvider for grouper-based reporting
+        $this->app->bind(
+            ReportColumnDataProviderInterface::class,
+            ReportGrouperColumnProvider::class
+        );
+
         if ($this->app->environment('local')) {
             $this->app->register(\Laravel\Telescope\TelescopeServiceProvider::class);
             $this->app->register(TelescopeServiceProvider::class);
         }
-        
+
     }
 
     /**

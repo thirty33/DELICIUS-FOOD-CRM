@@ -74,4 +74,10 @@ class Company extends Model
         return $this->belongsToMany(OrderRule::class, 'order_rule_companies');
     }
 
+    public function reportGroupers(): BelongsToMany
+    {
+        return $this->belongsToMany(ReportGrouper::class, 'company_report_grouper')
+            ->withTimestamps();
+    }
+
 }

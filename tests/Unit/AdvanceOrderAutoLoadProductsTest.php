@@ -186,9 +186,9 @@ class AdvanceOrderAutoLoadProductsTest extends TestCase
         ]);
 
         // Manually trigger the product loading logic (simulates Filament's afterCreate hook)
-        $orderRepository = new \App\Repositories\OrderRepository();
-        $advanceOrderProductRepository = new \App\Repositories\AdvanceOrderProductRepository();
-        $advanceOrderRepository = new \App\Repositories\AdvanceOrderRepository();
+        $orderRepository = app(\App\Repositories\OrderRepository::class);
+        $advanceOrderProductRepository = app(\App\Repositories\AdvanceOrderProductRepository::class);
+        $advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
 
         $productsData = $orderRepository->getProductsFromOrdersInDateRange(
             $advanceOrder->initial_dispatch_date->format('Y-m-d'),

@@ -174,7 +174,7 @@ class AdvanceOrderFilamentFormCreationTest extends TestCase
         $currentOrderedQuantity = $productData['ordered_quantity'];
 
         // Calculate ordered_quantity_new (considering previous OPs)
-        $advanceOrderRepository = new AdvanceOrderRepository();
+        $advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
         $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($advanceOrder);
         $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct(
             $this->product->id,
@@ -344,7 +344,7 @@ class AdvanceOrderFilamentFormCreationTest extends TestCase
         $productData = $productsData->firstWhere('product_id', $this->product->id);
         $currentOrderedQuantity = $productData['ordered_quantity'];
 
-        $advanceOrderRepository = new AdvanceOrderRepository();
+        $advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
         $previousAdvanceOrders = $advanceOrderRepository->getPreviousAdvanceOrdersWithSameDates($newAdvanceOrder);
         $maxPreviousQuantity = $advanceOrderRepository->getMaxOrderedQuantityForProduct(
             $this->product->id,

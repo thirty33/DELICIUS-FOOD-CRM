@@ -23,9 +23,9 @@ class CreateAdvanceOrder extends CreateRecord
 
         // Only load products if use_products_in_orders is true
         if ($advanceOrder->use_products_in_orders) {
-            $orderRepository = new OrderRepository();
-            $advanceOrderProductRepository = new AdvanceOrderProductRepository();
-            $advanceOrderRepository = new AdvanceOrderRepository();
+            $orderRepository = app(OrderRepository::class);
+            $advanceOrderProductRepository = app(AdvanceOrderProductRepository::class);
+            $advanceOrderRepository = app(AdvanceOrderRepository::class);
 
             // Get products from orders in the date range with quantities
             $productsData = $orderRepository->getProductsFromOrdersInDateRange(
