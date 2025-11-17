@@ -22,7 +22,8 @@ class ProductsTemplateExport implements FromArray, WithStyles, ShouldAutoSize
         'peso' => 'Peso',
         'permitir_ventas_sin_stock' => 'Permitir Ventas sin Stock',
         'activo' => 'Activo',
-        'ingredientes' => 'Ingredientes'
+        'ingredientes' => 'Ingredientes',
+        'areas_de_produccion' => 'Áreas de Producción'
     ];
 
     public function array(): array

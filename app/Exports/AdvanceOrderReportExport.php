@@ -31,11 +31,14 @@ class AdvanceOrderReportExport implements
     private array $advanceOrders = [];
     private array $columnHeaders = [];
     private ReportColumnDataProviderInterface $columnProvider;
-    private bool $showExcludedCompanies = true; // Control visibility of excluded companies columns
-    private bool $showAllAdelantos = true; // Show all adelanto columns (false = only initial)
-    private bool $showTotalElaborado = true; // Control visibility of total elaborado column
-    private bool $showSobrantes = true; // Control visibility of sobrantes column
-    private int $exportProcessId; // Track export process for status updates
+    private bool $showExcludedCompanies = true;
+    private bool $showAllAdelantos = true;
+    private bool $showTotalElaborado = true;
+    private bool $showSobrantes = true;
+    private bool $showAdelantoInicial = true;
+    private bool $showTotalPedidos = true;
+    private array $productionAreaIds = [];
+    private int $exportProcessId;
 
     public function __construct(
         array $advanceOrderIds,
@@ -43,7 +46,10 @@ class AdvanceOrderReportExport implements
         bool $showExcludedCompaniesOrAllAdelantos = true,
         bool $showAllAdelantosOrTotalElaborado = true,
         bool $showTotalElaboradoOrSobrantes = true,
-        bool $showSobrantes = true
+        bool $showSobrantes = true,
+        bool $showAdelantoInicial = true,
+        bool $showTotalPedidos = true,
+        array $productionAreaIds = []
     )
     {
         // Handle backward compatibility: if second param is bool, it's the old 5-param signature
@@ -54,14 +60,19 @@ class AdvanceOrderReportExport implements
             $this->showAllAdelantos = $showExcludedCompaniesOrAllAdelantos;
             $this->showTotalElaborado = $showAllAdelantosOrTotalElaborado;
             $this->showSobrantes = $showTotalElaboradoOrSobrantes;
+            $this->showAdelantoInicial = true;
+            $this->showTotalPedidos = true;
+            $this->productionAreaIds = [];
         } else {
-            // New 6-param signature
             $this->advanceOrderIds = $advanceOrderIds;
             $this->exportProcessId = $exportProcessIdOrShowExcludedCompanies;
             $this->showExcludedCompanies = $showExcludedCompaniesOrAllAdelantos;
             $this->showAllAdelantos = $showAllAdelantosOrTotalElaborado;
             $this->showTotalElaborado = $showTotalElaboradoOrSobrantes;
             $this->showSobrantes = $showSobrantes;
+            $this->showAdelantoInicial = $showAdelantoInicial;
+            $this->showTotalPedidos = $showTotalPedidos;
+            $this->productionAreaIds = $productionAreaIds;
         }
 
         // Inject column provider service from container
@@ -76,18 +87,8 @@ class AdvanceOrderReportExport implements
             ->get()
             ->keyBy('id')
             ->toArray();
-
-        \Log::info('Constructor finished', [
-            'advance_order_ids' => $advanceOrderIds,
-            'show_excluded_companies' => $this->showExcludedCompanies,
-            'show_all_adelantos' => $this->showAllAdelantos,
-            'show_total_elaborado' => $this->showTotalElaborado,
-            'show_sobrantes' => $this->showSobrantes,
-            'column_headers_count' => count($this->columnHeaders)
-        ]);
     }
-
-
+    
     /**
      * Return the collection of data to export
      */
@@ -95,30 +96,15 @@ class AdvanceOrderReportExport implements
     {
         $repository = app(AdvanceOrderRepository::class);
 
-        \Log::info('Starting collection generation', [
-            'advance_order_ids' => $this->advanceOrderIds,
-            'is_single_op' => count($this->advanceOrderIds) === 1
-        ]);
-
-        // If only one OP, use the same grouped method for consistency
-        if (count($this->advanceOrderIds) === 1) {
-            \Log::info('Single OP detected - using grouped method for consistency');
-            // Use the grouped method even for single OP to maintain consistency
-            // and support columns (companies/groupers) + total rows
-        }
-
         // Use the grouped by production area method (works for single or multiple OPs)
         $productionAreas = $repository->getAdvanceOrderProductsGroupedByProductionArea($this->advanceOrderIds);
 
-        \Log::info('Production areas loaded', [
-            'count' => count($productionAreas),
-            'areas' => $productionAreas->pluck('production_area_name')
-        ]);
-
-        \Log::info('Column headers loaded', [
-            'count' => count($this->columnHeaders),
-            'headers' => array_values($this->columnHeaders)
-        ]);
+        // Filter by production area IDs if provided
+        if (!empty($this->productionAreaIds)) {
+            $productionAreas = $productionAreas->filter(function($area) {
+                return in_array($area['production_area_id'], $this->productionAreaIds);
+            });
+        }
 
         $rows = collect();
 
@@ -250,26 +236,12 @@ class AdvanceOrderReportExport implements
                 // Log first product row for debugging
                 static $firstProductLogged = false;
                 if (!$firstProductLogged) {
-                    \Log::info('First product row before array_values', [
-                        'product_code' => $product['product_code'],
-                        'row_keys' => array_keys($row),
-                        'row_values' => $row,
-                        'column_headers_keys' => array_keys($this->columnHeaders)
-                    ]);
                     $firstProductLogged = true;
                 }
 
                 // Convert associative array to indexed array to preserve column order
                 $indexedRow = array_values($row);
-
-                // Log indexed row
-                if ($product['product_code'] === 'ENS00000011') {
-                    \Log::info('ENS00000011 indexed row', [
-                        'indexed_row' => $indexedRow,
-                        'count' => count($indexedRow)
-                    ]);
-                }
-
+                
                 $rows->push($indexedRow);
             }
 
@@ -330,13 +302,7 @@ class AdvanceOrderReportExport implements
      */
     public function headings(): array
     {
-        \Log::info('Generating headings', [
-            'advance_order_ids' => $this->advanceOrderIds,
-            'is_single_op' => count($this->advanceOrderIds) === 1,
-            'company_headers_count' => count($this->columnHeaders),
-            'company_headers' => $this->columnHeaders
-        ]);
-
+        
         // Use the same dynamic header structure for both single and multiple OPs
         // This ensures consistency and supports excluded companies + total rows
         $headers = [
@@ -367,13 +333,7 @@ class AdvanceOrderReportExport implements
         // Add final summary columns
         $headers[] = 'TOTAL ELABORADO';
         $headers[] = 'SOBRANTES';
-
-        \Log::info('Headers generated', [
-            'total_headers' => count($headers),
-            'headers' => $headers,
-            'company_headers' => $this->columnHeaders
-        ]);
-
+        
         return $headers;
     }
 
@@ -459,6 +419,49 @@ class AdvanceOrderReportExport implements
             }
         }
 
+        // Find and style TOTAL rows (rows where column C contains "TOTAL")
+        for ($row = 5; $row <= $highestRow; $row++) {
+            $cellC = $sheet->getCell('C' . $row)->getValue();
+
+            // If column C (Nombre del Producto) contains "TOTAL", apply bold
+            if ($cellC === 'TOTAL') {
+                $sheet->getStyle('A' . $row . ':' . $highestColumn . $row)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                    ],
+                ]);
+            }
+        }
+
+        // Apply font size 18 to ALL headers (row 1, all columns)
+        $sheet->getStyle('A1:' . $highestColumn . '1')->applyFromArray([
+            'font' => [
+                'size' => 18,
+            ],
+        ]);
+
+        // Apply font size 18 to date range header (row 2)
+        $sheet->getStyle('A2:' . $highestColumn . '2')->applyFromArray([
+            'font' => [
+                'size' => 18,
+            ],
+        ]);
+
+        // Apply font size 18 to date range values (row 3)
+        $sheet->getStyle('A3:' . $highestColumn . '3')->applyFromArray([
+            'font' => [
+                'size' => 18,
+            ],
+        ]);
+
+        // Apply font size 18 to ALL data rows (columns A to last column, from row 5 onwards)
+        // This includes product names (A, B, C) and all numeric values (D onwards)
+        $sheet->getStyle('A5:' . $highestColumn . $highestRow)->applyFromArray([
+            'font' => [
+                'size' => 18,
+            ],
+        ]);
+
         // Align all numeric columns (D onwards) to the left for data rows (row 2 onwards)
         $sheet->getStyle('D2:' . $highestColumn . $highestRow)->applyFromArray([
             'alignment' => [
@@ -466,16 +469,13 @@ class AdvanceOrderReportExport implements
             ],
         ]);
 
+        // Apply alternating row colors to product rows (before column colors)
+        $this->applyAlternatingRowColors($sheet, $highestRow);
+
         // Apply colors to dynamic columns
         // Column order: A-C (Category, Code, Name), D (TOTAL PEDIDOS), E-G (Companies), H onwards (OPs), last 2 (Total Elaborado, Sobrantes)
         $columnIndex = 5; // Start at E (5th column) - after TOTAL PEDIDOS
-
-        \Log::info('Applying column colors', [
-            'start_column_index' => $columnIndex,
-            'excluded_companies_count' => count($this->columnHeaders),
-            'ops_count' => count($this->advanceOrders)
-        ]);
-
+        
         // Apply light yellow color to excluded company columns FIRST (columns E, F, G, etc.)
         if (!empty($this->columnHeaders)) {
             $companyCount = count($this->columnHeaders);
@@ -488,7 +488,6 @@ class AdvanceOrderReportExport implements
                         'startColor' => ['rgb' => 'FFF2CC'] // Yellow light for excluded companies
                     ],
                 ]);
-                \Log::info('Applied company column color', ['column' => $companyColumn, 'index' => $columnIndex]);
                 $columnIndex++;
             }
         }
@@ -538,42 +537,38 @@ class AdvanceOrderReportExport implements
         // Hide columns based on parameters
         $currentColumnIndex = 5; // Start at E (after TOTAL PEDIDOS - column D is index 4)
 
+        // 0. Hide TOTAL PEDIDOS column if showTotalPedidos is false
+        if (!$this->showTotalPedidos) {
+            $totalPedidosColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(4);
+            $sheet->getColumnDimension($totalPedidosColumn)->setVisible(false);
+        }
+
         // 1. Hide excluded companies columns if showExcludedCompanies is false
         if (!$this->showExcludedCompanies && !empty($this->columnHeaders)) {
             $companyCount = count($this->columnHeaders);
 
-            \Log::info('Hiding company columns', [
-                'show_excluded_companies' => $this->showExcludedCompanies,
-                'company_count' => $companyCount,
-                'start_column_index' => $currentColumnIndex
-            ]);
-
             for ($i = 0; $i < $companyCount; $i++) {
                 $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($currentColumnIndex + $i);
                 $sheet->getColumnDimension($columnLetter)->setVisible(false);
-
-                \Log::info('Hidden company column', [
-                    'column' => $columnLetter,
-                    'index' => $currentColumnIndex + $i
-                ]);
             }
         }
 
         // Move index past company columns
         $currentColumnIndex += count($this->columnHeaders);
 
-        // 2. Hide non-initial adelanto columns if showAllAdelantos is false
+        // 2. Hide ADELANTO INICIAL column if showAdelantoInicial is false
+        if (!$this->showAdelantoInicial) {
+            $adelantoInicialColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($currentColumnIndex);
+            $sheet->getColumnDimension($adelantoInicialColumn)->setVisible(false);
+        }
+        $currentColumnIndex++;
+
+        // Move past first elaborar column
+        $currentColumnIndex++;
+
+        // 3. Hide non-initial adelanto columns if showAllAdelantos is false
         if (!$this->showAllAdelantos && count($this->advanceOrders) > 1) {
             $opCount = count($this->advanceOrders);
-
-            \Log::info('Hiding non-initial adelanto columns', [
-                'show_all_adelantos' => $this->showAllAdelantos,
-                'op_count' => $opCount,
-                'start_column_index' => $currentColumnIndex
-            ]);
-
-            // Skip first OP (ADELANTO INICIAL and ELABORAR 1)
-            $currentColumnIndex += 2;
 
             // Hide adelanto columns from OP 2 onwards (only adelanto, not elaborar)
             for ($i = 1; $i < $opCount; $i++) {
@@ -582,44 +577,71 @@ class AdvanceOrderReportExport implements
                 $adelantoColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($adelantoColumnIndex);
                 $sheet->getColumnDimension($adelantoColumn)->setVisible(false);
 
-                \Log::info('Hidden adelanto column', [
-                    'op_number' => $i + 1,
-                    'column' => $adelantoColumn,
-                    'index' => $adelantoColumnIndex
-                ]);
             }
 
-            // Move index past all OP columns
+            // Move index past all remaining OP columns (OP 2 onwards)
             $currentColumnIndex += (($opCount - 1) * 2);
         } else {
-            // Move index past all OP columns (adelanto + elaborar for each OP)
-            $currentColumnIndex += (count($this->advanceOrders) * 2);
+            // Move index past remaining OP columns (OP 2 onwards: adelanto + elaborar for each)
+            $currentColumnIndex += ((count($this->advanceOrders) - 1) * 2);
         }
 
-        // 3. Hide TOTAL ELABORADO column if showTotalElaborado is false
+        // 4. Hide TOTAL ELABORADO column if showTotalElaborado is false
         if (!$this->showTotalElaborado) {
             $totalElaboradoColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($currentColumnIndex);
             $sheet->getColumnDimension($totalElaboradoColumn)->setVisible(false);
-
-            \Log::info('Hidden total elaborado column', [
-                'column' => $totalElaboradoColumn,
-                'index' => $currentColumnIndex
-            ]);
         }
         $currentColumnIndex++;
 
-        // 4. Hide SOBRANTES column if showSobrantes is false
+        // 5. Hide SOBRANTES column if showSobrantes is false
         if (!$this->showSobrantes) {
             $sobrantesColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($currentColumnIndex);
             $sheet->getColumnDimension($sobrantesColumn)->setVisible(false);
-
-            \Log::info('Hidden sobrantes column', [
-                'column' => $sobrantesColumn,
-                'index' => $currentColumnIndex
-            ]);
         }
 
         return [];
+    }
+
+    /**
+     * Apply alternating row colors to product rows
+     *
+     * @param Worksheet $sheet The worksheet to apply colors to
+     * @param int $highestRow The last row in the sheet
+     * @return void
+     */
+    private function applyAlternatingRowColors(Worksheet $sheet, int $highestRow): void
+    {
+        $alternateColor = false;
+
+        for ($row = 5; $row <= $highestRow; $row++) {
+            $cellA = $sheet->getCell('A' . $row)->getValue();
+            $cellB = $sheet->getCell('B' . $row)->getValue();
+            $cellC = $sheet->getCell('C' . $row)->getValue();
+
+            // Skip production area headers (A has text, B and C empty)
+            if (!empty($cellA) && empty($cellB) && empty($cellC)) {
+                continue;
+            }
+
+            // Skip TOTAL rows (C contains "TOTAL")
+            if ($cellC === 'TOTAL') {
+                continue;
+            }
+
+            // Apply alternating color to product rows (columns A to D only)
+            // Columns E onwards will keep their predefined colors (yellow, pink, etc.)
+            if ($alternateColor) {
+                $sheet->getStyle('A' . $row . ':D' . $row)->applyFromArray([
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'startColor' => ['rgb' => 'F2F2F2'] // Light gray
+                    ],
+                ]);
+            }
+
+            // Toggle color for next product row
+            $alternateColor = !$alternateColor;
+        }
     }
 
     /**

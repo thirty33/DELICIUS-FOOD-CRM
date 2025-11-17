@@ -476,7 +476,11 @@ class AdvanceOrderRepository
         $columnTotals = $this->calculateColumnTotals($products);
         $opTotals = $this->calculateOpTotals($products);
 
+        // Get production area ID from first product in the area
+        $productionAreaId = $areaProducts->first()->production_area_id ?? null;
+
         return [
+            'production_area_id' => $productionAreaId,
             'production_area_name' => $areaName ?? 'Sin Área Productiva',
             'products' => $sortedProducts,
             'total_row' => [

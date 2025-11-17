@@ -48,7 +48,8 @@ class ProductsDataExport implements
         'peso' => 'Peso',
         'permitir_ventas_sin_stock' => 'Permitir Ventas sin Stock',
         'activo' => 'Activo',
-        'ingredientes' => 'Ingredientes'
+        'ingredientes' => 'Ingredientes',
+        'areas_de_produccion' => 'Áreas de Producción'
     ];
 
     private $exportProcessId;
@@ -62,7 +63,7 @@ class ProductsDataExport implements
 
     public function query()
     {
-        return Product::with(['category', 'ingredients'])
+        return Product::with(['category', 'ingredients', 'productionAreas'])
             ->whereIn('id', $this->productIds);
     }
     
@@ -87,7 +88,8 @@ class ProductsDataExport implements
                 'peso' => $product->weight !== null ? "'" . $product->weight : null,
                 'permitir_ventas_sin_stock' => $product->allow_sales_without_stock ? 'VERDADERO' : 'FALSO',
                 'activo' => $product->active ? 'VERDADERO' : 'FALSO',
-                'ingredientes' => $product->ingredients->pluck('descriptive_text')->implode(', ')
+                'ingredientes' => $product->ingredients->pluck('descriptive_text')->implode(', '),
+                'areas_de_produccion' => $product->productionAreas->pluck('name')->implode(', ')
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando producto para exportación', [

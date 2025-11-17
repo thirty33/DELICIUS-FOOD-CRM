@@ -101,6 +101,13 @@ class ProductResource extends Resource
                             ->label(__('Categoría'))
                             ->searchable()
                             ->columns(1),
+                        Forms\Components\Select::make('productionAreas')
+                            ->relationship('productionAreas', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->label(__('Cuartos Productivos'))
+                            ->searchable()
+                            ->columns(1),
                         Forms\Components\TextInput::make('measure_unit')
                             ->label(__('Unidad de Medida'))
                             ->nullable()

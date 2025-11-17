@@ -2,6 +2,7 @@
 
 namespace App\Forms;
 
+use App\Models\ProductionArea;
 use Filament\Forms;
 
 class AdvanceOrderReportOptionsForm
@@ -29,6 +30,12 @@ class AdvanceOrderReportOptionsForm
                         ->default(true)
                         ->inline(false),
 
+                    Forms\Components\Toggle::make('show_adelanto_inicial')
+                        ->label('Mostrar adelanto inicial')
+                        ->helperText('Muestra la columna de adelanto inicial en el reporte')
+                        ->default(true)
+                        ->inline(false),
+
                     Forms\Components\Toggle::make('show_total_elaborado')
                         ->label('Mostrar total elaborado')
                         ->helperText('Muestra la columna de total elaborado en el reporte')
@@ -40,6 +47,22 @@ class AdvanceOrderReportOptionsForm
                         ->helperText('Muestra la columna de sobrantes (stock actual en bodega)')
                         ->default(true)
                         ->inline(false),
+
+                    Forms\Components\Toggle::make('show_total_pedidos')
+                        ->label('Mostrar total pedidos')
+                        ->helperText('Muestra la columna de total pedidos en el reporte')
+                        ->default(true)
+                        ->inline(false),
+
+                    Forms\Components\Select::make('production_area_ids')
+                        ->label('Filtrar por áreas de producción')
+                        ->helperText('Seleccione las áreas de producción que desea incluir en el reporte. Si no selecciona ninguna, se mostrarán todas')
+                        ->multiple()
+                        ->options(ProductionArea::orderBy('name')->pluck('name', 'id'))
+                        ->default(ProductionArea::pluck('id')->toArray())
+                        ->searchable()
+                        ->preload()
+                        ->native(false),
                 ])
                 ->columns(1),
         ];

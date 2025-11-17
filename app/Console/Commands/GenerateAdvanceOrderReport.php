@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Exports\AdvanceOrderReportExport;
 use App\Models\AdvanceOrder;
+use App\Services\ImageSignerService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
@@ -19,8 +20,11 @@ class GenerateAdvanceOrderReport extends Command
                             {advanceOrderIds* : The IDs of the advance orders (space separated)}
                             {--hide-companies : Hide excluded companies columns in the report}
                             {--only-initial-adelanto : Show only initial adelanto column (hide other adelanto columns)}
+                            {--hide-adelanto-inicial : Hide adelanto inicial column}
                             {--hide-total-elaborado : Hide total elaborado column}
                             {--hide-sobrantes : Hide sobrantes column}
+                            {--hide-total-pedidos : Hide total pedidos column}
+                            {--production-areas=* : Filter by production area IDs (space separated)}
                             {--disk=s3 : Storage disk to use (s3 or local)}';
 
     /**
@@ -38,8 +42,11 @@ class GenerateAdvanceOrderReport extends Command
         $advanceOrderIds = $this->argument('advanceOrderIds');
         $hideCompanies = $this->option('hide-companies');
         $onlyInitialAdelanto = $this->option('only-initial-adelanto');
+        $hideAdelantoInicial = $this->option('hide-adelanto-inicial');
         $hideTotalElaborado = $this->option('hide-total-elaborado');
         $hideSobrantes = $this->option('hide-sobrantes');
+        $hideTotalPedidos = $this->option('hide-total-pedidos');
+        $productionAreaIds = $this->option('production-areas') ?: [];
         $disk = $this->option('disk');
 
         // Validate that all advance orders exist
@@ -64,45 +71,58 @@ class GenerateAdvanceOrderReport extends Command
         if ($onlyInitialAdelanto) {
             $this->info("Only initial adelanto column will be shown");
         }
+        if ($hideAdelantoInicial) {
+            $this->info("Adelanto inicial column will be hidden");
+        }
         if ($hideTotalElaborado) {
             $this->info("Total elaborado column will be hidden");
         }
         if ($hideSobrantes) {
             $this->info("Sobrantes column will be hidden");
         }
+        if ($hideTotalPedidos) {
+            $this->info("Total pedidos column will be hidden");
+        }
+        if (!empty($productionAreaIds)) {
+            $this->info("Filtering by production areas: " . implode(', ', $productionAreaIds));
+        }
 
         try {
-            // Create the export instance with all options
-            $export = new AdvanceOrderReportExport(
-                $advanceOrderIds,
-                !$hideCompanies,
-                !$onlyInitialAdelanto,
-                !$hideTotalElaborado,
-                !$hideSobrantes
-            );
-
             // Create filename based on disk
             if ($disk === 'local') {
                 $fileName = 'test-exports/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
             } else {
-                $fileName = 'advance-orders/reports/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
+                $fileName = 'exports/advance-orders/advance-orders-' . $idsString . '-' . now()->format('Y-m-d-His') . '.xlsx';
             }
 
-            // Store the file to specified disk
-            $stored = Excel::store($export, $fileName, $disk);
+            // Create the export instance with all options (exportProcessId = 0 for console commands)
+            $export = new AdvanceOrderReportExport(
+                $advanceOrderIds,
+                0, // exportProcessId (not tracked for console commands)
+                !$hideCompanies,        // showExcludedCompanies
+                !$onlyInitialAdelanto,  // showAllAdelantos
+                !$hideTotalElaborado,   // showTotalElaborado
+                !$hideSobrantes,        // showSobrantes
+                !$hideAdelantoInicial,  // showAdelantoInicial
+                !$hideTotalPedidos,     // showTotalPedidos
+                $productionAreaIds      // productionAreaIds
+            );
 
-            if (!$stored) {
-                throw new \Exception("Error storing file to {$disk}");
-            }
+            // Store the file to specified disk with explicit format
+            // Use download() to force synchronous execution, then manually upload to S3
+            $fileContent = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+
+            Storage::disk($disk)->put($fileName, $fileContent);
 
             $this->info('Report generated successfully!');
             $this->line('');
 
             if ($disk === 's3') {
-                // Get the signed temporary URL (valid for 24 hours)
+                // Get S3 temporary signed URL (valid for 24 hours)
                 $signedUrl = Storage::disk('s3')->temporaryUrl($fileName, now()->addHours(24));
+
                 $this->line('S3 Path: ' . $fileName);
-                $this->line('Signed URL (valid for 24 hours):');
+                $this->line('S3 Signed URL (valid for 24 hours):');
                 $this->line($signedUrl);
             } else {
                 $this->line('Local Path: ' . storage_path('app/' . $fileName));

@@ -262,7 +262,10 @@ class AdvanceOrderResource extends Resource
                                     $data['show_excluded_companies'] ?? true,
                                     $data['show_all_adelantos'] ?? true,
                                     $data['show_total_elaborado'] ?? true,
-                                    $data['show_sobrantes'] ?? true
+                                    $data['show_sobrantes'] ?? true,
+                                    $data['show_adelanto_inicial'] ?? true,
+                                    $data['show_total_pedidos'] ?? true,
+                                    $data['production_area_ids'] ?? []
                                 );
 
                                 // Store to S3 (queued automatically via ShouldQueue)
