@@ -35,6 +35,16 @@ class ReportGrouper extends Model
     public function companies(): BelongsToMany
     {
         return $this->belongsToMany(Company::class, 'company_report_grouper')
+            ->withPivot('use_all_branches')
+            ->withTimestamps();
+    }
+
+    /**
+     * Branches that belong to this grouper
+     */
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(Branch::class, 'branch_report_grouper')
             ->withTimestamps();
     }
 

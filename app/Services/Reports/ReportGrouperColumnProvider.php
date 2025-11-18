@@ -52,8 +52,24 @@ class ReportGrouperColumnProvider implements ReportColumnDataProviderInterface
             ->join('companies', 'users.company_id', '=', 'companies.id')
             ->join('company_report_grouper', 'companies.id', '=', 'company_report_grouper.company_id')
             ->join('report_groupers', 'company_report_grouper.report_grouper_id', '=', 'report_groupers.id')
+
+            // LEFT JOIN to branch_report_grouper to check if specific branches are configured
+            ->leftJoin('branch_report_grouper', function($join) {
+                $join->on('users.branch_id', '=', 'branch_report_grouper.branch_id')
+                     ->on('report_groupers.id', '=', 'branch_report_grouper.report_grouper_id');
+            })
+
             ->whereIn('advance_order_order_lines.advance_order_id', $advanceOrderIds)
             ->where('report_groupers.is_active', true)
+
+            // Apply branch filtering based on use_all_branches flag
+            // If use_all_branches = true: include all branches (no branch filtering)
+            // If use_all_branches = false: only include branches that exist in branch_report_grouper
+            ->where(function($query) {
+                $query->where('company_report_grouper.use_all_branches', true)
+                      ->orWhereNotNull('branch_report_grouper.branch_id');
+            })
+
             ->select(
                 'orders.id as order_id',
                 'order_lines.product_id',

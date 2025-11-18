@@ -2969,4 +2969,746 @@ class PartiallyScheduledOrderFlowTest extends TestCase
         // Cleanup config
         $reportConfig->delete();
     }
+
+    /**
+     * TDD Test: Groupers with Branch Filtering
+     *
+     * Tests the new functionality for filtering groupers by branches.
+     * This test creates 10 orders from the same company but different branches,
+     * and validates that the report shows separate columns for each branch-specific grouper.
+     *
+     * SCENARIO:
+     * - 1 Company (TEST COMPANY)
+     * - 2 Branches (Branch 1, Branch 2)
+     * - 10 Orders total:
+     *   - 5 orders from users in Branch 1 (quantities: 10, 20, 30, 40, 50) = 150 total
+     *   - 5 orders from users in Branch 2 (quantities: 15, 25, 35, 45, 55) = 175 total
+     * - 2 Groupers:
+     *   - Grouper 1: Same company + Branch 1 only
+     *   - Grouper 2: Same company + Branch 2 only
+     *
+     * EXPECTED RESULT:
+     * - Report should have 2 separate grouper columns
+     * - Grouper 1 column should show 150 total units (Branch 1 orders only)
+     * - Grouper 2 column should show 175 total units (Branch 2 orders only)
+     * - TOTAL PEDIDOS should be 325 units (150 + 175)
+     */
+    public function test_tdd_groupers_filtered_by_branches(): void
+    {
+        // Override service binding
+        $this->app->bind(
+            \App\Contracts\ReportColumnDataProviderInterface::class,
+            \App\Services\Reports\ReportGrouperColumnProvider::class
+        );
+
+        // Create roles and permissions
+        $roleConvenio = \App\Models\Role::firstOrCreate(['name' => \App\Enums\RoleName::AGREEMENT->value]);
+        $permissionConsolidado = \App\Models\Permission::firstOrCreate(['name' => \App\Enums\PermissionName::CONSOLIDADO->value]);
+
+        // Create single company
+        $company = Company::create([
+            'name' => 'Test Multi-Branch Company S.A.',
+            'fantasy_name' => 'Multi-Branch Company',
+            'tax_id' => '77.777.777-7',
+            'company_code' => 'MBCOMP1',
+            'email' => 'multibranch@test.com',
+            'phone_number' => '999999999',
+            'address' => 'Multi-Branch Address 1',
+            'price_list_id' => $this->company->price_list_id,
+            'exclude_from_consolidated_report' => false,
+        ]);
+
+        // Create 2 branches
+        $branch1 = Branch::create([
+            'company_id' => $company->id,
+            'address' => 'Branch 1 Address',
+            'fantasy_name' => 'Branch 1',
+            'branch_code' => 'BR1',
+            'phone' => '111111111',
+            'min_price_order' => 0,
+        ]);
+
+        $branch2 = Branch::create([
+            'company_id' => $company->id,
+            'address' => 'Branch 2 Address',
+            'fantasy_name' => 'Branch 2',
+            'branch_code' => 'BR2',
+            'phone' => '222222222',
+            'min_price_order' => 0,
+        ]);
+
+        // Branch 1: quantities = 10, 20, 30, 40, 50 (total = 150)
+        $branch1Quantities = [10, 20, 30, 40, 50];
+        $branch1Total = array_sum($branch1Quantities); // 150
+
+        // Branch 2: quantities = 15, 25, 35, 45, 55 (total = 175)
+        $branch2Quantities = [15, 25, 35, 45, 55];
+        $branch2Total = array_sum($branch2Quantities); // 175
+
+        $expectedTotalPedidos = $branch1Total + $branch2Total; // 325
+
+        $users = [];
+        $orders = [];
+
+        // Create 5 users and orders for Branch 1
+        for ($i = 1; $i <= 5; $i++) {
+            $user = User::create([
+                'name' => "Branch 1 User {$i}",
+                'email' => "branch1user{$i}@test.com",
+                'nickname' => "br1user{$i}",
+                'password' => bcrypt('password'),
+                'company_id' => $company->id,
+                'branch_id' => $branch1->id,
+            ]);
+
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $branch1Quantities[$i - 1], false);
+
+            $users[] = $user;
+            $orders[] = $order;
+        }
+
+        // Create 5 users and orders for Branch 2
+        for ($i = 1; $i <= 5; $i++) {
+            $user = User::create([
+                'name' => "Branch 2 User {$i}",
+                'email' => "branch2user{$i}@test.com",
+                'nickname' => "br2user{$i}",
+                'password' => bcrypt('password'),
+                'company_id' => $company->id,
+                'branch_id' => $branch2->id,
+            ]);
+
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $branch2Quantities[$i - 1], false);
+
+            $users[] = $user;
+            $orders[] = $order;
+        }
+
+        // Deactivate ALL configs and create test-specific config
+        \App\Models\ReportConfiguration::query()->update(['is_active' => false]);
+
+        $reportConfig = \App\Models\ReportConfiguration::create([
+            'name' => 'test_branch_grouper_config',
+            'description' => 'Test configuration for branch-specific groupers',
+            'use_groupers' => true,
+            'exclude_cafeterias' => false,
+            'exclude_agreements' => false,
+            'is_active' => true,
+        ]);
+
+        // Create 2 groupers with same company but different branches
+        // GROUPER 1: Company + Branch 1
+        $grouperBranch1 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'BRANCH 1 GROUPER',
+            'code' => 'GRP_BR1',
+            'display_order' => 1,
+            'is_active' => true,
+        ]);
+        // Attach company with use_all_branches = false (we want specific branches only)
+        $grouperBranch1->companies()->attach($company->id, ['use_all_branches' => false]);
+        $grouperBranch1->branches()->attach($branch1->id);
+
+        // GROUPER 2: Company + Branch 2
+        $grouperBranch2 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'BRANCH 2 GROUPER',
+            'code' => 'GRP_BR2',
+            'display_order' => 2,
+            'is_active' => true,
+        ]);
+        // Attach company with use_all_branches = false (we want specific branches only)
+        $grouperBranch2->companies()->attach($company->id, ['use_all_branches' => false]);
+        $grouperBranch2->branches()->attach($branch2->id);
+
+        // Create OP and generate report
+        $orderIds = array_map(fn($order) => $order->id, $orders);
+        $op1 = $this->createAndExecuteOp($orderIds);
+
+        $filePath = $this->generateConsolidatedReport(
+            [$op1->id],
+            showExcludedCompanies: true,
+            showAllAdelantos: true,
+            showTotalElaborado: true,
+            showSobrantes: true
+        );
+
+        $this->assertFileExists($filePath);
+
+        // Read and validate Excel
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Find header row
+        $headerRow = $this->findHeaderRow($spreadsheet);
+        $this->assertNotNull($headerRow, 'Header row not found');
+
+        // Find columns
+        $grouperBranch1Col = null;
+        $grouperBranch2Col = null;
+        $totalPedidosCol = null;
+
+        $col = 'A';
+        while (true) {
+            $headerValue = $sheet->getCell($col . $headerRow)->getValue();
+
+            if ($headerValue === null || $headerValue === '') {
+                break;
+            }
+
+            if ($headerValue === 'BRANCH 1 GROUPER') {
+                $grouperBranch1Col = $col;
+            }
+            if ($headerValue === 'BRANCH 2 GROUPER') {
+                $grouperBranch2Col = $col;
+            }
+            if ($headerValue === 'TOTAL PEDIDOS') {
+                $totalPedidosCol = $col;
+            }
+
+            $col++;
+        }
+
+        // Validate that both grouper columns exist
+        $this->assertNotNull($grouperBranch1Col, 'BRANCH 1 GROUPER column should exist');
+        $this->assertNotNull($grouperBranch2Col, 'BRANCH 2 GROUPER column should exist');
+        $this->assertNotNull($totalPedidosCol, 'TOTAL PEDIDOS column should exist');
+
+        // Find the product data row
+        $productRow = null;
+        for ($row = $headerRow + 1; $row <= $headerRow + 20; $row++) {
+            $testValue = $sheet->getCell($totalPedidosCol . $row)->getValue();
+            if (is_numeric($testValue) && $testValue > 0) {
+                $productRow = $row;
+                break;
+            }
+        }
+
+        $this->assertNotNull($productRow, 'Could not find product data row');
+
+        // Validate values
+        $grouperBranch1Value = $sheet->getCell($grouperBranch1Col . $productRow)->getValue();
+        $grouperBranch2Value = $sheet->getCell($grouperBranch2Col . $productRow)->getValue();
+        $totalPedidosValue = $sheet->getCell($totalPedidosCol . $productRow)->getValue();
+
+        // TDD: These assertions will FAIL until we implement branch filtering in the report logic
+        $this->assertEquals(
+            $branch1Total,
+            $grouperBranch1Value,
+            "BRANCH 1 GROUPER should have {$branch1Total} units (10+20+30+40+50)"
+        );
+
+        $this->assertEquals(
+            $branch2Total,
+            $grouperBranch2Value,
+            "BRANCH 2 GROUPER should have {$branch2Total} units (15+25+35+45+55)"
+        );
+
+        $this->assertEquals(
+            $expectedTotalPedidos,
+            $totalPedidosValue,
+            "TOTAL PEDIDOS should be {$expectedTotalPedidos}"
+        );
+
+        // Validate production values
+        $expectedProductionValues = [
+            'PRODUCT_A' => [
+                'adelanto_inicial' => 0,
+                'elaborar_1' => $expectedTotalPedidos,
+                'total_elaborado' => $expectedTotalPedidos,
+                'sobrantes' => 0,
+            ],
+        ];
+
+        $this->validateProductionValues($spreadsheet, $expectedProductionValues);
+
+        // Cleanup config
+        $reportConfig->delete();
+    }
+
+    /**
+     * Complex Test: Mixed Groupers with Multiple Companies and Branch Configurations
+     *
+     * Tests complex scenarios mixing companies with all branches and companies with specific branches.
+     *
+     * SCENARIO:
+     * - 4 Companies, each with multiple branches
+     * - 20 Orders distributed across companies and branches
+     * - 4 Groupers with mixed configurations:
+     *
+     * COMPANY 1 (6 branches):
+     *   - Branch 1A: 1 order (10 units)
+     *   - Branch 1B: 1 order (20 units)
+     *   - Branch 1C: 1 order (30 units)
+     *   - Branch 1D: 1 order (40 units)
+     *   - Branch 1E: 1 order (50 units)
+     *   - Branch 1F: 1 order (60 units)
+     *   Total Company 1: 210 units (10+20+30+40+50+60)
+     *
+     * COMPANY 2 (6 branches):
+     *   - Branch 2A: 1 order (15 units)
+     *   - Branch 2B: 1 order (25 units)
+     *   - Branch 2C: 1 order (35 units)
+     *   - Branch 2D: 1 order (45 units)
+     *   - Branch 2E: 1 order (55 units)
+     *   - Branch 2F: 1 order (65 units)
+     *   Total Company 2: 240 units (15+25+35+45+55+65)
+     *   Group A (2A, 2B, 2C): 75 units (15+25+35)
+     *   Group B (2D, 2E, 2F): 165 units (45+55+65)
+     *
+     * COMPANY 3 (4 branches):
+     *   - Branch 3A: 1 order (100 units)
+     *   - Branch 3B: 1 order (200 units)
+     *   - Branch 3C: 1 order (300 units)
+     *   - Branch 3D: 1 order (400 units)
+     *   Total Company 3: 1000 units (100+200+300+400)
+     *
+     * COMPANY 4 (4 branches):
+     *   - Branch 4A: 1 order (11 units)
+     *   - Branch 4B: 1 order (22 units)
+     *   - Branch 4C: 1 order (33 units)
+     *   - Branch 4D: 1 order (44 units)
+     *   Total Company 4: 110 units (11+22+33+44)
+     *
+     * GROUPER CONFIGURATION:
+     * - Grouper 1: Company 1 (ALL branches) + Company 2 (branches 2A, 2B, 2C only)
+     *   Expected: 210 + 75 = 285 units
+     *
+     * - Grouper 2: Company 2 (branches 2D, 2E, 2F only)
+     *   Expected: 165 units
+     *
+     * - Grouper 3: Company 3 (ALL branches)
+     *   Expected: 1000 units
+     *
+     * - Grouper 4: Company 4 (ALL branches)
+     *   Expected: 110 units
+     *
+     * TOTAL PEDIDOS: 285 + 165 + 1000 + 110 = 1560 units
+     */
+    public function test_complex_mixed_groupers_with_multiple_companies(): void
+    {
+        // Override service binding
+        $this->app->bind(
+            \App\Contracts\ReportColumnDataProviderInterface::class,
+            \App\Services\Reports\ReportGrouperColumnProvider::class
+        );
+
+        // Create roles and permissions
+        $roleConvenio = \App\Models\Role::firstOrCreate(['name' => \App\Enums\RoleName::AGREEMENT->value]);
+        $permissionConsolidado = \App\Models\Permission::firstOrCreate(['name' => \App\Enums\PermissionName::CONSOLIDADO->value]);
+
+        // ========================================
+        // COMPANY 1: 6 branches, ALL branches in Grouper 1
+        // ========================================
+        $company1 = Company::create([
+            'name' => 'Test Company 1 S.A.',
+            'fantasy_name' => 'Company 1',
+            'tax_id' => '11.111.111-1',
+            'company_code' => 'COMP1',
+            'email' => 'company1@test.com',
+            'phone_number' => '111111111',
+            'address' => 'Company 1 Address',
+            'price_list_id' => $this->company->price_list_id,
+            'exclude_from_consolidated_report' => false,
+        ]);
+
+        $company1Branches = [];
+        $company1Quantities = [10, 20, 30, 40, 50, 60]; // Total: 210
+        $company1Total = array_sum($company1Quantities);
+
+        for ($i = 0; $i < 6; $i++) {
+            $branchLetter = chr(65 + $i); // A, B, C, D, E, F
+            $branch = Branch::create([
+                'company_id' => $company1->id,
+                'address' => "Branch 1{$branchLetter} Address",
+                'fantasy_name' => "Branch 1{$branchLetter}",
+                'branch_code' => "BR1{$branchLetter}",
+                'phone' => '111111' . ($i + 1),
+                'min_price_order' => 0,
+            ]);
+            $company1Branches[] = $branch;
+
+            // Create user and order for this branch
+            $user = User::create([
+                'name' => "Company 1 Branch {$branchLetter} User",
+                'email' => "c1branch{$branchLetter}@test.com",
+                'nickname' => "c1br{$branchLetter}",
+                'password' => bcrypt('password'),
+                'company_id' => $company1->id,
+                'branch_id' => $branch->id,
+            ]);
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $company1Quantities[$i], false);
+        }
+
+        // ========================================
+        // COMPANY 2: 6 branches, split between Grouper 1 (A,B,C) and Grouper 2 (D,E,F)
+        // ========================================
+        $company2 = Company::create([
+            'name' => 'Test Company 2 S.A.',
+            'fantasy_name' => 'Company 2',
+            'tax_id' => '22.222.222-2',
+            'company_code' => 'COMP2',
+            'email' => 'company2@test.com',
+            'phone_number' => '222222222',
+            'address' => 'Company 2 Address',
+            'price_list_id' => $this->company->price_list_id,
+            'exclude_from_consolidated_report' => false,
+        ]);
+
+        $company2Branches = [];
+        $company2Quantities = [15, 25, 35, 45, 55, 65]; // Total: 240
+        $company2GroupA = array_sum(array_slice($company2Quantities, 0, 3)); // 15+25+35 = 75
+        $company2GroupB = array_sum(array_slice($company2Quantities, 3, 3)); // 45+55+65 = 165
+
+        for ($i = 0; $i < 6; $i++) {
+            $branchLetter = chr(65 + $i); // A, B, C, D, E, F
+            $branch = Branch::create([
+                'company_id' => $company2->id,
+                'address' => "Branch 2{$branchLetter} Address",
+                'fantasy_name' => "Branch 2{$branchLetter}",
+                'branch_code' => "BR2{$branchLetter}",
+                'phone' => '222222' . ($i + 1),
+                'min_price_order' => 0,
+            ]);
+            $company2Branches[] = $branch;
+
+            // Create user and order for this branch
+            $user = User::create([
+                'name' => "Company 2 Branch {$branchLetter} User",
+                'email' => "c2branch{$branchLetter}@test.com",
+                'nickname' => "c2br{$branchLetter}",
+                'password' => bcrypt('password'),
+                'company_id' => $company2->id,
+                'branch_id' => $branch->id,
+            ]);
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $company2Quantities[$i], false);
+        }
+
+        // ========================================
+        // COMPANY 3: 4 branches, ALL branches in Grouper 3
+        // ========================================
+        $company3 = Company::create([
+            'name' => 'Test Company 3 S.A.',
+            'fantasy_name' => 'Company 3',
+            'tax_id' => '33.333.333-3',
+            'company_code' => 'COMP3',
+            'email' => 'company3@test.com',
+            'phone_number' => '333333333',
+            'address' => 'Company 3 Address',
+            'price_list_id' => $this->company->price_list_id,
+            'exclude_from_consolidated_report' => false,
+        ]);
+
+        $company3Branches = [];
+        $company3Quantities = [100, 200, 300, 400]; // Total: 1000
+        $company3Total = array_sum($company3Quantities);
+
+        for ($i = 0; $i < 4; $i++) {
+            $branchLetter = chr(65 + $i); // A, B, C, D
+            $branch = Branch::create([
+                'company_id' => $company3->id,
+                'address' => "Branch 3{$branchLetter} Address",
+                'fantasy_name' => "Branch 3{$branchLetter}",
+                'branch_code' => "BR3{$branchLetter}",
+                'phone' => '333333' . ($i + 1),
+                'min_price_order' => 0,
+            ]);
+            $company3Branches[] = $branch;
+
+            // Create user and order for this branch
+            $user = User::create([
+                'name' => "Company 3 Branch {$branchLetter} User",
+                'email' => "c3branch{$branchLetter}@test.com",
+                'nickname' => "c3br{$branchLetter}",
+                'password' => bcrypt('password'),
+                'company_id' => $company3->id,
+                'branch_id' => $branch->id,
+            ]);
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $company3Quantities[$i], false);
+        }
+
+        // ========================================
+        // COMPANY 4: 4 branches, ALL branches in Grouper 4
+        // ========================================
+        $company4 = Company::create([
+            'name' => 'Test Company 4 S.A.',
+            'fantasy_name' => 'Company 4',
+            'tax_id' => '44.444.444-4',
+            'company_code' => 'COMP4',
+            'email' => 'company4@test.com',
+            'phone_number' => '444444444',
+            'address' => 'Company 4 Address',
+            'price_list_id' => $this->company->price_list_id,
+            'exclude_from_consolidated_report' => false,
+        ]);
+
+        $company4Branches = [];
+        $company4Quantities = [11, 22, 33, 44]; // Total: 110
+        $company4Total = array_sum($company4Quantities);
+
+        for ($i = 0; $i < 4; $i++) {
+            $branchLetter = chr(65 + $i); // A, B, C, D
+            $branch = Branch::create([
+                'company_id' => $company4->id,
+                'address' => "Branch 4{$branchLetter} Address",
+                'fantasy_name' => "Branch 4{$branchLetter}",
+                'branch_code' => "BR4{$branchLetter}",
+                'phone' => '444444' . ($i + 1),
+                'min_price_order' => 0,
+            ]);
+            $company4Branches[] = $branch;
+
+            // Create user and order for this branch
+            $user = User::create([
+                'name' => "Company 4 Branch {$branchLetter} User",
+                'email' => "c4branch{$branchLetter}@test.com",
+                'nickname' => "c4br{$branchLetter}",
+                'password' => bcrypt('password'),
+                'company_id' => $company4->id,
+                'branch_id' => $branch->id,
+            ]);
+            $user->roles()->attach($roleConvenio->id);
+            $user->permissions()->attach($permissionConsolidado->id);
+
+            $order = $this->createOrderForUser($user, $this->dateFA, OrderStatus::PROCESSED);
+            $this->createOrderLine($order, $this->productA, $company4Quantities[$i], false);
+        }
+
+        // ========================================
+        // CREATE REPORT CONFIGURATION
+        // ========================================
+        \App\Models\ReportConfiguration::query()->update(['is_active' => false]);
+
+        $reportConfig = \App\Models\ReportConfiguration::create([
+            'name' => 'test_complex_mixed_groupers',
+            'description' => 'Test configuration for complex mixed grouper scenarios',
+            'use_groupers' => true,
+            'exclude_cafeterias' => false,
+            'exclude_agreements' => false,
+            'is_active' => true,
+        ]);
+
+        // ========================================
+        // GROUPER 1: Company 1 (ALL branches) + Company 2 (branches A, B, C only)
+        // Expected: 210 + 75 = 285 units
+        // ========================================
+        $grouper1 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'GROUPER 1',
+            'code' => 'GRP1',
+            'display_order' => 1,
+            'is_active' => true,
+        ]);
+        // Company 1: ALL branches
+        $grouper1->companies()->attach($company1->id, ['use_all_branches' => true]);
+        // Company 2: ONLY branches A, B, C
+        $grouper1->companies()->attach($company2->id, ['use_all_branches' => false]);
+        $grouper1->branches()->attach([
+            $company2Branches[0]->id, // 2A
+            $company2Branches[1]->id, // 2B
+            $company2Branches[2]->id, // 2C
+        ]);
+
+        $grouper1Expected = $company1Total + $company2GroupA; // 210 + 75 = 285
+
+        // ========================================
+        // GROUPER 2: Company 2 (branches D, E, F only)
+        // Expected: 165 units
+        // ========================================
+        $grouper2 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'GROUPER 2',
+            'code' => 'GRP2',
+            'display_order' => 2,
+            'is_active' => true,
+        ]);
+        // Company 2: ONLY branches D, E, F
+        $grouper2->companies()->attach($company2->id, ['use_all_branches' => false]);
+        $grouper2->branches()->attach([
+            $company2Branches[3]->id, // 2D
+            $company2Branches[4]->id, // 2E
+            $company2Branches[5]->id, // 2F
+        ]);
+
+        $grouper2Expected = $company2GroupB; // 165
+
+        // ========================================
+        // GROUPER 3: Company 3 (ALL branches)
+        // Expected: 1000 units
+        // ========================================
+        $grouper3 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'GROUPER 3',
+            'code' => 'GRP3',
+            'display_order' => 3,
+            'is_active' => true,
+        ]);
+        // Company 3: ALL branches
+        $grouper3->companies()->attach($company3->id, ['use_all_branches' => true]);
+
+        $grouper3Expected = $company3Total; // 1000
+
+        // ========================================
+        // GROUPER 4: Company 4 (ALL branches)
+        // Expected: 110 units
+        // ========================================
+        $grouper4 = \App\Models\ReportGrouper::create([
+            'report_configuration_id' => $reportConfig->id,
+            'name' => 'GROUPER 4',
+            'code' => 'GRP4',
+            'display_order' => 4,
+            'is_active' => true,
+        ]);
+        // Company 4: ALL branches
+        $grouper4->companies()->attach($company4->id, ['use_all_branches' => true]);
+
+        $grouper4Expected = $company4Total; // 110
+
+        // ========================================
+        // GENERATE REPORT
+        // ========================================
+        $expectedTotalPedidos = $grouper1Expected + $grouper2Expected + $grouper3Expected + $grouper4Expected; // 1560
+
+        $allOrders = Order::whereIn('user_id', User::whereIn('company_id', [
+            $company1->id,
+            $company2->id,
+            $company3->id,
+            $company4->id,
+        ])->pluck('id'))->get();
+
+        $orderIds = $allOrders->pluck('id')->toArray();
+        $op1 = $this->createAndExecuteOp($orderIds);
+
+        $filePath = $this->generateConsolidatedReport(
+            [$op1->id],
+            showExcludedCompanies: true,
+            showAllAdelantos: true,
+            showTotalElaborado: true,
+            showSobrantes: true
+        );
+
+        $this->assertFileExists($filePath);
+
+        // ========================================
+        // VALIDATE EXCEL REPORT
+        // ========================================
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Find header row and columns
+        $headerRow = 1;
+        $productRow = null;
+        $grouperColumns = [];
+
+        // Find grouper columns and product row
+        foreach ($sheet->getRowIterator() as $row) {
+            $rowIndex = $row->getRowIndex();
+            $cellIterator = $row->getCellIterator();
+            $cellIterator->setIterateOnlyExistingCells(false);
+
+            foreach ($cellIterator as $cell) {
+                $value = $cell->getValue();
+
+                // Find header columns
+                if ($rowIndex === $headerRow) {
+                    if ($value === 'GROUPER 1') {
+                        $grouperColumns['GRP1'] = $cell->getColumn();
+                    } elseif ($value === 'GROUPER 2') {
+                        $grouperColumns['GRP2'] = $cell->getColumn();
+                    } elseif ($value === 'GROUPER 3') {
+                        $grouperColumns['GRP3'] = $cell->getColumn();
+                    } elseif ($value === 'GROUPER 4') {
+                        $grouperColumns['GRP4'] = $cell->getColumn();
+                    } elseif ($value === 'TOTAL PEDIDOS') {
+                        $grouperColumns['TOTAL'] = $cell->getColumn();
+                    }
+                }
+
+                // Find product row
+                if ($cell->getColumn() === 'B' && $value === 'PRODUCT_A') {
+                    $productRow = $rowIndex;
+                }
+            }
+        }
+
+        $this->assertNotNull($productRow, 'Product row not found');
+        $this->assertArrayHasKey('GRP1', $grouperColumns, 'GROUPER 1 column not found');
+        $this->assertArrayHasKey('GRP2', $grouperColumns, 'GROUPER 2 column not found');
+        $this->assertArrayHasKey('GRP3', $grouperColumns, 'GROUPER 3 column not found');
+        $this->assertArrayHasKey('GRP4', $grouperColumns, 'GROUPER 4 column not found');
+        $this->assertArrayHasKey('TOTAL', $grouperColumns, 'TOTAL PEDIDOS column not found');
+
+        // Get values from report
+        $grouper1Value = $sheet->getCell($grouperColumns['GRP1'] . $productRow)->getValue();
+        $grouper2Value = $sheet->getCell($grouperColumns['GRP2'] . $productRow)->getValue();
+        $grouper3Value = $sheet->getCell($grouperColumns['GRP3'] . $productRow)->getValue();
+        $grouper4Value = $sheet->getCell($grouperColumns['GRP4'] . $productRow)->getValue();
+        $totalPedidosValue = $sheet->getCell($grouperColumns['TOTAL'] . $productRow)->getValue();
+
+        // VALIDATE ALL GROUPER VALUES
+        $this->assertEquals(
+            $grouper1Expected,
+            $grouper1Value,
+            "GROUPER 1 should have {$grouper1Expected} units (Company 1: 210 + Company 2 branches A,B,C: 75)"
+        );
+
+        $this->assertEquals(
+            $grouper2Expected,
+            $grouper2Value,
+            "GROUPER 2 should have {$grouper2Expected} units (Company 2 branches D,E,F: 165)"
+        );
+
+        $this->assertEquals(
+            $grouper3Expected,
+            $grouper3Value,
+            "GROUPER 3 should have {$grouper3Expected} units (Company 3 all branches: 1000)"
+        );
+
+        $this->assertEquals(
+            $grouper4Expected,
+            $grouper4Value,
+            "GROUPER 4 should have {$grouper4Expected} units (Company 4 all branches: 110)"
+        );
+
+        $this->assertEquals(
+            $expectedTotalPedidos,
+            $totalPedidosValue,
+            "TOTAL PEDIDOS should be {$expectedTotalPedidos} (285 + 165 + 1000 + 110)"
+        );
+
+        // Validate production values
+        $expectedProductionValues = [
+            'PRODUCT_A' => [
+                'adelanto_inicial' => 0,
+                'elaborar_1' => $expectedTotalPedidos,
+                'total_elaborado' => $expectedTotalPedidos,
+                'sobrantes' => 0,
+            ],
+        ];
+
+        $this->validateProductionValues($spreadsheet, $expectedProductionValues);
+
+        // Cleanup config
+        $reportConfig->delete();
+    }
 }
