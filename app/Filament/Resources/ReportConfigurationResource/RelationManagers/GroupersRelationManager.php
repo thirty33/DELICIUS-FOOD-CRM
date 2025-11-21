@@ -12,7 +12,6 @@ use Filament\Forms\Set;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-
 class GroupersRelationManager extends RelationManager
 {
     protected static string $relationship = 'groupers';
@@ -159,14 +158,12 @@ class GroupersRelationManager extends RelationManager
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Remove company_configs from data as it's handled in afterCreate
         unset($data['company_configs']);
         return $data;
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Remove company_configs from data as it's handled in afterSave
         unset($data['company_configs']);
         return $data;
     }
@@ -185,10 +182,8 @@ class GroupersRelationManager extends RelationManager
     {
         $data = $this->form->getState();
         $grouper = $this->record;
-
         $companyConfigs = $data['company_configs'] ?? [];
 
-        // Prepare data for syncing companies with pivot data
         $companySyncData = [];
         $branchSyncData = [];
 
@@ -197,12 +192,10 @@ class GroupersRelationManager extends RelationManager
             $useAllBranches = $config['use_all_branches'] ?? true;
             $branchIds = $config['branch_ids'] ?? [];
 
-            // Add company with pivot data
             $companySyncData[$companyId] = [
                 'use_all_branches' => $useAllBranches,
             ];
 
-            // If specific branches are selected, add them to branch sync data
             if (!$useAllBranches && !empty($branchIds)) {
                 foreach ($branchIds as $branchId) {
                     $branchSyncData[] = $branchId;
@@ -210,10 +203,7 @@ class GroupersRelationManager extends RelationManager
             }
         }
 
-        // Sync companies with pivot data
         $grouper->companies()->sync($companySyncData);
-
-        // Sync branches
         $grouper->branches()->sync($branchSyncData);
     }
 
@@ -322,7 +312,6 @@ class GroupersRelationManager extends RelationManager
             ->actions([
                 Tables\Actions\EditAction::make()
                     ->mutateRecordDataUsing(function (array $data, ReportGrouper $record): array {
-                        // Load company configurations for editing
                         $record->load(['companies', 'branches']);
 
                         $companyConfigs = [];
@@ -345,6 +334,37 @@ class GroupersRelationManager extends RelationManager
                         $data['company_configs'] = $companyConfigs;
 
                         return $data;
+                    })
+                    ->using(function (ReportGrouper $record, array $data): ReportGrouper {
+                        $recordData = $data;
+                        $companyConfigs = $recordData['company_configs'] ?? [];
+                        unset($recordData['company_configs']);
+
+                        $record->update($recordData);
+
+                        $companySyncData = [];
+                        $branchSyncData = [];
+
+                        foreach ($companyConfigs as $config) {
+                            $companyId = $config['company_id'];
+                            $useAllBranches = $config['use_all_branches'] ?? true;
+                            $branchIds = $config['branch_ids'] ?? [];
+
+                            $companySyncData[$companyId] = [
+                                'use_all_branches' => $useAllBranches,
+                            ];
+
+                            if (!$useAllBranches && !empty($branchIds)) {
+                                foreach ($branchIds as $branchId) {
+                                    $branchSyncData[] = $branchId;
+                                }
+                            }
+                        }
+
+                        $record->companies()->sync($companySyncData);
+                        $record->branches()->sync($branchSyncData);
+
+                        return $record;
                     }),
                 Tables\Actions\DeleteAction::make(),
             ])
