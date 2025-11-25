@@ -8,6 +8,8 @@ use App\Contracts\API\Auth\AuthServiceInterface;
 use App\Services\API\V1\AuthSanctumService;
 use App\Contracts\ReportColumnDataProviderInterface;
 use App\Services\Reports\ReportGrouperColumnProvider;
+use App\Contracts\NutritionalInformationRepositoryInterface;
+use App\Repositories\NutritionalInformationRepository;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
@@ -45,6 +47,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             ReportColumnDataProviderInterface::class,
             ReportGrouperColumnProvider::class
+        );
+
+        // Bind nutritional information repository
+        $this->app->bind(
+            NutritionalInformationRepositoryInterface::class,
+            NutritionalInformationRepository::class
         );
 
         if ($this->app->environment('local')) {

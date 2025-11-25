@@ -34,6 +34,7 @@ class ExportProcess extends Model
     const TYPE_ORDER_LINES = 'líneas de pedidos';
     const ORDER_CONSOLIDATED = 'consolidado de pedidos';
     const TYPE_VOUCHERS = 'vouchers';
+    const TYPE_NUTRITIONAL_INFORMATION = 'informacion nutricional';
 
     // Constantes para los estados
     const STATUS_QUEUED = 'en cola';
@@ -60,6 +61,7 @@ class ExportProcess extends Model
             self::TYPE_ORDER_LINES,
             self::ORDER_CONSOLIDATED,
             self::TYPE_VOUCHERS,
+            self::TYPE_NUTRITIONAL_INFORMATION,
         ];
     }
 

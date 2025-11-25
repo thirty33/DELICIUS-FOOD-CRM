@@ -34,6 +34,44 @@ Recent sessions have exposed a critical reliability defect: whenever Claude queu
 
 ---
 
+## CRITICAL - Screenshot and Visual Analysis Protocol
+
+**⚠️ MANDATORY VISUAL VERIFICATION - NON-NEGOTIABLE ⚠️**
+
+When taking screenshots or analyzing visual content, the following protocol **MUST** be followed:
+
+### Mandatory Analysis Requirements
+
+1. **ANALYZE THE ACTUAL IMAGE**: After taking a screenshot, you MUST examine what the image actually shows. Do NOT assume or predict what you expect to see based on previous screenshots or context.
+
+2. **DESCRIBE SPECIFIC VISUAL ELEMENTS**: Before making any conclusions, explicitly describe what you observe:
+   - Are borders visible? Which ones specifically?
+   - Are values/text complete or truncated?
+   - What colors are present?
+   - What is the actual state of the element in question?
+
+3. **NEVER ASSUME**: Do NOT write responses based on what you "expect" to see. Each screenshot is a new piece of evidence that must be analyzed independently.
+
+4. **VERIFY BEFORE SUGGESTING CHANGES**: If a visual element appears correct, acknowledge it. Do NOT suggest unnecessary changes based on assumptions.
+
+### What Happened (Incident Report)
+
+During a debugging session, Claude took a screenshot showing that a table border was correctly visible, but reported that the border was still cut off. When questioned, Claude admitted to "comparing mentally" with previous screenshots instead of analyzing the actual image.
+
+**This is unacceptable behavior**. When asked to observe something, Claude MUST actually observe it, not assume based on patterns or expectations.
+
+### Correct Workflow
+
+1. Take screenshot
+2. **STOP and examine the image carefully**
+3. Describe what you actually see in the image
+4. Only then provide analysis or suggest next steps
+5. If the issue is resolved, acknowledge it clearly
+
+**Failure to follow this protocol wastes user time and erodes trust.**
+
+---
+
 ## Project Overview
 
 DeliciusFood CRM is a comprehensive Laravel-based management system for prepared meal delivery services. It handles the complete operation chain from order receipt to delivery, coordinating menu management, inventory, customers, and deliveries through a Filament-powered admin panel.

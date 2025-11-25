@@ -27,6 +27,7 @@
         "malzariey/filament-daterangepicker-filter": "^3.2",
         "pelmered/filament-money-field": "^1.4",
         "phpoffice/phpspreadsheet": "^1.30.0",
+        "picqer/php-barcode-generator": "^3.2",
         "resend/resend-laravel": "^0.17.0",
         "ryangjchandler/blade-tabler-icons": "^2.3",
         "saade/blade-iconsax": "^1.2",
