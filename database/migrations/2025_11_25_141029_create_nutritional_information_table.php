@@ -35,6 +35,12 @@ return new class extends Migration
             $table->integer('shelf_life_days')->default(0); // Vida útil en días
             $table->boolean('generate_label')->default(false); // Generar etiqueta
 
+            // High content flags (boolean fields instead of nutritional_values)
+            $table->boolean('high_sodium')->default(false); // Alto en sodio
+            $table->boolean('high_calories')->default(false); // Alto en calorías
+            $table->boolean('high_fat')->default(false); // Alto en grasas
+            $table->boolean('high_sugar')->default(false); // Alto en azúcares
+
             $table->timestamps();
 
             // Unique constraint: one nutritional info per product

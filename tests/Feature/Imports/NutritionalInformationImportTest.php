@@ -94,12 +94,12 @@ class NutritionalInformationImportTest extends TestCase
             $this->assertNotNull($nutritionalInfo->measure_unit, "Product {$product->code} should have measure unit");
             $this->assertGreaterThan(0, $nutritionalInfo->net_weight, "Product {$product->code} should have net weight > 0");
 
-            // Assert NutritionalValue records exist (should have 16 values)
+            // Assert NutritionalValue records exist (should have 12 values, flags are in boolean fields)
             $nutritionalValues = $nutritionalInfo->nutritionalValues;
             $this->assertEquals(
-                16,
+                12,
                 $nutritionalValues->count(),
-                "Product {$product->code} should have exactly 16 nutritional values (12 nutritional + 4 flags)"
+                "Product {$product->code} should have exactly 12 nutritional values (flags are stored as boolean fields)"
             );
 
             // Assert all nutritional value types exist
@@ -111,7 +111,7 @@ class NutritionalInformationImportTest extends TestCase
 
         // Verify total counts
         $this->assertEquals(10, NutritionalInformation::count(), 'Should have 10 nutritional information records');
-        $this->assertEquals(160, NutritionalValue::count(), 'Should have 160 nutritional value records (16 per product)');
+        $this->assertEquals(120, NutritionalValue::count(), 'Should have 120 nutritional value records (12 per product, flags in boolean fields)');
     }
 
     /**
@@ -404,6 +404,107 @@ class NutritionalInformationImportTest extends TestCase
         $this->assertTrue(
             $matchFound,
             'At least one expected error pattern should be found in error log'
+        );
+    }
+
+    /**
+     * Test high content flags are stored in boolean fields in nutritional_information table
+     *
+     * TDD RED PHASE: This test validates that "Alto en" flags are stored as boolean columns
+     * in the nutritional_information table, NOT as nutritional_values records.
+     *
+     * Expected behavior:
+     * 1. Import reads ALTO SODIO, ALTO CALORIAS, ALTO EN GRASAS, ALTO EN AZUCARES from Excel
+     * 2. These values are stored in high_sodium, high_calories, high_fat, high_sugar columns
+     * 3. These values are NOT stored in nutritional_values table
+     * 4. NutritionalValue count should be 12 per product (not 16)
+     *
+     * This test will FAIL until importer is updated to use boolean fields.
+     */
+    public function test_high_content_flags_are_stored_in_boolean_fields(): void
+    {
+        // Create test products
+        $products = $this->createTestProducts();
+
+        // Get test Excel file from fixtures
+        $testFile = base_path('tests/Fixtures/test_nutritional_information.xlsx');
+        $this->assertFileExists($testFile, 'Test Excel file should exist in fixtures directory');
+
+        // Import using ImportService
+        $importService = app(ImportService::class);
+        $repository = app(\App\Contracts\NutritionalInformationRepositoryInterface::class);
+
+        $importProcess = $importService->importWithRepository(
+            \App\Imports\NutritionalInformationImport::class,
+            $testFile,
+            \App\Models\ImportProcess::TYPE_NUTRITIONAL_INFORMATION,
+            $repository
+        );
+
+        // Verify import completed
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete successfully'
+        );
+
+        // Validate first product (ACM00000001)
+        $firstProduct = $products->first();
+        $firstProduct->refresh();
+        $nutritionalInfo = $firstProduct->nutritionalInformation;
+
+        $this->assertNotNull($nutritionalInfo, 'Product should have nutritional information');
+
+        // TDD RED PHASE: Assert boolean fields exist and are set correctly
+        // These assertions will FAIL until importer is updated
+        $this->assertFalse(
+            $nutritionalInfo->high_sodium,
+            'high_sodium should be FALSE (value 0 in Excel row 1)'
+        );
+        $this->assertFalse(
+            $nutritionalInfo->high_calories,
+            'high_calories should be FALSE (value 0 in Excel row 1)'
+        );
+        $this->assertFalse(
+            $nutritionalInfo->high_fat,
+            'high_fat should be FALSE (value 0 in Excel row 1)'
+        );
+        $this->assertFalse(
+            $nutritionalInfo->high_sugar,
+            'high_sugar should be FALSE (value 0 in Excel row 1)'
+        );
+
+        // Assert that HIGH content flags are NOT in nutritional_values table
+        $flagTypes = [
+            NutritionalValueType::HIGH_SODIUM,
+            NutritionalValueType::HIGH_CALORIES,
+            NutritionalValueType::HIGH_FAT,
+            NutritionalValueType::HIGH_SUGAR,
+        ];
+
+        foreach ($flagTypes as $flagType) {
+            $flagValue = $nutritionalInfo->nutritionalValues()
+                ->where('type', $flagType->value)
+                ->first();
+
+            $this->assertNull(
+                $flagValue,
+                "Flag '{$flagType->value}' should NOT exist in nutritional_values table"
+            );
+        }
+
+        // Assert nutritional_values count is 12 (not 16)
+        $this->assertEquals(
+            12,
+            $nutritionalInfo->nutritionalValues()->count(),
+            'Should have exactly 12 nutritional values (excluding 4 flags)'
+        );
+
+        // Total count across all 10 products should be 120 (not 160)
+        $this->assertEquals(
+            120,
+            NutritionalValue::count(),
+            'Should have 120 total nutritional value records (12 per product, 10 products)'
         );
     }
 }

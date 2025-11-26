@@ -110,4 +110,15 @@ enum NutritionalValueType: string
             self::HIGH_SUGAR,
         ];
     }
+
+    /**
+     * Get options for Filament select
+     */
+    public static function options(): array
+    {
+        return array_reduce(self::cases(), function ($carry, $case) {
+            $carry[$case->value] = $case->label();
+            return $carry;
+        }, []);
+    }
 }

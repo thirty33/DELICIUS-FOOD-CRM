@@ -10,6 +10,13 @@ use App\Contracts\ReportColumnDataProviderInterface;
 use App\Services\Reports\ReportGrouperColumnProvider;
 use App\Contracts\NutritionalInformationRepositoryInterface;
 use App\Repositories\NutritionalInformationRepository;
+use App\Contracts\ImportServiceInterface;
+use App\Services\ImportService;
+use App\Contracts\DeletionServiceInterface;
+use App\Services\NutritionalInformationDeletionService;
+use App\Jobs\DeleteNutritionalInformationJob;
+use App\Contracts\Labels\LabelGeneratorInterface;
+use App\Services\Labels\Generators\NutritionalLabelGenerator;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
@@ -53,6 +60,18 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             NutritionalInformationRepositoryInterface::class,
             NutritionalInformationRepository::class
+        );
+
+        // Bind import service
+        $this->app->bind(
+            ImportServiceInterface::class,
+            ImportService::class
+        );
+
+        // Bind label generator
+        $this->app->bind(
+            LabelGeneratorInterface::class,
+            NutritionalLabelGenerator::class
         );
 
         if ($this->app->environment('local')) {

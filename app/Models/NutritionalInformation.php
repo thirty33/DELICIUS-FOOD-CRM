@@ -21,6 +21,10 @@ class NutritionalInformation extends Model
         'gross_weight',
         'shelf_life_days',
         'generate_label',
+        'high_sodium',
+        'high_calories',
+        'high_fat',
+        'high_sugar',
     ];
 
     protected $casts = [
@@ -28,6 +32,10 @@ class NutritionalInformation extends Model
         'gross_weight' => 'decimal:2',
         'shelf_life_days' => 'integer',
         'generate_label' => 'boolean',
+        'high_sodium' => 'boolean',
+        'high_calories' => 'boolean',
+        'high_fat' => 'boolean',
+        'high_sugar' => 'boolean',
     ];
 
     /**
@@ -48,9 +56,23 @@ class NutritionalInformation extends Model
 
     /**
      * Get a specific nutritional value by type
+     * For flag types, returns value from boolean fields
+     * For nutritional types, returns value from nutritional_values table
      */
     public function getValue(NutritionalValueType $type): ?float
     {
+        // If it's a flag type, get from boolean field
+        if ($type->isFlag()) {
+            return match ($type) {
+                NutritionalValueType::HIGH_SODIUM => $this->high_sodium ? 1.0 : 0.0,
+                NutritionalValueType::HIGH_CALORIES => $this->high_calories ? 1.0 : 0.0,
+                NutritionalValueType::HIGH_FAT => $this->high_fat ? 1.0 : 0.0,
+                NutritionalValueType::HIGH_SUGAR => $this->high_sugar ? 1.0 : 0.0,
+                default => null,
+            };
+        }
+
+        // For nutritional values, get from nutritional_values table
         $value = $this->nutritionalValues()
             ->where('type', $type->value)
             ->first();
@@ -102,7 +124,7 @@ class NutritionalInformation extends Model
      */
     public function hasHighSodium(): bool
     {
-        return (bool) $this->getValue(NutritionalValueType::HIGH_SODIUM);
+        return $this->high_sodium;
     }
 
     /**
@@ -110,7 +132,7 @@ class NutritionalInformation extends Model
      */
     public function hasHighCalories(): bool
     {
-        return (bool) $this->getValue(NutritionalValueType::HIGH_CALORIES);
+        return $this->high_calories;
     }
 
     /**
@@ -118,7 +140,7 @@ class NutritionalInformation extends Model
      */
     public function hasHighFat(): bool
     {
-        return (bool) $this->getValue(NutritionalValueType::HIGH_FAT);
+        return $this->high_fat;
     }
 
     /**
@@ -126,6 +148,6 @@ class NutritionalInformation extends Model
      */
     public function hasHighSugar(): bool
     {
-        return (bool) $this->getValue(NutritionalValueType::HIGH_SUGAR);
+        return $this->high_sugar;
     }
 }

@@ -4,13 +4,16 @@ namespace App\Filament\Resources\AdvanceOrderResource\RelationManagers;
 
 use App\Repositories\AdvanceOrderRepository;
 use App\Repositories\OrderRepository;
+use App\Services\Labels\NutritionalLabelService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class ProductsRelationManager extends RelationManager
@@ -135,7 +138,31 @@ class ProductsRelationManager extends RelationManager
             ])
             ->defaultSort('product.code')
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('has_nutritional_info')
+                    ->label(__('Información Nutricional'))
+                    ->options([
+                        'with' => __('Con Información Nutricional'),
+                        'without' => __('Sin Información Nutricional'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        if (!isset($data['value'])) {
+                            return $query;
+                        }
+
+                        if ($data['value'] === 'with') {
+                            return $query->whereHas('product.nutritionalInformation', function ($q) {
+                                $q->where('generate_label', true);
+                            });
+                        }
+
+                        if ($data['value'] === 'without') {
+                            return $query->whereDoesntHave('product.nutritionalInformation', function ($q) {
+                                $q->where('generate_label', true);
+                            });
+                        }
+
+                        return $query;
+                    }),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
@@ -167,12 +194,153 @@ class ProductsRelationManager extends RelationManager
                     }),
             ])
             ->actions([
+                Tables\Actions\Action::make('generate_label')
+                    ->label(__('Generar Etiqueta'))
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->visible(function ($record) {
+                        // Only show if product has nutritional info with generate_label = true
+                        return $record->product->nutritionalInformation
+                            && $record->product->nutritionalInformation->generate_label === true;
+                    })
+                    ->form([
+                        Forms\Components\DatePicker::make('elaboration_date')
+                            ->label(__('Fecha de Elaboración'))
+                            ->default(now())
+                            ->displayFormat('d/m/Y')
+                            ->format('d/m/Y')
+                            ->required(),
+                        Forms\Components\TextInput::make('quantity')
+                            ->label(__('Cantidad de Etiquetas'))
+                            ->numeric()
+                            ->default(fn ($record) => $record->total_to_produce ?? 0)
+                            ->minValue(1)
+                            ->required()
+                            ->helperText(__('Cantidad de etiquetas a generar para este producto')),
+                    ])
+                    ->action(function ($record, array $data, NutritionalLabelService $labelService) {
+                        try {
+                            $productId = $record->product_id;
+                            $elaborationDate = $data['elaboration_date'];
+                            $quantity = (int) $data['quantity'];
+
+                            if ($quantity <= 0) {
+                                Notification::make()
+                                    ->title(__('Cantidad inválida'))
+                                    ->body(__('La cantidad debe ser mayor a 0'))
+                                    ->warning()
+                                    ->send();
+                                return;
+                            }
+
+                            // Create quantities array with structure [product_id => quantity]
+                            $quantities = [$productId => $quantity];
+
+                            $exportProcess = $labelService->generateLabels([$productId], $elaborationDate, $quantities);
+
+                            Notification::make()
+                                ->title(__('Generación de etiquetas iniciada'))
+                                ->body(__('Se generarán :count etiqueta(s) del producto :product. El proceso finalizará en breve.', [
+                                    'count' => $quantity,
+                                    'product' => $record->product->name
+                                ]))
+                                ->success()
+                                ->send();
+
+                        } catch (\Exception $e) {
+                            Log::error('Error al iniciar generación de etiqueta nutricional desde orden de producción', [
+                                'product_id' => $record->product_id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+
+                            Notification::make()
+                                ->title(__('Error'))
+                                ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas: ') . $e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
                 Tables\Actions\DeleteAction::make()
                     ->label(__('Eliminar'))
                     ->visible(fn () => $this->ownerRecord->status !== \App\Enums\AdvanceOrderStatus::EXECUTED),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('generate_nutritional_labels')
+                        ->label(__('Generar Etiquetas Nutricionales'))
+                        ->icon('heroicon-o-document-text')
+                        ->color('success')
+                        ->form([
+                            Forms\Components\DatePicker::make('elaboration_date')
+                                ->label(__('Fecha de Elaboración'))
+                                ->default(now())
+                                ->displayFormat('d/m/Y')
+                                ->format('d/m/Y')
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data, NutritionalLabelService $labelService) {
+                            try {
+                                if ($records->isEmpty()) {
+                                    Notification::make()
+                                        ->title(__('Sin registros'))
+                                        ->body(__('No hay productos seleccionados para generar etiquetas'))
+                                        ->warning()
+                                        ->send();
+                                    return;
+                                }
+
+                                // Build quantities array from total_to_produce field
+                                $quantities = [];
+                                $productIds = [];
+
+                                foreach ($records as $record) {
+                                    $productId = $record->product_id;
+                                    $quantity = $record->total_to_produce ?? 0;
+
+                                    if ($quantity > 0) {
+                                        $productIds[] = $productId;
+                                        $quantities[$productId] = $quantity;
+                                    }
+                                }
+
+                                if (empty($productIds)) {
+                                    Notification::make()
+                                        ->title(__('Sin productos a elaborar'))
+                                        ->body(__('Los productos seleccionados no tienen cantidad a elaborar'))
+                                        ->warning()
+                                        ->send();
+                                    return;
+                                }
+
+                                $elaborationDate = $data['elaboration_date'];
+                                $totalLabels = array_sum($quantities);
+
+                                $exportProcess = $labelService->generateLabels($productIds, $elaborationDate, $quantities);
+
+                                Notification::make()
+                                    ->title(__('Generación de etiquetas iniciada'))
+                                    ->body(__('Se generarán :count etiqueta(s) de :products producto(s). El proceso finalizará en breve.', [
+                                        'count' => $totalLabels,
+                                        'products' => count($productIds)
+                                    ]))
+                                    ->success()
+                                    ->send();
+
+                            } catch (\Exception $e) {
+                                Log::error('Error al iniciar generación de etiquetas nutricionales desde orden de producción', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                Notification::make()
+                                    ->title(__('Error'))
+                                    ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas: ') . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\DeleteBulkAction::make()
                         ->label(__('Eliminar seleccionados'))
                         ->visible(fn () => $this->ownerRecord->status !== \App\Enums\AdvanceOrderStatus::EXECUTED),

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Contracts\ImportServiceInterface;
 use App\Models\ImportProcess;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
  * Handles Excel import operations with standardized error handling and process tracking.
  * Decouples import logic from specific importer classes and test contexts.
  */
-class ImportService
+class ImportService implements ImportServiceInterface
 {
     /**
      * Execute an import operation

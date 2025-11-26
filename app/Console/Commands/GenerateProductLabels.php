@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 class GenerateProductLabels extends Command
 {
-    protected $signature = 'labels:generate {product_ids?*} {--copies=1}';
+    protected $signature = 'labels:generate {product_ids?*} {--copies=1} {--elaboration-date=}';
 
     protected $description = 'Generate nutritional labels for products';
 
@@ -17,6 +17,7 @@ class GenerateProductLabels extends Command
     {
         $productIds = $this->argument('product_ids');
         $copies = (int) $this->option('copies');
+        $elaborationDate = $this->option('elaboration-date') ?: now()->format('d/m/Y');
 
         if (empty($productIds)) {
             $this->info('No product IDs provided. Generating test label with hardcoded data...');
@@ -31,8 +32,10 @@ class GenerateProductLabels extends Command
         $productsWithCopies = $this->generateLabelsWithCopies($products, $copies);
 
         $this->info("Generating {$productsWithCopies->count()} labels...");
+        $this->info("Elaboration date: {$elaborationDate}");
 
-        $generator = new NutritionalLabelGenerator();
+        $generator = app(NutritionalLabelGenerator::class);
+        $generator->setElaborationDate($elaborationDate);
         $pdfBinary = $generator->generate($productsWithCopies);
 
         $url = $this->saveToS3($pdfBinary);
@@ -44,12 +47,23 @@ class GenerateProductLabels extends Command
 
     protected function validateProductIds(array $productIds): \Illuminate\Support\Collection
     {
-        $products = Product::whereIn('id', $productIds)->get();
+        $products = Product::with('nutritionalInformation.nutritionalValues')
+            ->whereIn('id', $productIds)
+            ->get();
 
         $notFound = array_diff($productIds, $products->pluck('id')->toArray());
 
         if (!empty($notFound)) {
             $this->error('Products not found: ' . implode(', ', $notFound));
+        }
+
+        $withoutNutritionalInfo = $products->filter(function ($product) {
+            return $product->nutritionalInformation === null;
+        });
+
+        if ($withoutNutritionalInfo->isNotEmpty()) {
+            $this->warn('Products without nutritional information: ' .
+                $withoutNutritionalInfo->pluck('id')->implode(', '));
         }
 
         return $products;

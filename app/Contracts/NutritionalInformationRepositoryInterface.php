@@ -56,4 +56,14 @@ interface NutritionalInformationRepositoryInterface
      * @return NutritionalInformation|null
      */
     public function getNutritionalInformationByProductId(int $productId): ?NutritionalInformation;
+
+    /**
+     * Get products for label generation
+     * Filters by product IDs and generate_label flag
+     *
+     * @param array $productIds
+     * @param array $quantities Array with structure [product_id => quantity]. If empty, returns one instance per product.
+     * @return \Illuminate\Support\Collection
+     */
+    public function getProductsForLabelGeneration(array $productIds, array $quantities = []): \Illuminate\Support\Collection;
 }
