@@ -26,7 +26,24 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
      *
      * @var int
      */
-    public $timeout = 600; // 10 minutes for PDF generation with large quantities
+    public $timeout = 900; // 15 minutes for PDF generation with large quantities (increased for production)
+
+    /**
+     * The number of times the job may be attempted.
+     *
+     * @var int
+     */
+    public $tries = 5;
+
+    /**
+     * The number of seconds to wait before retrying the job.
+     *
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [60, 180, 300, 600]; // 1min, 3min, 5min, 10min between retries
+    }
 
     private array $productIds;
     private string $elaborationDate;
@@ -43,6 +60,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
 
     public function handle(LabelGeneratorInterface $labelGenerator, NutritionalInformationRepositoryInterface $repository)
     {
+            
         $exportProcess = ExportProcess::findOrFail($this->exportProcessId);
         $exportProcess->update(['status' => ExportProcess::STATUS_PROCESSING]);
 
@@ -54,9 +72,25 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
             throw new \Exception('No se encontraron productos con información nutricional y etiqueta habilitada');
         }
 
+        Log::info('Products fetched for label generation', [
+            'export_process_id' => $this->exportProcessId,
+            'actual_product_count' => $products->count(),
+            'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 2)
+        ]);
+
         // Set elaboration date and generate PDF
         $labelGenerator->setElaborationDate($this->elaborationDate);
+        $startTime = microtime(true);
         $pdfContent = $labelGenerator->generate($products);
+        $generationTime = round(microtime(true) - $startTime, 2);
+
+        Log::info('PDF generated successfully', [
+            'export_process_id' => $this->exportProcessId,
+            'generation_time_seconds' => $generationTime,
+            'pdf_size_mb' => round(strlen($pdfContent) / 1024 / 1024, 2),
+            'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
+            'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2)
+        ]);
 
         // Generate file name
         $productCount = $products->count();

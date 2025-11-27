@@ -603,4 +603,28 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
         // Return code with corrected checksum
         return $baseCode . $checksumDigit;
     }
+
+    /**
+     * Clear image and barcode cache to free memory
+     *
+     * This method is called by AbstractLabelGenerator between chunk processing
+     * to release memory used by cached base64 images and generated barcodes.
+     */
+    public function clearGeneratorCache(): void
+    {
+        $beforeMemory = memory_get_usage(true);
+
+        $this->imageCache = [];
+        $this->barcodeCache = [];
+
+        $afterMemory = memory_get_usage(true);
+        $freedMemory = $beforeMemory - $afterMemory;
+
+        \Log::debug('Nutritional label generator cache cleared', [
+            'images_cached' => 0,
+            'barcodes_cached' => 0,
+            'memory_freed_mb' => round($freedMemory / 1024 / 1024, 2),
+            'memory_current_mb' => round($afterMemory / 1024 / 1024, 2)
+        ]);
+    }
 }
