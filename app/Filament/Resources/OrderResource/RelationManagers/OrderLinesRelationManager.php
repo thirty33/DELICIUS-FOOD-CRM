@@ -136,10 +136,10 @@ class OrderLinesRelationManager extends RelationManager
                             ->disabled(),
                         Forms\Components\Toggle::make('partially_scheduled')
                             ->label('Parcialmente agendado')
-                            ->disabled()
                             ->default(false)
                             ->onColor('success')
-                            ->offColor('danger'),
+                            ->offColor('danger')
+                            ->helperText('Marca este producto como parcialmente agendado'),
                     ])
             ]);
     }
@@ -181,8 +181,7 @@ class OrderLinesRelationManager extends RelationManager
                     }),
                 Tables\Columns\ToggleColumn::make('partially_scheduled')
                     ->label('Parcialmente agendado')
-                    ->sortable()
-                    ->disabled(),
+                    ->sortable(),
             ])
             ->filters([
                 //

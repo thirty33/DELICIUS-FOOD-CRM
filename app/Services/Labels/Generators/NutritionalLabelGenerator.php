@@ -71,6 +71,10 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
         $elaborationDate = $this->elaborationDate ?: now()->format('d/m/Y');
         $expirationDate = $this->repository->getExpirationDate($product, $elaborationDate);
 
+        // Check if net weight is 0 to hide nutritional table
+        $netWeight = $product->nutritionalInformation->net_weight ?? 0;
+        $nutritionalTableVisibility = ($netWeight == 0) ? "style='visibility: hidden;'" : "";
+
         $html = "
         <div class='label-container'>
             <table class='main-layout' cellpadding='0' cellspacing='0'>
@@ -106,7 +110,7 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                             <p><strong>FECHA: 29/06/2023 Seremi RM</strong></p>
                             <p class='social-line'><img src='data:image/png;base64,{$arrobaBase64}' class='social-icon' /> ventas@deliciusfood.cl</p>
                             <p><img src='data:image/png;base64,{$whatsappBase64}' class='social-icon' /> +56 9 5189 3815</p>
-                            <p><img src='data:image/png;base64,{$instagramBase64}' class='social-icon' /> deliciusfood.cl/deliciuscoffee.cl</p>
+                            <!--<p><img src='data:image/png;base64,{$instagramBase64}' class='social-icon' /> deliciusfood.cl/deliciuscoffee.cl</p>-->
                             <p><img src='data:image/png;base64,{$worldwideBase64}' class='social-icon' /> deliciusfood.cl</p>
                         </div>
 
@@ -118,7 +122,7 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
                     <!-- RIGHT COLUMN: Nutritional Table + Warning Icons -->
                     <td class='right-column'>
-                        <table class='nutri-table-full' cellpadding='0' cellspacing='0'>
+                        <table class='nutri-table-full' cellpadding='0' cellspacing='0' {$nutritionalTableVisibility}>
                             <tr class='title-row'>
                                 <td colspan='3' class='nutri-title'>Información Nutricional</td>
                             </tr>
