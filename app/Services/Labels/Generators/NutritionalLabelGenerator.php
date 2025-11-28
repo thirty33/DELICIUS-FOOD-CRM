@@ -116,7 +116,7 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
                         <div class='weight-section'>
                             <p class='weight-value'><strong>Peso {$this->repository->getGrossWeight($product)}</strong></p>
-                            <p class='weight-note'>Agitar soya antes de verter</p>
+                            <!-- <p class='weight-note'>Agitar soya antes de verter</p> -->
                         </div>
                     </td>
 

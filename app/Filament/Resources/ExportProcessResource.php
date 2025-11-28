@@ -54,16 +54,9 @@ class ExportProcessResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('description')
                     ->label('Descripción')
-                    ->limit(50)
-                    ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
-                        $state = $column->getState();
-                        if (strlen($state) > 50) {
-                            return $state;
-                        }
-                        return null;
-                    })
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()

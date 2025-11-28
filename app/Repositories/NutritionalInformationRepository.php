@@ -366,7 +366,7 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
      */
     public function getProductsForLabelGeneration(array $productIds, array $quantities = []): \Illuminate\Support\Collection
     {
-        $products = Product::with('nutritionalInformation.nutritionalValues')
+        $products = Product::with(['nutritionalInformation.nutritionalValues', 'productionAreas'])
             ->whereIn('id', $productIds)
             ->whereHas('nutritionalInformation', function ($query) {
                 $query->where('generate_label', true);
@@ -388,5 +388,32 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
         }
 
         return $repeatedProducts;
+    }
+
+    /**
+     * Calculate total number of labels that will be generated
+     * Filters products by generate_label flag and sums their quantities
+     *
+     * @param array $productIds Array of product IDs
+     * @param array $quantities Array with structure [product_id => quantity]
+     * @return int Total number of labels that will be generated
+     */
+    public function calculateTotalLabelsToGenerate(array $productIds, array $quantities): int
+    {
+        // Get only products with nutritional information and generate_label = true
+        $validProductIds = Product::whereIn('id', $productIds)
+            ->whereHas('nutritionalInformation', function ($query) {
+                $query->where('generate_label', true);
+            })
+            ->pluck('id')
+            ->toArray();
+
+        // Sum quantities only for valid products
+        $totalLabels = 0;
+        foreach ($validProductIds as $productId) {
+            $totalLabels += $quantities[$productId] ?? 0;
+        }
+
+        return $totalLabels;
     }
 }

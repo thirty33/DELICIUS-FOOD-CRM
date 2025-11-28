@@ -49,18 +49,28 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
     private string $elaborationDate;
     private int $exportProcessId;
     private array $quantities;
+    private ?string $productionArea;
+    private ?string $productionOrderCode;
 
-    public function __construct(array $productIds, string $elaborationDate, int $exportProcessId, array $quantities = [])
-    {
+    public function __construct(
+        array $productIds,
+        string $elaborationDate,
+        int $exportProcessId,
+        array $quantities = [],
+        ?string $productionArea = null,
+        ?string $productionOrderCode = null
+    ) {
         $this->productIds = $productIds;
         $this->elaborationDate = $elaborationDate;
         $this->exportProcessId = $exportProcessId;
         $this->quantities = $quantities;
+        $this->productionArea = $productionArea;
+        $this->productionOrderCode = $productionOrderCode;
     }
 
     public function handle(LabelGeneratorInterface $labelGenerator, NutritionalInformationRepositoryInterface $repository)
     {
-            
+
         $exportProcess = ExportProcess::findOrFail($this->exportProcessId);
         $exportProcess->update(['status' => ExportProcess::STATUS_PROCESSING]);
 
@@ -68,11 +78,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         // Repository will handle quantities and repeat products as needed
         $products = $repository->getProductsForLabelGeneration($this->productIds, $this->quantities);
 
-        if ($products->isEmpty()) {
-            throw new \Exception('No se encontraron productos con información nutricional y etiqueta habilitada');
-        }
-
-        Log::info('Products fetched for label generation', [
+        Log::info('Processing label generation for chunk', [
             'export_process_id' => $this->exportProcessId,
             'actual_product_count' => $products->count(),
             'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 2)
@@ -92,19 +98,41 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
             'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2)
         ]);
 
-        // Generate file name
+        // Generate file name with production area and order code
         $productCount = $products->count();
-        $productIds = $products->pluck('id')->sort()->values();
+        $productIds = $products->pluck('id')->unique()->sort()->values();
         $firstProduct = $productIds->first();
         $lastProduct = $productIds->last();
         $timestamp = now()->format('Ymd_His');
         $dateStr = now()->format('Y/m/d');
 
-        if ($productCount === 1) {
-            $fileName = "etiqueta_nutricional_producto_{$firstProduct}_{$timestamp}.pdf";
-        } else {
-            $fileName = "etiquetas_nutricionales_{$productCount}_productos_{$firstProduct}_al_{$lastProduct}_{$timestamp}.pdf";
+        // Build file name components
+        $fileNameParts = ['etiquetas_nutricionales'];
+
+        // Add production order code if available
+        if ($this->productionOrderCode) {
+            $fileNameParts[] = $this->productionOrderCode;
         }
+
+        // Add production area if available (sanitize for filename)
+        if ($this->productionArea) {
+            $sanitizedArea = str_replace([' ', '/', '\\'], '_', $this->productionArea);
+            $fileNameParts[] = $sanitizedArea;
+        }
+
+        // Add product count and range
+        if ($productCount === 1) {
+            $fileNameParts[] = "producto_{$firstProduct}";
+        } else {
+            $uniqueCount = $productIds->count();
+            $fileNameParts[] = "{$productCount}_etiquetas";
+            $fileNameParts[] = "{$uniqueCount}_productos_{$firstProduct}_al_{$lastProduct}";
+        }
+
+        // Add timestamp
+        $fileNameParts[] = $timestamp;
+
+        $fileName = implode('_', $fileNameParts) . '.pdf';
 
         $s3Path = "pdfs/nutritional-labels/{$dateStr}/{$fileName}";
 
@@ -138,6 +166,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         Log::error('Job de generación de etiquetas nutricionales falló', [
             'export_process_id' => $this->exportProcessId,
             'product_ids' => $this->productIds,
+            'quantities' => $this->quantities,
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString()
         ]);

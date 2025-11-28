@@ -236,7 +236,15 @@ class ProductsRelationManager extends RelationManager
                             // Create quantities array with structure [product_id => quantity]
                             $quantities = [$productId => $quantity];
 
-                            $exportProcess = $labelService->generateLabels([$productId], $elaborationDate, $quantities);
+                            // Get production order identifier from owner record
+                            $productionOrderCode = "OP-{$this->ownerRecord->id}";
+
+                            $exportProcess = $labelService->generateLabels(
+                                [$productId],
+                                $elaborationDate,
+                                $quantities,
+                                $productionOrderCode
+                            );
 
                             Notification::make()
                                 ->title(__('Generación de etiquetas iniciada'))
@@ -279,7 +287,7 @@ class ProductsRelationManager extends RelationManager
                                 ->format('d/m/Y')
                                 ->required(),
                         ])
-                        ->action(function (Collection $records, array $data, NutritionalLabelService $labelService) {
+                        ->action(function (Collection $records, array $data, NutritionalLabelService $labelService, \App\Repositories\NutritionalInformationRepository $repository) {
                             try {
                                 if ($records->isEmpty()) {
                                     Notification::make()
@@ -314,9 +322,20 @@ class ProductsRelationManager extends RelationManager
                                 }
 
                                 $elaborationDate = $data['elaboration_date'];
-                                $totalLabels = array_sum($quantities);
 
-                                $exportProcess = $labelService->generateLabels($productIds, $elaborationDate, $quantities);
+                                // Calculate actual number of labels that will be generated
+                                // (only products with nutritional information and generate_label = true)
+                                $totalLabels = $repository->calculateTotalLabelsToGenerate($productIds, $quantities);
+
+                                // Get production order identifier from owner record
+                                $productionOrderCode = "OP-{$this->ownerRecord->id}";
+
+                                $exportProcess = $labelService->generateLabels(
+                                    $productIds,
+                                    $elaborationDate,
+                                    $quantities,
+                                    $productionOrderCode
+                                );
 
                                 Notification::make()
                                     ->title(__('Generación de etiquetas iniciada'))
