@@ -222,10 +222,6 @@ class ProductResource extends Resource
                                     'El proceso de importación finalizará en breve'
                                 )->send();
                             } catch (\Exception $e) {
-                                Log::error('Error en importación de productos', [
-                                    'message' => $e->getMessage() . ' ' . $e->getLine(),
-                                ]);
-
                                 ProductResource::makeNotification(
                                     'Error',
                                     'El proceso ha fallado',
@@ -297,11 +293,6 @@ class ProductResource extends Resource
                                     ->color('success')
                                     ->send();
                             } catch (\Exception $mainException) {
-                                Log::error('Error iniciando carga de imágenes', [
-                                    'error' => $mainException->getMessage(),
-                                    'trace' => $mainException->getTraceAsString()
-                                ]);
-
                                 Notification::make()
                                     ->title('Error')
                                     ->body('No se pudo iniciar la carga de imágenes')
@@ -317,11 +308,6 @@ class ProductResource extends Resource
                 Tables\Actions\DeleteAction::make()
                     ->action(function (Product $record) {
                         try {
-                            Log::info('Iniciando proceso de eliminación de producto', [
-                                'product_id' => $record->id,
-                                'product_name' => $record->name
-                            ]);
-
                             // Crear array con el ID del producto a eliminar
                             $productIdToDelete = [$record->id];
 
@@ -332,17 +318,7 @@ class ProductResource extends Resource
                                 'Eliminación en proceso',
                                 'El producto será eliminado en segundo plano.'
                             )->send();
-
-                            Log::info('Job de eliminación de producto enviado a la cola', [
-                                'product_id' => $record->id
-                            ]);
                         } catch (\Exception $e) {
-                            Log::error('Error al preparar eliminación de producto', [
-                                'product_id' => $record->id,
-                                'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
-                            ]);
-
                             self::makeNotification(
                                 'Error',
                                 'Ha ocurrido un error al preparar la eliminación del producto: ' . $e->getMessage(),

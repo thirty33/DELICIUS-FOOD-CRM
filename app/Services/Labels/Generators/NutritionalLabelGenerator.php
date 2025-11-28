@@ -191,7 +191,7 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 padding: 3mm 1mm 1mm 1mm;
                 font-size: 7px;
                 line-height: 0.8;
-                letter-spacing: -0.3px;
+                letter-spacing: -0.1px;
                 overflow: hidden;
                 box-sizing: border-box;
                 background-color: #ffffff;
@@ -491,7 +491,6 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
             $imageData = file_get_contents($url);
 
             if ($imageData === false) {
-                \Log::warning("Failed to download image from URL", ['url' => $url]);
                 return '';
             }
 
@@ -502,10 +501,6 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
             return $base64;
         } catch (\Exception $e) {
-            \Log::error("Error downloading image from URL", [
-                'url' => $url,
-                'error' => $e->getMessage()
-            ]);
             return '';
         }
     }
@@ -545,7 +540,6 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
         // Validate EAN-13 format (13 digits)
         if (!preg_match('/^\d{13}$/', $code)) {
-            \Log::warning("Invalid EAN-13 barcode format", ['code' => $code]);
             return '';
         }
 
@@ -569,13 +563,6 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
             return $base64;
         } catch (\Exception $e) {
-            \Log::error("Barcode generation failed", [
-                'code' => $code,
-                'error' => $e->getMessage(),
-                'exception_class' => get_class($e),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
             return '';
         }
     }
@@ -614,19 +601,7 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
      */
     public function clearGeneratorCache(): void
     {
-        $beforeMemory = memory_get_usage(true);
-
         $this->imageCache = [];
         $this->barcodeCache = [];
-
-        $afterMemory = memory_get_usage(true);
-        $freedMemory = $beforeMemory - $afterMemory;
-
-        \Log::debug('Nutritional label generator cache cleared', [
-            'images_cached' => 0,
-            'barcodes_cached' => 0,
-            'memory_freed_mb' => round($freedMemory / 1024 / 1024, 2),
-            'memory_current_mb' => round($afterMemory / 1024 / 1024, 2)
-        ]);
     }
 }

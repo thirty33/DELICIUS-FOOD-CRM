@@ -7,7 +7,6 @@ use App\Models\ExportProcess;
 use App\Models\Product;
 use App\Repositories\NutritionalInformationRepository;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Service for generating nutritional labels
@@ -25,7 +24,7 @@ class NutritionalLabelService
      *
      * @var int
      */
-    private const LABELS_PER_CHUNK = 200;
+    private const LABELS_PER_CHUNK = 100;
 
     public function __construct(
         protected NutritionalInformationRepository $repository
@@ -53,10 +52,6 @@ class NutritionalLabelService
         if ($validationProducts->isEmpty()) {
             throw new \Exception('No se encontraron productos con información nutricional y etiqueta habilitada');
         }
-
-        Log::info('Products validated for label generation', [
-            'valid_products_count' => $validationProducts->count()
-        ]);
 
         // Step 2: Get valid product IDs from validated products
         // Only create chunks for products that actually have nutritional information
@@ -153,40 +148,13 @@ class NutritionalLabelService
 
                 $exportProcesses[] = $exportProcess;
 
-                Log::info('Nutritional labels chunk prepared for chain', [
-                    'export_process_id' => $exportProcess->id,
-                    'production_area' => $areaName,
-                    'area_chunk_number' => $areaChunkNumber,
-                    'area_chunks_total' => $areaChunksCount,
-                    'global_chunk_index' => $globalChunkIndex,
-                    'chunk_labels' => $chunkLabelCount,
-                    'chunk_quantities' => $chunkQuantities
-                ]);
-
                 $globalChunkIndex++;
             }
         }
 
-        Log::info('Nutritional labels generation - chunking strategy by production areas', [
-            'total_labels' => $totalLabels,
-            'chunk_size' => self::LABELS_PER_CHUNK,
-            'production_areas_count' => count($productsByArea),
-            'total_chunks' => $globalChunkIndex,
-            'valid_unique_products' => count($validProductIds),
-            'requested_unique_products' => count($productIds)
-        ]);
-
         // Step 4: Dispatch all jobs as a sequential chain
         // Each job will only start after the previous one completes successfully
         Bus::chain($jobs)->dispatch();
-
-        Log::info('Nutritional labels generation initiated with sequential chaining', [
-            'total_export_processes' => count($exportProcesses),
-            'total_jobs_in_chain' => count($jobs),
-            'total_labels' => $totalLabels,
-            'elaboration_date' => $elaborationDate,
-            'execution_mode' => 'sequential'
-        ]);
 
         // Return the first export process (for backward compatibility)
         // Frontend will receive the first process, others will be processed in background

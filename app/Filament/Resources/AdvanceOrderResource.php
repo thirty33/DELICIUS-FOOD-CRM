@@ -289,12 +289,6 @@ class AdvanceOrderResource extends Resource
                                     ->send();
 
                             } catch (\Exception $e) {
-                                Log::error('Error al iniciar la generación del reporte consolidado de OP', [
-                                    'export_process_id' => $exportProcess->id ?? 0,
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 \Filament\Notifications\Notification::make()
                                     ->danger()
                                     ->title('Error')

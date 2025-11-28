@@ -214,11 +214,6 @@ class NutritionalInformationResource extends Resource
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            Log::error('Error en importación de información nutricional', [
-                                'message' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString(),
-                            ]);
-
                             Notification::make()
                                 ->title(__('Error'))
                                 ->body(__('El proceso ha fallado'))
@@ -267,12 +262,6 @@ class NutritionalInformationResource extends Resource
                                 ->send();
 
                         } catch (\Exception $e) {
-                            Log::error('Error al iniciar generación de etiqueta nutricional', [
-                                'product_id' => $record->product_id,
-                                'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
-                            ]);
-
                             Notification::make()
                                 ->title(__('Error'))
                                 ->body(__('Ha ocurrido un error al iniciar la generación de etiqueta: ') . $e->getMessage())
@@ -342,11 +331,6 @@ class NutritionalInformationResource extends Resource
                                     ->send();
 
                             } catch (\Exception $e) {
-                                Log::error('Error al iniciar generación de etiquetas nutricionales', [
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 Notification::make()
                                     ->title(__('Error'))
                                     ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas: ') . $e->getMessage())

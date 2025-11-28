@@ -13,7 +13,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -78,25 +77,9 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         // Repository will handle quantities and repeat products as needed
         $products = $repository->getProductsForLabelGeneration($this->productIds, $this->quantities);
 
-        Log::info('Processing label generation for chunk', [
-            'export_process_id' => $this->exportProcessId,
-            'actual_product_count' => $products->count(),
-            'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 2)
-        ]);
-
         // Set elaboration date and generate PDF
         $labelGenerator->setElaborationDate($this->elaborationDate);
-        $startTime = microtime(true);
         $pdfContent = $labelGenerator->generate($products);
-        $generationTime = round(microtime(true) - $startTime, 2);
-
-        Log::info('PDF generated successfully', [
-            'export_process_id' => $this->exportProcessId,
-            'generation_time_seconds' => $generationTime,
-            'pdf_size_mb' => round(strlen($pdfContent) / 1024 / 1024, 2),
-            'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
-            'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2)
-        ]);
 
         // Generate file name with production area and order code
         $productCount = $products->count();
@@ -151,24 +134,10 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
             'status' => ExportProcess::STATUS_PROCESSED,
             'file_url' => $signedUrlData['signed_url']
         ]);
-
-        Log::info('Nutritional labels generated successfully', [
-            'export_process_id' => $this->exportProcessId,
-            'product_count' => $productCount,
-            'file_path' => $s3Path
-        ]);
     }
 
     public function failed(Throwable $e): void
     {
         ExportErrorHandler::handle($e, $this->exportProcessId, 'job_failure');
-
-        Log::error('Job de generación de etiquetas nutricionales falló', [
-            'export_process_id' => $this->exportProcessId,
-            'product_ids' => $this->productIds,
-            'quantities' => $this->quantities,
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
     }
 }

@@ -262,12 +262,6 @@ class ProductsRelationManager extends RelationManager
                                 ->send();
 
                         } catch (\Exception $e) {
-                            Log::error('Error al iniciar generación de etiqueta nutricional desde orden de producción', [
-                                'product_id' => $record->product_id,
-                                'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
-                            ]);
-
                             Notification::make()
                                 ->title(__('Error'))
                                 ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas: ') . $e->getMessage())
@@ -353,11 +347,6 @@ class ProductsRelationManager extends RelationManager
                                     ->send();
 
                             } catch (\Exception $e) {
-                                Log::error('Error al iniciar generación de etiquetas nutricionales desde orden de producción', [
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 Notification::make()
                                     ->title(__('Error'))
                                     ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas: ') . $e->getMessage())

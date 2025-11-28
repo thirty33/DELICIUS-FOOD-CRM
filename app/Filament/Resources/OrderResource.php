@@ -384,12 +384,6 @@ class OrderResource extends Resource
                                 )->send();
 
                             } catch (\Exception $e) {
-                                Log::error('Error al preparar eliminación de orden', [
-                                    'order_id' => $record->id,
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al preparar la eliminación de la orden: ' . $e->getMessage(),
@@ -418,12 +412,6 @@ class OrderResource extends Resource
                                 )->send();
 
                             } catch (\Exception $e) {
-                                Log::error('Error al preparar envío de correo de pedido', [
-                                    'order_id' => $record->id,
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al preparar el envío del correo: ' . $e->getMessage(),
@@ -468,12 +456,6 @@ class OrderResource extends Resource
 
                                 return redirect()->route('filament.admin.resources.billing-processes.edit', ['record' => $billingProcess->id]);
                             } catch (\Exception $e) {
-                                Log::error('Error al crear proceso de facturación', [
-                                    'order_id' => $record->id,
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 self::makeNotification(
                                     'Error',
                                     'Ha ocurrido un error al crear el proceso de facturación: ' . $e->getMessage(),
@@ -541,12 +523,6 @@ class OrderResource extends Resource
                                     'El proceso de exportación finalizará en breve'
                                 )->send();
                             } catch (\Exception $e) {
-                                Log::error('Error en la exportación de líneas de pedido', [
-                                    'export_process_id' => $exportProcess->id ?? 0,
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
-                                ]);
-
                                 // Usar ExportErrorHandler para registrar el error de manera consistente
                                 ExportErrorHandler::handle(
                                     $e,
