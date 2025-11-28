@@ -190,10 +190,12 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 height: 50mm;
                 padding: 3mm 1mm 1mm 1mm;
                 font-size: 7px;
-                line-height: 1.15;
+                line-height: 0.8;
+                letter-spacing: -0.3px;
                 overflow: hidden;
                 box-sizing: border-box;
                 background-color: #ffffff;
+                font-family: 'DejaVu Sans Condensed', 'DejaVu Sans', Arial, sans-serif;
             }
 
             .main-layout {
@@ -262,12 +264,12 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
             .ingredients-block {
                 font-size: 5.5px;
-                line-height: 1.2;
+                line-height: 0.8;
                 background-color: #ffffff;
             }
 
             .ingredients-block p {
-                margin: 0 0 0.8mm 0;
+                margin: 0 0 0.4mm 0;
                 background-color: #ffffff;
             }
 
@@ -297,12 +299,12 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
             .company-info {
                 font-size: 6px;
-                line-height: 1.3;
+                line-height: 0.8;
                 background-color: #ffffff;
             }
 
             .company-info p {
-                margin: 0 0 0.5mm 0;
+                margin: 0 0 0.3mm 0;
                 background-color: #ffffff;
             }
 

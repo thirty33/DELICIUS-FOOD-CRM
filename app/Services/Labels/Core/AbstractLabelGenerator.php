@@ -186,13 +186,13 @@ abstract class AbstractLabelGenerator implements LabelGeneratorInterface
                 margin: 0;
                 padding: 0;
             }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'DejaVu Sans Condensed', 'DejaVu Sans', Arial, sans-serif; }
             html, body {
                 width: 100mm;
                 height: 50mm;
                 margin: 0;
                 padding: 0;
-                font-family: Helvetica, Arial, sans-serif;
+                font-family: 'DejaVu Sans Condensed', 'DejaVu Sans', Arial, sans-serif;
                 font-weight: bold;
                 font-size: 10px;
             }

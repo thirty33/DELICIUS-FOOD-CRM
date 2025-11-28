@@ -163,6 +163,12 @@ class ProductsRelationManager extends RelationManager
 
                         return $query;
                     }),
+                Tables\Filters\SelectFilter::make('production_area_id')
+                    ->label(__('Cuarto Productivo'))
+                    ->relationship('product.productionAreas', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->multiple(),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()

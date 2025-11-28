@@ -19,6 +19,14 @@ use Illuminate\Support\Facades\Log;
  */
 class NutritionalLabelService
 {
+    /**
+     * Maximum number of labels per chunk for batch processing
+     * Adjust this value based on server memory and performance requirements
+     *
+     * @var int
+     */
+    private const LABELS_PER_CHUNK = 200;
+
     public function __construct(
         protected NutritionalInformationRepository $repository
     ) {}
@@ -36,7 +44,6 @@ class NutritionalLabelService
     public function generateLabels(array $productIds, ?string $elaborationDate = null, array $quantities = [], ?string $productionOrderCode = null): ExportProcess
     {
         $elaborationDate = $elaborationDate ?: now()->format('d/m/Y');
-        $chunkSize = 100;
 
         // Step 1: Validate products before creating chunks
         // Fetch UNIQUE products to ensure they exist and have nutritional information
@@ -94,8 +101,8 @@ class NutritionalLabelService
             $areaLabelCount = count($expandedAreaProductIds);
             $totalLabels += $areaLabelCount;
 
-            // Chunk this area's products (max 100 per chunk)
-            $areaChunks = array_chunk($expandedAreaProductIds, $chunkSize);
+            // Chunk this area's products
+            $areaChunks = array_chunk($expandedAreaProductIds, self::LABELS_PER_CHUNK);
             $areaChunksCount = count($areaChunks);
 
             foreach ($areaChunks as $areaChunkIndex => $chunkProductIds) {
@@ -162,7 +169,7 @@ class NutritionalLabelService
 
         Log::info('Nutritional labels generation - chunking strategy by production areas', [
             'total_labels' => $totalLabels,
-            'chunk_size' => $chunkSize,
+            'chunk_size' => self::LABELS_PER_CHUNK,
             'production_areas_count' => count($productsByArea),
             'total_chunks' => $globalChunkIndex,
             'valid_unique_products' => count($validProductIds),
