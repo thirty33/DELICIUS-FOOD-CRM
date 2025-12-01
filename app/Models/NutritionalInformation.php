@@ -25,6 +25,8 @@ class NutritionalInformation extends Model
         'high_calories',
         'high_fat',
         'high_sugar',
+        'show_soy_text',
+        'show_chicken_text',
     ];
 
     protected $casts = [
@@ -36,6 +38,8 @@ class NutritionalInformation extends Model
         'high_calories' => 'boolean',
         'high_fat' => 'boolean',
         'high_sugar' => 'boolean',
+        'show_soy_text' => 'boolean',
+        'show_chicken_text' => 'boolean',
     ];
 
     /**

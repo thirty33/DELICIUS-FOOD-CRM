@@ -86,6 +86,10 @@ class NutritionalInformationImport implements
         'alto_en_grasas' => 'high_fat',
         'alto_en_azucares' => 'high_sugar',
 
+        // Warning text flags (0 or 1)
+        'mostrar_texto_soya' => 'show_soy_text',
+        'mostrar_texto_pollo' => 'show_chicken_text',
+
         // Additional fields
         'vida_util' => 'shelf_life_days',
         'generar_etiqueta' => 'generate_label',
@@ -123,6 +127,12 @@ class NutritionalInformationImport implements
                 'gross_weight' => $row['peso_bruto'] ?? 0,
                 'shelf_life_days' => $row['vida_util'] ?? 0,
                 'generate_label' => $row['generar_etiqueta'] ?? false,
+                'high_sodium' => (bool) ($row['alto_sodio'] ?? false),
+                'high_calories' => (bool) ($row['alto_calorias'] ?? false),
+                'high_fat' => (bool) ($row['alto_en_grasas'] ?? false),
+                'high_sugar' => (bool) ($row['alto_en_azucares'] ?? false),
+                'show_soy_text' => (bool) ($row['mostrar_texto_soya'] ?? false),
+                'show_chicken_text' => (bool) ($row['mostrar_texto_pollo'] ?? false),
             ];
 
             // Create or update NutritionalInformation
@@ -131,7 +141,7 @@ class NutritionalInformationImport implements
                 $nutritionalInfoData
             );
 
-            // Extract nutritional_values (16 values total)
+            // Extract nutritional_values (12 values total - numeric values only, NOT flags)
             $nutritionalValues = [
                 NutritionalValueType::CALORIES->value => $row['calorias'] ?? 0,
                 NutritionalValueType::PROTEIN->value => $row['proteina'] ?? 0,
@@ -145,10 +155,6 @@ class NutritionalInformationImport implements
                 NutritionalValueType::FIBER->value => $row['fibra'] ?? 0,
                 NutritionalValueType::SUGAR->value => $row['azucar'] ?? 0,
                 NutritionalValueType::SODIUM->value => $row['sodio'] ?? 0,
-                NutritionalValueType::HIGH_SODIUM->value => $row['alto_sodio'] ?? 0,
-                NutritionalValueType::HIGH_CALORIES->value => $row['alto_calorias'] ?? 0,
-                NutritionalValueType::HIGH_FAT->value => $row['alto_en_grasas'] ?? 0,
-                NutritionalValueType::HIGH_SUGAR->value => $row['alto_en_azucares'] ?? 0,
             ];
 
             // Create or update NutritionalValue records
@@ -160,7 +166,7 @@ class NutritionalInformationImport implements
     }
 
     /**
-     * Get the expected Excel headers (26 columns)
+     * Get the expected Excel headers (28 columns)
      *
      * @return array
      */
@@ -193,6 +199,8 @@ class NutritionalInformationImport implements
             'ALTO EN AZUCARES',        // 24
             'VIDA UTIL',               // 25
             'GENERAR ETIQUETA',        // 26
+            'MOSTRAR TEXTO SOYA',      // 27
+            'MOSTRAR TEXTO POLLO',     // 28
         ];
     }
 
@@ -241,6 +249,10 @@ class NutritionalInformationImport implements
             '*.alto_calorias' => ['nullable', 'in:0,1'],
             '*.alto_en_grasas' => ['nullable', 'in:0,1'],
             '*.alto_en_azucares' => ['nullable', 'in:0,1'],
+
+            // Warning text flags - must be 0 or 1
+            '*.mostrar_texto_soya' => ['nullable', 'in:0,1'],
+            '*.mostrar_texto_pollo' => ['nullable', 'in:0,1'],
 
             '*.vida_util' => ['nullable', 'integer', 'min:0'],
             '*.generar_etiqueta' => ['nullable', 'in:0,1'],
@@ -314,6 +326,10 @@ class NutritionalInformationImport implements
             '*.alto_calorias.in' => 'Alto en calorías debe ser 0 o 1',
             '*.alto_en_grasas.in' => 'Alto en grasas debe ser 0 o 1',
             '*.alto_en_azucares.in' => 'Alto en azúcares debe ser 0 o 1',
+
+            // Warning text flags
+            '*.mostrar_texto_soya.in' => 'Mostrar texto soya debe ser 0 o 1',
+            '*.mostrar_texto_pollo.in' => 'Mostrar texto pollo debe ser 0 o 1',
 
             '*.vida_util.integer' => 'La vida útil debe ser un número entero',
             '*.vida_util.min' => 'La vida útil debe ser mayor o igual a 0',

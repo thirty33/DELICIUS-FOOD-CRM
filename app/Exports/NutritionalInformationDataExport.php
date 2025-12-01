@@ -39,7 +39,7 @@ class NutritionalInformationDataExport implements
 
     /**
      * Headers matching NutritionalInformationImport expected headers
-     * IMPORTANT: These MUST match the import headings exactly
+     * IMPORTANT: These MUST match the import headings exactly (28 columns total)
      */
     private $headers = [
         'codigo_de_producto' => 'CÓDIGO DE PRODUCTO',
@@ -68,6 +68,8 @@ class NutritionalInformationDataExport implements
         'alto_en_azucares' => 'ALTO EN AZUCARES',
         'vida_util' => 'VIDA UTIL',
         'generar_etiqueta' => 'GENERAR ETIQUETA',
+        'mostrar_texto_soya' => 'MOSTRAR TEXTO SOYA',
+        'mostrar_texto_pollo' => 'MOSTRAR TEXTO POLLO',
     ];
 
     private $exportProcessId;
@@ -120,6 +122,8 @@ class NutritionalInformationDataExport implements
                 'alto_en_azucares' => (int) $nutritionalInfo->getValue(\App\Enums\NutritionalValueType::HIGH_SUGAR),
                 'vida_util' => $nutritionalInfo->shelf_life_days,
                 'generar_etiqueta' => $nutritionalInfo->generate_label ? 1 : 0,
+                'mostrar_texto_soya' => $nutritionalInfo->show_soy_text ? 1 : 0,
+                'mostrar_texto_pollo' => $nutritionalInfo->show_chicken_text ? 1 : 0,
             ];
         } catch (\Exception $e) {
             Log::error('Error mapping nutritional information for export', [

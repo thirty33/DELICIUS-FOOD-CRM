@@ -221,6 +221,16 @@ class NutritionalInformationResource extends Resource
                                 ->send();
                         }
                     }),
+                Tables\Actions\Action::make('download_nutritional_information_template')
+                    ->label(__('Bajar plantilla de información nutricional'))
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('info')
+                    ->action(function (\App\Services\TemplateDownloadService $templateService) {
+                        return $templateService->download(
+                            \App\Exports\NutritionalInformationTemplateExport::class,
+                            'template_importacion_info_nutricional.xlsx'
+                        );
+                    }),
             ])
             ->actions([
                 Tables\Actions\Action::make('generate_label')

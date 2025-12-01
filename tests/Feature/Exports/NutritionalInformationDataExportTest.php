@@ -24,9 +24,10 @@ use Tests\TestCase;
  *
  * Test validates:
  * 1. File is generated successfully
- * 2. Headers match EXACTLY what NutritionalInformationImport expects (26 headers)
+ * 2. Headers match EXACTLY what NutritionalInformationImport expects (28 headers)
  * 3. Excel data matches database data exactly
  * 4. All nutritional values are exported correctly
+ * 5. Warning text fields (show_soy_text, show_chicken_text) are exported correctly
  */
 class NutritionalInformationDataExportTest extends TestCase
 {
@@ -85,6 +86,10 @@ class NutritionalInformationDataExportTest extends TestCase
             'gross_weight' => 300.75,
             'shelf_life_days' => 5,
             'generate_label' => true,
+            'high_sodium' => true,
+            'high_calories' => false,
+            'high_fat' => true,
+            'high_sugar' => false,
         ]);
 
         // Create nutritional values for product 1
@@ -100,10 +105,6 @@ class NutritionalInformationDataExportTest extends TestCase
         $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::FIBER, 4.5);
         $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::SUGAR, 8.2);
         $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::SODIUM, 120.5);
-        $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::HIGH_SODIUM, 1);
-        $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::HIGH_CALORIES, 0);
-        $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::HIGH_FAT, 1);
-        $this->createNutritionalValue($this->nutritionalInfo1->id, NutritionalValueType::HIGH_SUGAR, 0);
 
         // Create nutritional information for product 2
         $this->nutritionalInfo2 = NutritionalInformation::create([
@@ -116,6 +117,10 @@ class NutritionalInformationDataExportTest extends TestCase
             'gross_weight' => 400.0,
             'shelf_life_days' => 3,
             'generate_label' => false,
+            'high_sodium' => false,
+            'high_calories' => true,
+            'high_fat' => false,
+            'high_sugar' => false,
         ]);
 
         // Create nutritional values for product 2
@@ -131,10 +136,6 @@ class NutritionalInformationDataExportTest extends TestCase
         $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::FIBER, 3.0);
         $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::SUGAR, 2.5);
         $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::SODIUM, 200.0);
-        $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::HIGH_SODIUM, 0);
-        $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::HIGH_CALORIES, 1);
-        $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::HIGH_FAT, 0);
-        $this->createNutritionalValue($this->nutritionalInfo2->id, NutritionalValueType::HIGH_SUGAR, 0);
     }
 
     /**
@@ -162,7 +163,7 @@ class NutritionalInformationDataExportTest extends TestCase
      */
     public function test_export_headers_match_import_expectations(): void
     {
-        // Expected headers - MUST match NutritionalInformationImport headingRow() expectations
+        // Expected headers - MUST match NutritionalInformationImport headingRow() expectations (28 columns)
         $expectedHeaders = [
             'CÓDIGO DE PRODUCTO',
             'NOMBRE DE PRODUCTO',
@@ -190,6 +191,8 @@ class NutritionalInformationDataExportTest extends TestCase
             'ALTO EN AZUCARES',
             'VIDA UTIL',
             'GENERAR ETIQUETA',
+            'MOSTRAR TEXTO SOYA',
+            'MOSTRAR TEXTO POLLO',
         ];
 
         // Generate export file
@@ -201,12 +204,12 @@ class NutritionalInformationDataExportTest extends TestCase
         $spreadsheet = $this->loadExcelFile($filePath);
         $sheet = $spreadsheet->getActiveSheet();
 
-        // Read headers from row 1
+        // Read headers from row 1 using numeric iteration (to support columns beyond Z)
         $actualHeaders = [];
-        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
 
-        for ($col = 'A'; $col <= $highestColumn; $col++) {
-            $headerValue = $sheet->getCell($col . '1')->getValue();
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
             if ($headerValue) {
                 $actualHeaders[] = $headerValue;
             }
@@ -219,8 +222,8 @@ class NutritionalInformationDataExportTest extends TestCase
             'Export headers MUST match import expectations EXACTLY'
         );
 
-        // Verify we have exactly 26 headers
-        $this->assertCount(26, $actualHeaders, 'Should have exactly 26 headers');
+        // Verify we have exactly 28 headers (26 original + 2 warning text fields)
+        $this->assertCount(28, $actualHeaders, 'Should have exactly 28 headers (26 original + 2 warning text fields)');
 
         // Clean up
         $this->cleanupTestFile($filePath);
@@ -309,6 +312,142 @@ class NutritionalInformationDataExportTest extends TestCase
 
         $this->assertEquals(3, $sheet->getCell('Y3')->getValue(), 'Product 2: vida util');
         $this->assertEquals(0, $sheet->getCell('Z3')->getValue(), 'Product 2: generar etiqueta');
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * Test that export includes warning text fields (MOSTRAR TEXTO SOYA, MOSTRAR TEXTO POLLO)
+     *
+     * TDD RED PHASE: This test will FAIL because:
+     * 1. Export headers don't include MOSTRAR TEXTO SOYA and MOSTRAR TEXTO POLLO
+     * 2. Export data doesn't include show_soy_text and show_chicken_text values
+     * 3. Columns 27 and 28 don't exist in exported Excel
+     *
+     * Expected behavior after GREEN phase:
+     * - Excel should have 28 columns (26 existing + 2 new warning text fields)
+     * - Column 27: MOSTRAR TEXTO SOYA (values: 0 or 1)
+     * - Column 28: MOSTRAR TEXTO POLLO (values: 0 or 1)
+     * - Values should match database boolean fields
+     */
+    public function test_export_includes_warning_text_fields(): void
+    {
+        // Update nutritionalInfo1 to have warning text fields
+        $this->nutritionalInfo1->update([
+            'show_soy_text' => true,
+            'show_chicken_text' => false,
+        ]);
+
+        // Update nutritionalInfo2 to have different warning text values
+        $this->nutritionalInfo2->update([
+            'show_soy_text' => false,
+            'show_chicken_text' => true,
+        ]);
+
+        // Generate export file
+        $filePath = $this->generateNutritionalExport(
+            collect([$this->nutritionalInfo1->id, $this->nutritionalInfo2->id])
+        );
+
+        // Load Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // ===== VERIFY HEADERS INCLUDE WARNING TEXT COLUMNS =====
+        // Expected headers should now be 28 (26 + 2 new)
+        $expectedHeaders = [
+            'CÓDIGO DE PRODUCTO',      // 1
+            'NOMBRE DE PRODUCTO',      // 2
+            'CODIGO DE BARRAS',        // 3
+            'INGREDIENTE',             // 4
+            'ALERGENOS',               // 5
+            'UNIDAD DE MEDIDA',        // 6
+            'PESO NETO',               // 7
+            'PESO BRUTO',              // 8
+            'CALORIAS',                // 9
+            'PROTEINA',                // 10
+            'GRASA',                   // 11
+            'GRASA SATURADA',          // 12
+            'GRASA MONOINSATURADA',    // 13
+            'GRASA POLIINSATURADA',    // 14
+            'GRASA TRANS',             // 15
+            'COLESTEROL',              // 16
+            'CARBOHIDRATO',            // 17
+            'FIBRA',                   // 18
+            'AZUCAR',                  // 19
+            'SODIO',                   // 20
+            'ALTO SODIO',              // 21
+            'ALTO CALORIAS',           // 22
+            'ALTO EN GRASAS',          // 23
+            'ALTO EN AZUCARES',        // 24
+            'VIDA UTIL',               // 25
+            'GENERAR ETIQUETA',        // 26
+            'MOSTRAR TEXTO SOYA',      // 27 - NEW
+            'MOSTRAR TEXTO POLLO',     // 28 - NEW
+        ];
+
+        // Read headers from row 1 using numeric iteration (to support columns beyond Z)
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        // Assert we have 28 headers
+        $this->assertCount(28, $actualHeaders, 'Export should have 28 headers (26 existing + 2 warning text fields)');
+
+        // Assert headers match exactly
+        $this->assertEquals(
+            $expectedHeaders,
+            $actualHeaders,
+            'Export headers must include MOSTRAR TEXTO SOYA and MOSTRAR TEXTO POLLO at positions 27-28'
+        );
+
+        // Verify column order: warning text columns should come AFTER VIDA UTIL and GENERAR ETIQUETA
+        $vidaUtilIndex = array_search('VIDA UTIL', $actualHeaders);
+        $generateLabelIndex = array_search('GENERAR ETIQUETA', $actualHeaders);
+        $showSoyTextIndex = array_search('MOSTRAR TEXTO SOYA', $actualHeaders);
+        $showChickenTextIndex = array_search('MOSTRAR TEXTO POLLO', $actualHeaders);
+
+        $this->assertEquals(24, $vidaUtilIndex, 'VIDA UTIL should be at index 24 (column 25)');
+        $this->assertEquals(25, $generateLabelIndex, 'GENERAR ETIQUETA should be at index 25 (column 26)');
+        $this->assertEquals(26, $showSoyTextIndex, 'MOSTRAR TEXTO SOYA should be at index 26 (column 27)');
+        $this->assertEquals(27, $showChickenTextIndex, 'MOSTRAR TEXTO POLLO should be at index 27 (column 28)');
+
+        // ===== VERIFY DATA FOR PRODUCT 1 (Row 2) =====
+        // Column 27 (AA): MOSTRAR TEXTO SOYA = 1 (true in database)
+        $this->assertEquals(
+            1,
+            $sheet->getCellByColumnAndRow(27, 2)->getValue(),
+            'Product 1: show_soy_text should be 1 (true in database)'
+        );
+
+        // Column 28 (AB): MOSTRAR TEXTO POLLO = 0 (false in database)
+        $this->assertEquals(
+            0,
+            $sheet->getCellByColumnAndRow(28, 2)->getValue(),
+            'Product 1: show_chicken_text should be 0 (false in database)'
+        );
+
+        // ===== VERIFY DATA FOR PRODUCT 2 (Row 3) =====
+        // Column 27 (AA): MOSTRAR TEXTO SOYA = 0 (false in database)
+        $this->assertEquals(
+            0,
+            $sheet->getCellByColumnAndRow(27, 3)->getValue(),
+            'Product 2: show_soy_text should be 0 (false in database)'
+        );
+
+        // Column 28 (AB): MOSTRAR TEXTO POLLO = 1 (true in database)
+        $this->assertEquals(
+            1,
+            $sheet->getCellByColumnAndRow(28, 3)->getValue(),
+            'Product 2: show_chicken_text should be 1 (true in database)'
+        );
 
         // Clean up
         $this->cleanupTestFile($filePath);

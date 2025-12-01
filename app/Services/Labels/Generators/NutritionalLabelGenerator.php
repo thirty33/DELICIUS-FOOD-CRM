@@ -115,8 +115,21 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                         </div>
 
                         <div class='weight-section'>
-                            <p class='weight-value'><strong>Peso {$this->repository->getGrossWeight($product)}</strong></p>
-                            <!-- <p class='weight-note'>Agitar soya antes de verter</p> -->
+                            <p class='weight-value'><strong>Peso {$this->repository->getGrossWeight($product)}</strong></p>";
+
+        // Show soy warning text if show_soy_text is true
+        if ($product->nutritionalInformation?->show_soy_text) {
+            $html .= "
+                            <p class='weight-note'>Agitar soya antes de verter</p>";
+        }
+
+        // Show chicken warning text if show_chicken_text is true
+        if ($product->nutritionalInformation?->show_chicken_text) {
+            $html .= "
+                            <p class='weight-note'>Nota: el pollo se somete a un riguroso<br>proceso de desmenuzado; Sin embargo, algunos<br>restos de huesos pueden persistir</p>";
+        }
+
+        $html .= "
                         </div>
                     </td>
 
@@ -334,12 +347,14 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 font-size: 7px;
                 margin: 0 0 0.3mm 0;
                 background-color: #ffffff;
+                text-align: left;
             }
 
             .weight-note {
                 font-size: 5.5px;
                 margin: 0;
                 background-color: #ffffff;
+                text-align: left;
             }
 
             /* RIGHT COLUMN STYLES */

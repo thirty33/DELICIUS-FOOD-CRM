@@ -71,7 +71,7 @@ class NutritionalInformationUpdateTest extends TestCase
 
         // Verify initial state: 5 products have nutritional info, product 6 does NOT
         $this->assertEquals(5, NutritionalInformation::count(), 'Should have 5 existing nutritional information records');
-        $this->assertEquals(80, NutritionalValue::count(), 'Should have 80 nutritional value records (5 products × 16 values)');
+        $this->assertEquals(60, NutritionalValue::count(), 'Should have 60 nutritional value records (5 products × 12 values, HIGH_* flags are boolean fields)');
 
         // Verify product 6 has NO nutritional info
         $product6 = $products->get(5);
@@ -99,7 +99,7 @@ class NutritionalInformationUpdateTest extends TestCase
 
         // STEP 5: Verify final state: 6 products now have nutritional info
         $this->assertEquals(6, NutritionalInformation::count(), 'Should now have 6 nutritional information records');
-        $this->assertEquals(96, NutritionalValue::count(), 'Should have 96 nutritional value records (6 products × 16 values)');
+        $this->assertEquals(72, NutritionalValue::count(), 'Should have 72 nutritional value records (6 products × 12 values, HIGH_* flags are boolean fields)');
 
         // STEP 6: Verify UPDATES for products 1-5
         $this->assertProduct1WasUpdated($products->get(0));
@@ -293,10 +293,6 @@ class NutritionalInformationUpdateTest extends TestCase
             NutritionalValueType::FIBER->value => 0.5,
             NutritionalValueType::SUGAR->value => 1.2,
             NutritionalValueType::SODIUM->value => 280,
-            NutritionalValueType::HIGH_SODIUM->value => 0,
-            NutritionalValueType::HIGH_CALORIES->value => 0,
-            NutritionalValueType::HIGH_FAT->value => 0,
-            NutritionalValueType::HIGH_SUGAR->value => 0,
         ]);
 
         // Product 2-5: Create with simple original values
@@ -326,10 +322,6 @@ class NutritionalInformationUpdateTest extends TestCase
                 NutritionalValueType::FIBER->value => 0.5 * $productNumber,
                 NutritionalValueType::SUGAR->value => 1.0 * $productNumber,
                 NutritionalValueType::SODIUM->value => 100 * $productNumber,
-                NutritionalValueType::HIGH_SODIUM->value => 0,
-                NutritionalValueType::HIGH_CALORIES->value => 0,
-                NutritionalValueType::HIGH_FAT->value => 0,
-                NutritionalValueType::HIGH_SUGAR->value => 0,
             ]);
         }
     }
