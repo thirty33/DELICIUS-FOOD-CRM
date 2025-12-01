@@ -118,6 +118,21 @@ class NutritionalInformationResource extends Resource
                             ->columnSpan(1),
                     ])
                     ->columns(2),
+
+                Forms\Components\Section::make(__('Textos de Advertencia en Etiqueta'))
+                    ->schema([
+                        Forms\Components\Toggle::make('show_soy_text')
+                            ->label(__('Mostrar Texto de Soya'))
+                            ->helperText(__('Muestra: "Agitar soya antes de verter"'))
+                            ->default(false)
+                            ->columnSpan(1),
+                        Forms\Components\Toggle::make('show_chicken_text')
+                            ->label(__('Mostrar Texto de Pollo'))
+                            ->helperText(__('Muestra advertencia sobre restos de huesos en pollo desmenuzado'))
+                            ->default(false)
+                            ->columnSpan(1),
+                    ])
+                    ->columns(2),
             ]);
     }
 
@@ -161,6 +176,16 @@ class NutritionalInformationResource extends Resource
                     ->label(__('Generar Etiqueta'))
                     ->boolean()
                     ->toggleable(),
+                Tables\Columns\IconColumn::make('show_soy_text')
+                    ->label(__('Texto Soya'))
+                    ->boolean()
+                    ->toggleable()
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('show_chicken_text')
+                    ->label(__('Texto Pollo'))
+                    ->boolean()
+                    ->toggleable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Creado'))
                     ->dateTime()
