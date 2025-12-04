@@ -2,13 +2,13 @@
 
 namespace App\Repositories;
 
-use App\Contracts\NutritionalInformationRepositoryInterface;
+use App\Contracts\HorecaInformationRepositoryInterface;
 use App\Enums\NutritionalValueType;
 use App\Models\NutritionalInformation;
 use App\Models\NutritionalValue;
 use App\Models\Product;
 
-class NutritionalInformationRepository implements NutritionalInformationRepositoryInterface
+class HorecaInformationRepository implements HorecaInformationRepositoryInterface
 {
     /**
      * Find a product by its code
@@ -131,22 +131,14 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
 
     /**
      * Get net weight for label portion display
+     * HORECA labels do NOT show portion weight
      *
-     * @param Product $product
+     * @param mixed $product
      * @return string
      */
-    public function getPortionWeight(Product $product): string
+    public function getPortionWeight($product): string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
-
-        if (!$nutritionalInfo) {
-            return '0 gr. aprox';
-        }
-
-        $netWeight = $nutritionalInfo->net_weight;
-        $unit = strtolower($nutritionalInfo->measure_unit);
-
-        return "{$netWeight} {$unit}. aprox";
+        return '';
     }
 
     /**
@@ -191,150 +183,95 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
 
     /**
      * Get all nutritional values for label display
-     * Returns array with type, label, per100g, and perPortion values
+     * HORECA labels do NOT show nutritional table
      *
-     * @param Product $product
+     * @param mixed $product
      * @return array
      */
-    public function getNutritionalValuesForLabel(Product $product): array
+    public function getNutritionalValuesForLabel($product): array
     {
-        $types = [
-            NutritionalValueType::CALORIES,
-            NutritionalValueType::PROTEIN,
-            NutritionalValueType::FAT_TOTAL,
-            NutritionalValueType::FAT_SATURATED,
-            NutritionalValueType::FAT_MONOUNSATURATED,
-            NutritionalValueType::FAT_POLYUNSATURATED,
-            NutritionalValueType::FAT_TRANS,
-            NutritionalValueType::CHOLESTEROL,
-            NutritionalValueType::CARBOHYDRATE,
-            NutritionalValueType::FIBER,
-            NutritionalValueType::SUGAR,
-            NutritionalValueType::SODIUM,
-        ];
-
-        $values = [];
-        foreach ($types as $type) {
-            $label = $type->label();
-            $unit = $type->unit();
-
-            // Concatenate unit to label (e.g., "Calorías (kcal)", "Proteínas (g)")
-            $labelWithUnit = $unit ? "{$label} ({$unit})" : $label;
-
-            $values[] = [
-                'type' => $type->value,
-                'label' => $labelWithUnit,
-                'unit' => $unit,
-                'per100g' => round($this->getValuePer100g($product, $type), 1),
-                'perPortion' => round($this->getValuePerPortion($product, $type), 1),
-            ];
-        }
-
-        return $values;
+        return [];
     }
 
     /**
      * Get active "Alto en" flags for label display
+     * HORECA labels do NOT show high content flags
      *
-     * @param Product $product
+     * @param mixed $product
      * @return array Array with flag names that are active
      */
-    public function getActiveHighContentFlags(Product $product): array
+    public function getActiveHighContentFlags($product): array
     {
-        $nutritionalInfo = $product->nutritionalInformation;
-
-        if (!$nutritionalInfo) {
-            return [];
-        }
-
-        $activeFlags = [];
-
-        if ($nutritionalInfo->high_sodium) {
-            $activeFlags[] = 'high_sodium';
-        }
-
-        if ($nutritionalInfo->high_calories) {
-            $activeFlags[] = 'high_calories';
-        }
-
-        if ($nutritionalInfo->high_fat) {
-            $activeFlags[] = 'high_fat';
-        }
-
-        if ($nutritionalInfo->high_sugar) {
-            $activeFlags[] = 'high_sugar';
-        }
-
-        return $activeFlags;
+        return [];
     }
 
     /**
-     * Get product gross weight for label display from nutritional_information table
+     * Get product gross weight for label display from label data array
+     * HORECA uses net_weight from the label data array
      *
-     * @param Product $product
+     * @param mixed $product Array with 'net_weight' and 'measure_unit' keys
      * @return string
      */
-    public function getGrossWeight(Product $product): string
+    public function getGrossWeight($product): string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
+        $weight = $product['net_weight'] ?? 0;
+        $unit = strtolower($product['measure_unit'] ?? 'g');
 
-        $weight = $nutritionalInfo->gross_weight ?? 0;
-        $unit = strtolower($nutritionalInfo->measure_unit ?? 'g');
+        // Format weight with 2 decimals
+        $formattedWeight = number_format($weight, 2, '.', '');
 
-        return "{$weight} {$unit}.";
+        return "{$formattedWeight} {$unit}.";
     }
 
     /**
      * Get product ingredients
+     * HORECA labels do NOT show ingredients
      *
-     * @param Product $product
+     * @param mixed $product
      * @return string
      */
-    public function getIngredients(Product $product): string
+    public function getIngredients($product): string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
-
-        return $nutritionalInfo?->ingredients ?? 'No especificado';
+        return 'No especificado';
     }
 
     /**
      * Get product allergens
+     * HORECA labels do NOT show allergens
      *
-     * @param Product $product
+     * @param mixed $product
      * @return string
      */
-    public function getAllergens(Product $product): string
+    public function getAllergens($product): string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
-
-        return $nutritionalInfo?->allergens ?? 'No especificado';
+        return 'No especificado';
     }
 
     /**
      * Get product barcode from nutritional_information table
+     * HORECA labels do NOT show barcode
      *
-     * @param Product $product
+     * @param mixed $product
      * @return string|null
      */
-    public function getBarcode(Product $product): ?string
+    public function getBarcode($product): ?string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
-
-        return $nutritionalInfo?->barcode;
+        return null;
     }
 
     /**
      * Calculate expiration date based on elaboration date and shelf life
+     * HORECA uses shelf_life from plated_dish_ingredients table
      *
-     * @param Product $product
+     * @param mixed $product Array with 'shelf_life' key (days)
      * @param string $elaborationDate Date in format d/m/Y
      * @return string Expiration date in format d/m/Y
      */
-    public function getExpirationDate(Product $product, string $elaborationDate): string
+    public function getExpirationDate($product, string $elaborationDate): string
     {
-        $nutritionalInfo = $product->nutritionalInformation;
+        $shelfLifeDays = $product['shelf_life'] ?? null;
 
-        if (!$nutritionalInfo || !$nutritionalInfo->shelf_life_days) {
+        if (!$shelfLifeDays) {
             return $elaborationDate;
         }
 
@@ -344,12 +281,12 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
                 return $elaborationDate;
             }
 
-            $elaborationDateTime->modify("+{$nutritionalInfo->shelf_life_days} days");
+            $elaborationDateTime->modify("+{$shelfLifeDays} days");
             return $elaborationDateTime->format('d/m/Y');
         } catch (\Exception $e) {
-            \Log::error("Error calculating expiration date", [
+            \Log::error("Error calculating expiration date for HORECA label", [
                 'elaboration_date' => $elaborationDate,
-                'shelf_life_days' => $nutritionalInfo->shelf_life_days,
+                'shelf_life_days' => $shelfLifeDays,
                 'error' => $e->getMessage()
             ]);
             return $elaborationDate;
@@ -359,7 +296,6 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
     /**
      * Get products for label generation
      * Filters by product IDs and generate_label flag
-     * Excludes HORECA products (products with platedDish)
      *
      * @param array $productIds
      * @param array $quantities Array with structure [product_id => quantity]. If empty, returns one instance per product.
@@ -372,7 +308,6 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
             ->whereHas('nutritionalInformation', function ($query) {
                 $query->where('generate_label', true);
             })
-            ->whereDoesntHave('platedDish')  // Exclude HORECA products (they have their own label system)
             ->get();
 
         // If no quantities specified, return products as-is (one per product)
@@ -395,7 +330,6 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
     /**
      * Calculate total number of labels that will be generated
      * Filters products by generate_label flag and sums their quantities
-     * Excludes HORECA products (products with platedDish)
      *
      * @param array $productIds Array of product IDs
      * @param array $quantities Array with structure [product_id => quantity]
@@ -404,12 +338,10 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
     public function calculateTotalLabelsToGenerate(array $productIds, array $quantities): int
     {
         // Get only products with nutritional information and generate_label = true
-        // Exclude HORECA products (they have their own label system)
         $validProductIds = Product::whereIn('id', $productIds)
             ->whereHas('nutritionalInformation', function ($query) {
                 $query->where('generate_label', true);
             })
-            ->whereDoesntHave('platedDish')  // Exclude HORECA products
             ->pluck('id')
             ->toArray();
 

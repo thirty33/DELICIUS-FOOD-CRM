@@ -35,6 +35,7 @@ class ImportProcess extends Model
     const TYPE_USERS = 'usuarios';
     const TYPE_ORDERS = 'órdenes';
     const TYPE_NUTRITIONAL_INFORMATION = 'informacion nutricional';
+    const TYPE_PLATED_DISH_INGREDIENTS = 'emplatados';
 
     // Constantes para los estados
     const STATUS_QUEUED = 'en cola';
@@ -60,7 +61,8 @@ class ImportProcess extends Model
             self::TYPE_USERS,
             self::TYPE_PRODUCTS_IMAGES,
             self::TYPE_ORDERS,
-            self::TYPE_NUTRITIONAL_INFORMATION
+            self::TYPE_NUTRITIONAL_INFORMATION,
+            self::TYPE_PLATED_DISH_INGREDIENTS,
         ];
     }
 

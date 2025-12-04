@@ -183,7 +183,16 @@ class ProductResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
                     ->relationship('category', 'name')
-                    ->label(__('Categoría'))
+                    ->label(__('Categoría')),
+                Tables\Filters\TernaryFilter::make('has_plated_dish')
+                    ->label(__('Productos HORECA'))
+                    ->placeholder(__('Todos los productos'))
+                    ->trueLabel(__('Solo productos HORECA'))
+                    ->falseLabel(__('Solo productos normales'))
+                    ->queries(
+                        true: fn ($query) => $query->whereHas('platedDish'),
+                        false: fn ($query) => $query->whereDoesntHave('platedDish'),
+                    )
             ])
             ->headerActions([
                 Tables\Actions\ActionGroup::make([

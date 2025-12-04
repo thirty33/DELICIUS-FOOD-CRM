@@ -131,4 +131,12 @@ class Product extends Model
         return $this->hasOne(NutritionalInformation::class);
     }
 
+    /**
+     * Get the plated dish for this product (one-to-one)
+     */
+    public function platedDish(): HasOne
+    {
+        return $this->hasOne(PlatedDish::class);
+    }
+
 }

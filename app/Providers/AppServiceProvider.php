@@ -10,6 +10,12 @@ use App\Contracts\ReportColumnDataProviderInterface;
 use App\Services\Reports\ReportGrouperColumnProvider;
 use App\Contracts\NutritionalInformationRepositoryInterface;
 use App\Repositories\NutritionalInformationRepository;
+use App\Contracts\PlatedDishRepositoryInterface;
+use App\Repositories\PlatedDishRepository;
+use App\Contracts\HorecaLabelDataRepositoryInterface;
+use App\Repositories\HorecaLabelDataRepository;
+use App\Contracts\HorecaInformationRepositoryInterface;
+use App\Repositories\HorecaInformationRepository;
 use App\Contracts\ImportServiceInterface;
 use App\Services\ImportService;
 use App\Contracts\DeletionServiceInterface;
@@ -60,6 +66,24 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             NutritionalInformationRepositoryInterface::class,
             NutritionalInformationRepository::class
+        );
+
+        // Bind plated dish repository
+        $this->app->bind(
+            PlatedDishRepositoryInterface::class,
+            PlatedDishRepository::class
+        );
+
+        // Bind HORECA label data repository
+        $this->app->bind(
+            HorecaLabelDataRepositoryInterface::class,
+            HorecaLabelDataRepository::class
+        );
+
+        // Bind HORECA information repository
+        $this->app->bind(
+            HorecaInformationRepositoryInterface::class,
+            HorecaInformationRepository::class
         );
 
         // Bind import service

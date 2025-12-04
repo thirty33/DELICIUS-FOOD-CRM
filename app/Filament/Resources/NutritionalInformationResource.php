@@ -331,6 +331,48 @@ class NutritionalInformationResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('export_data')
+                        ->label(__('Exportar Datos'))
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('info')
+                        ->action(function (Collection $records, \App\Services\ExportService $exportService) {
+                            try {
+                                if ($records->isEmpty()) {
+                                    Notification::make()
+                                        ->title(__('Sin registros'))
+                                        ->body(__('No hay registros seleccionados para exportar'))
+                                        ->warning()
+                                        ->send();
+                                    return;
+                                }
+
+                                $nutritionalInfoIds = $records->pluck('id');
+                                $fileName = 'nutritional-information-exports/export_informacion_nutricional_' . now()->format('Ymd_His') . '.xlsx';
+
+                                $exportProcess = $exportService->export(
+                                    \App\Exports\NutritionalInformationDataExport::class,
+                                    $nutritionalInfoIds,
+                                    ExportProcess::TYPE_NUTRITIONAL_INFORMATION,
+                                    $fileName,
+                                    [],
+                                    's3'
+                                );
+
+                                Notification::make()
+                                    ->title(__('Exportación iniciada'))
+                                    ->body(__('Se están exportando :count registros. El proceso finalizará en breve.', ['count' => $records->count()]))
+                                    ->success()
+                                    ->send();
+
+                            } catch (\Exception $e) {
+                                Notification::make()
+                                    ->title(__('Error'))
+                                    ->body(__('Ha ocurrido un error al iniciar la exportación: ') . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('generate_labels')
                         ->label(__('Generar Etiquetas'))
                         ->icon('heroicon-o-document-text')

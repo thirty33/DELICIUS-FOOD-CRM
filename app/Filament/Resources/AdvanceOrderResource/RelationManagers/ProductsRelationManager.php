@@ -4,6 +4,7 @@ namespace App\Filament\Resources\AdvanceOrderResource\RelationManagers;
 
 use App\Repositories\AdvanceOrderRepository;
 use App\Repositories\OrderRepository;
+use App\Services\Labels\HorecaLabelService;
 use App\Services\Labels\NutritionalLabelService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -163,6 +164,15 @@ class ProductsRelationManager extends RelationManager
 
                         return $query;
                     }),
+                Tables\Filters\TernaryFilter::make('has_plated_dish')
+                    ->label(__('Productos HORECA'))
+                    ->placeholder(__('Todos los productos'))
+                    ->trueLabel(__('Solo productos HORECA'))
+                    ->falseLabel(__('Solo productos normales'))
+                    ->queries(
+                        true: fn ($query) => $query->whereHas('product.platedDish'),
+                        false: fn ($query) => $query->whereDoesntHave('product.platedDish'),
+                    ),
                 Tables\Filters\SelectFilter::make('production_area_id')
                     ->label(__('Cuarto Productivo'))
                     ->relationship('product.productionAreas', 'name')
@@ -198,6 +208,55 @@ class ProductsRelationManager extends RelationManager
 
                         return $data;
                     }),
+                Tables\Actions\Action::make('generate_horeca_labels')
+                    ->label(__('Generar Etiquetas HORECA'))
+                    ->icon('heroicon-o-tag')
+                    ->color('warning')
+                    ->form([
+                        Forms\Components\DatePicker::make('elaboration_date')
+                            ->label(__('Fecha de Elaboración'))
+                            ->default(now())
+                            ->displayFormat('d/m/Y')
+                            ->format('d/m/Y')
+                            ->required()
+                            ->helperText(__('Fecha que aparecerá en las etiquetas HORECA')),
+                    ])
+                    ->action(function (array $data, HorecaLabelService $horecaLabelService) {
+                        try {
+                            $advanceOrderId = $this->ownerRecord->id;
+                            $elaborationDate = $data['elaboration_date'];
+
+                            // Call service to generate HORECA labels
+                            $exportProcess = $horecaLabelService->generateLabelsForAdvanceOrder(
+                                $advanceOrderId,
+                                $elaborationDate
+                            );
+
+                            Notification::make()
+                                ->title(__('Generación de etiquetas HORECA iniciada'))
+                                ->body(__('Se están generando las etiquetas HORECA para los ingredientes de esta orden de producción. El proceso finalizará en breve.'))
+                                ->success()
+                                ->send();
+
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title(__('Error'))
+                                ->body(__('Ha ocurrido un error al iniciar la generación de etiquetas HORECA: ') . $e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            Log::error('Error generating HORECA labels', [
+                                'advance_order_id' => $this->ownerRecord->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                        }
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Generar Etiquetas HORECA'))
+                    ->modalDescription(__('Se generarán etiquetas para todos los ingredientes HORECA de los productos en las órdenes asociadas a esta Orden de Producción.'))
+                    ->modalSubmitActionLabel(__('Generar'))
+                    ->modalIcon('heroicon-o-tag'),
             ])
             ->actions([
                 Tables\Actions\Action::make('generate_label')
