@@ -8,6 +8,7 @@ use App\Models\ExportProcess;
 use App\Models\PlatedDish;
 use App\Models\PlatedDishIngredient;
 use App\Models\Product;
+use App\Support\ImportExport\PlatedDishIngredientsSchema;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Facades\Excel;
@@ -150,16 +151,8 @@ class PlatedDishIngredientsDataExportTest extends TestCase
         $this->assertGreaterThan(0, filesize($filePath), 'Export file should not be empty');
 
         // ===== 2. VERIFY HEADERS MATCH IMPORT EXPECTATIONS =====
-        // Expected headers from PlatedDishIngredientsImport::getExpectedHeaders()
-        $expectedHeaders = [
-            'CODIGO DE PRODUCTO',
-            'NOMBRE DE PRODUCTO',
-            'EMPLATADO',
-            'UNIDAD DE MEDIDA',
-            'CANTIDAD',
-            'CANTIDAD MAXIMA (HORECA)',
-            'VIDA UTIL',
-        ];
+        // Expected headers from PlatedDishIngredientsSchema (centralized)
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
 
         // Load Excel file
         $spreadsheet = $this->loadExcelFile($filePath);
@@ -183,8 +176,9 @@ class PlatedDishIngredientsDataExportTest extends TestCase
             'Export headers MUST match PlatedDishIngredientsImport expectations EXACTLY'
         );
 
-        // Verify we have exactly 7 headers
-        $this->assertCount(7, $actualHeaders, 'Should have exactly 7 headers');
+        // Verify we have expected number of headers
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Should have exactly {$expectedCount} headers");
 
         // ===== 3. VERIFY ROW COUNT =====
         // We have 5 products, each with 6 ingredients = 30 data rows + 1 header row = 31 total rows
@@ -362,15 +356,7 @@ class PlatedDishIngredientsDataExportTest extends TestCase
         $sheet = $spreadsheet->getActiveSheet();
 
         // ===== 1. VERIFY HEADERS INCLUDE "VIDA UTIL" =====
-        $expectedHeaders = [
-            'CODIGO DE PRODUCTO',
-            'NOMBRE DE PRODUCTO',
-            'EMPLATADO',
-            'UNIDAD DE MEDIDA',
-            'CANTIDAD',
-            'CANTIDAD MAXIMA (HORECA)',
-            'VIDA UTIL', // 7th column
-        ];
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
 
         // Read headers from row 1
         $actualHeaders = [];
@@ -383,8 +369,9 @@ class PlatedDishIngredientsDataExportTest extends TestCase
             }
         }
 
-        // Assert we have exactly 7 headers
-        $this->assertCount(7, $actualHeaders, 'Should have exactly 7 headers including VIDA UTIL');
+        // Assert we have expected number of headers
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Should have exactly {$expectedCount} headers including VIDA UTIL");
 
         // Assert headers match exactly
         $this->assertEquals(
@@ -486,6 +473,218 @@ class PlatedDishIngredientsDataExportTest extends TestCase
             0,
             $nullShelfLifeCount,
             'All 30 data rows should have shelf_life values, none should be null'
+        );
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * Test that export includes is_horeca field with correct values
+     *
+     * This test validates that the 8th column "ES HORECA" is included
+     * in the export and that is_horeca values from database are exported correctly.
+     *
+     * EXPECTED STRUCTURE:
+     * - Headers: 8 columns including "ES HORECA" as the last column
+     * - Data: Each product row includes is_horeca value in Column H
+     * - Values: "VERDADERO" for TRUE, "FALSO" for FALSE
+     *
+     * IMPORTANT:
+     * - is_horeca is a PLATED DISH level field (not ingredient level)
+     * - All ingredient rows for the same product MUST have the same is_horeca value
+     * - Product with 6 ingredients = 6 rows with same is_horeca value
+     */
+    public function test_export_includes_is_horeca_field_with_correct_values(): void
+    {
+        // ===== 1. CREATE TEST DATA WITH DIFFERENT is_horeca VALUES =====
+
+        // Product 1: is_horeca = TRUE (3 ingredients)
+        $product1 = Product::create([
+            'code' => 'HORECA-TRUE-001',
+            'name' => 'HORECA Product (TRUE)',
+            'description' => 'Test product with is_horeca = TRUE',
+            'price' => 10000,
+            'category_id' => $this->category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+            'active' => true,
+        ]);
+
+        $platedDish1 = PlatedDish::create([
+            'product_id' => $product1->id,
+            'is_active' => true,
+            'is_horeca' => true, // TRUE
+        ]);
+
+        // Create 3 ingredients for Product 1
+        for ($i = 1; $i <= 3; $i++) {
+            PlatedDishIngredient::create([
+                'plated_dish_id' => $platedDish1->id,
+                'ingredient_name' => "HORECA-ING-{$i}",
+                'measure_unit' => 'GR',
+                'quantity' => 100 * $i,
+                'max_quantity_horeca' => 150 * $i,
+                'order_index' => $i - 1,
+                'is_optional' => false,
+                'shelf_life' => 7 * $i,
+            ]);
+        }
+
+        // Product 2: is_horeca = FALSE (2 ingredients)
+        $product2 = Product::create([
+            'code' => 'HORECA-FALSE-001',
+            'name' => 'Non-HORECA Product (FALSE)',
+            'description' => 'Test product with is_horeca = FALSE',
+            'price' => 20000,
+            'category_id' => $this->category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+            'active' => true,
+        ]);
+
+        $platedDish2 = PlatedDish::create([
+            'product_id' => $product2->id,
+            'is_active' => true,
+            'is_horeca' => false, // FALSE
+        ]);
+
+        // Create 2 ingredients for Product 2
+        for ($i = 1; $i <= 2; $i++) {
+            PlatedDishIngredient::create([
+                'plated_dish_id' => $platedDish2->id,
+                'ingredient_name' => "REGULAR-ING-{$i}",
+                'measure_unit' => 'ML',
+                'quantity' => 50 * $i,
+                'max_quantity_horeca' => 75 * $i,
+                'order_index' => $i - 1,
+                'is_optional' => false,
+                'shelf_life' => 15 * $i,
+            ]);
+        }
+
+        // ===== 2. GENERATE EXPORT FILE =====
+        $platedDishIds = collect([$platedDish1->id, $platedDish2->id]);
+        $filePath = $this->generatePlatedDishExport($platedDishIds);
+
+        // Load Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // ===== 3. VERIFY HEADERS INCLUDE "ES HORECA" =====
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
+
+        // Read headers from row 1
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        // Assert we have 8 headers including ES HORECA
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Should have exactly {$expectedCount} headers including ES HORECA");
+
+        // Assert headers match exactly
+        $this->assertEquals(
+            $expectedHeaders,
+            $actualHeaders,
+            'Export headers MUST include ES HORECA as 8th column'
+        );
+
+        // Verify "ES HORECA" is in Column H (8th column)
+        $esHorecaHeader = $sheet->getCell('H1')->getValue();
+        $this->assertEquals(
+            'ES HORECA',
+            $esHorecaHeader,
+            'Column H should contain "ES HORECA" header'
+        );
+
+        // ===== 4. VERIFY PRODUCT 1 IS_HORECA VALUES (3 ROWS - ALL TRUE) =====
+        // Rows 2-4 are for Product 1 (3 ingredients)
+        for ($row = 2; $row <= 4; $row++) {
+            // Column H: ES HORECA
+            $excelIsHoreca = $sheet->getCell("H{$row}")->getValue();
+
+            $this->assertNotNull(
+                $excelIsHoreca,
+                "Row {$row}: is_horeca should not be null in Excel"
+            );
+
+            $this->assertEquals(
+                'VERDADERO',
+                $excelIsHoreca,
+                "Row {$row}: Product 1 is_horeca should be VERDADERO (TRUE) in Excel"
+            );
+        }
+
+        // ===== 5. VERIFY PRODUCT 2 IS_HORECA VALUES (2 ROWS - ALL FALSE) =====
+        // Rows 5-6 are for Product 2 (2 ingredients)
+        for ($row = 5; $row <= 6; $row++) {
+            // Column H: ES HORECA
+            $excelIsHoreca = $sheet->getCell("H{$row}")->getValue();
+
+            $this->assertNotNull(
+                $excelIsHoreca,
+                "Row {$row}: is_horeca should not be null in Excel"
+            );
+
+            $this->assertEquals(
+                'FALSO',
+                $excelIsHoreca,
+                "Row {$row}: Product 2 is_horeca should be FALSO (FALSE) in Excel"
+            );
+        }
+
+        // ===== 6. VERIFY ALL ROWS HAVE IS_HORECA VALUE =====
+        $lastRow = $sheet->getHighestRow();
+        $nullIsHorecaCount = 0;
+
+        for ($row = 2; $row <= $lastRow; $row++) {
+            $isHoreca = $sheet->getCell("H{$row}")->getValue();
+            if ($isHoreca === null || $isHoreca === '') {
+                $nullIsHorecaCount++;
+            }
+        }
+
+        $this->assertEquals(
+            0,
+            $nullIsHorecaCount,
+            'All data rows should have is_horeca values, none should be null'
+        );
+
+        // ===== 7. VERIFY IS_HORECA VALUES ARE CONSISTENT PER PRODUCT =====
+        // Product 1: All 3 rows should have same value (VERDADERO)
+        $product1Row1IsHoreca = $sheet->getCell('H2')->getValue();
+        $product1Row2IsHoreca = $sheet->getCell('H3')->getValue();
+        $product1Row3IsHoreca = $sheet->getCell('H4')->getValue();
+
+        $this->assertEquals(
+            $product1Row1IsHoreca,
+            $product1Row2IsHoreca,
+            'Product 1: All ingredient rows must have same is_horeca value (row 2 vs row 3)'
+        );
+
+        $this->assertEquals(
+            $product1Row1IsHoreca,
+            $product1Row3IsHoreca,
+            'Product 1: All ingredient rows must have same is_horeca value (row 2 vs row 4)'
+        );
+
+        // Product 2: All 2 rows should have same value (FALSO)
+        $product2Row1IsHoreca = $sheet->getCell('H5')->getValue();
+        $product2Row2IsHoreca = $sheet->getCell('H6')->getValue();
+
+        $this->assertEquals(
+            $product2Row1IsHoreca,
+            $product2Row2IsHoreca,
+            'Product 2: All ingredient rows must have same is_horeca value'
         );
 
         // Clean up

@@ -13,10 +13,12 @@ class PlatedDish extends Model
     protected $fillable = [
         'product_id',
         'is_active',
+        'is_horeca',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_horeca' => 'boolean',
     ];
 
     /**

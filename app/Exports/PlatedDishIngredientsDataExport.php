@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\ExportProcess;
 use App\Models\PlatedDish;
+use App\Support\ImportExport\PlatedDishIngredientsSchema;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -43,24 +44,9 @@ class PlatedDishIngredientsDataExport implements
      * Headers matching PlatedDishIngredientsImport expected headers
      * IMPORTANT: These MUST match the import headings exactly (7 columns total)
      *
-     * From PlatedDishIngredientsImport::getExpectedHeaders():
-     * 1. CODIGO DE PRODUCTO
-     * 2. NOMBRE DE PRODUCTO
-     * 3. EMPLATADO (ingredient code)
-     * 4. UNIDAD DE MEDIDA
-     * 5. CANTIDAD
-     * 6. CANTIDAD MAXIMA (HORECA)
-     * 7. VIDA UTIL
+     * NOTE: Headers are now centralized in PlatedDishIngredientsSchema class.
+     * Any changes to headers must be made in that class only.
      */
-    private array $headers = [
-        'CODIGO DE PRODUCTO',
-        'NOMBRE DE PRODUCTO',
-        'EMPLATADO',
-        'UNIDAD DE MEDIDA',
-        'CANTIDAD',
-        'CANTIDAD MAXIMA (HORECA)',
-        'VIDA UTIL',
-    ];
 
     private Collection $platedDishIds;
     private int $exportProcessId;
@@ -122,6 +108,7 @@ class PlatedDishIngredientsDataExport implements
                         'cantidad' => $ingredient->quantity,
                         'cantidad_maxima_horeca' => $ingredient->max_quantity_horeca,
                         'vida_util' => $ingredient->shelf_life,
+                        'es_horeca' => $platedDish->is_horeca ? 'VERDADERO' : 'FALSO',
                     ]);
                 }
             }
@@ -151,7 +138,7 @@ class PlatedDishIngredientsDataExport implements
      */
     public function headings(): array
     {
-        return $this->headers;
+        return PlatedDishIngredientsSchema::getHeaderValues();
     }
 
     /**

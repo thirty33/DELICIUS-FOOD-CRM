@@ -1457,4 +1457,191 @@ class PlatedDishIngredientsImportTest extends TestCase
             'Import should complete successfully'
         );
     }
+
+    /**
+     * Test that ES HORECA field is imported and saved to PlatedDish table
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because:
+     * 1. Migration for is_horeca field does not exist yet
+     * 2. PlatedDishIngredientsSchema does not include ES HORECA header yet
+     * 3. PlatedDishIngredientsImport does not process is_horeca field yet
+     *
+     * IMPORTANT:
+     * - ES HORECA is a PlatedDish-level field (not ingredient-level)
+     * - Even though Excel has 5 rows (one per ingredient), all rows have same ES HORECA value
+     * - The value should be saved ONCE to plated_dishes table, not to plated_dish_ingredients
+     *
+     * Test Data: plated_dish_with_horeca_field.xlsx
+     * - 1 product (PROD-HORECA-001)
+     * - 5 ingredients
+     * - ES HORECA = VERDADERO (same value in all 5 rows)
+     */
+    public function test_imports_is_horeca_field_to_plated_dish_table(): void
+    {
+        // Create the product that will be imported
+        $product = $this->createTestProduct('PROD-HORECA-001', 'Test HORECA Product');
+
+        // Import Excel with ES HORECA field
+        $testFile = base_path('tests/Fixtures/plated_dish_with_horeca_field.xlsx');
+        $importProcess = $this->runImport($testFile);
+
+        // ===== 1. VERIFY PLATED DISH WAS CREATED =====
+        $platedDish = PlatedDish::where('product_id', $product->id)->first();
+        $this->assertNotNull($platedDish, 'PlatedDish should be created for product');
+
+        // ===== 2. VERIFY IS_HORECA FIELD IS SAVED TO PLATED_DISHES TABLE =====
+        // TDD RED: This will FAIL because is_horeca column does not exist yet
+        $this->assertTrue(
+            $platedDish->is_horeca,
+            'PlatedDish.is_horeca should be TRUE when Excel has ES HORECA = VERDADERO'
+        );
+
+        // ===== 3. VERIFY INGREDIENTS WERE CREATED (5 INGREDIENTS) =====
+        $ingredients = $platedDish->ingredients()->orderBy('order_index')->get();
+        $this->assertCount(5, $ingredients, 'Should have 5 ingredients');
+
+        // ===== 4. VERIFY INGREDIENTS DO NOT HAVE IS_HORECA FIELD =====
+        // (is_horeca belongs to PlatedDish, not PlatedDishIngredient)
+        $firstIngredient = $ingredients->first();
+        $this->assertObjectNotHasProperty(
+            'is_horeca',
+            $firstIngredient,
+            'PlatedDishIngredient should NOT have is_horeca field (it belongs to PlatedDish)'
+        );
+
+        // ===== 5. VERIFY IMPORT WAS SUCCESSFUL =====
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete successfully'
+        );
+    }
+
+    /**
+     * Test that ES HORECA field is updated when re-importing existing PlatedDish
+     *
+     * SCENARIO:
+     * 1. PlatedDish already exists in DB with is_horeca = FALSE
+     * 2. Import Excel with same product but is_horeca = VERDADERO
+     * 3. Verify is_horeca is updated to TRUE in database
+     *
+     * This test validates that the import correctly UPDATES existing PlatedDish records,
+     * not just creates new ones.
+     *
+     * Test Data: plated_dish_update_horeca_field.xlsx
+     * - 1 product (PROD-UPDATE-HORECA-001)
+     * - 3 ingredients
+     * - ES HORECA = VERDADERO (updating from FALSE)
+     */
+    public function test_updates_is_horeca_field_when_reimporting_existing_plated_dish(): void
+    {
+        // ===== STEP 1: CREATE PRODUCT =====
+        $product = $this->createTestProduct('PROD-UPDATE-HORECA-001', 'Test Update HORECA Product');
+
+        // ===== STEP 2: CREATE EXISTING PLATED DISH WITH is_horeca = FALSE =====
+        $existingPlatedDish = PlatedDish::create([
+            'product_id' => $product->id,
+            'is_active' => true,
+            'is_horeca' => false, // Initially FALSE
+        ]);
+
+        // Create existing ingredients
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $existingPlatedDish->id,
+            'ingredient_name' => 'Old Ingredient 1',
+            'measure_unit' => 'GR',
+            'quantity' => 50,
+            'max_quantity_horeca' => 75,
+            'order_index' => 0,
+            'is_optional' => false,
+            'shelf_life' => 5,
+        ]);
+
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $existingPlatedDish->id,
+            'ingredient_name' => 'Old Ingredient 2',
+            'measure_unit' => 'ML',
+            'quantity' => 30,
+            'max_quantity_horeca' => 50,
+            'order_index' => 1,
+            'is_optional' => false,
+            'shelf_life' => 10,
+        ]);
+
+        // ===== STEP 3: VERIFY INITIAL STATE =====
+        $this->assertFalse(
+            $existingPlatedDish->is_horeca,
+            'PlatedDish should initially have is_horeca = FALSE'
+        );
+
+        $this->assertCount(
+            2,
+            $existingPlatedDish->ingredients,
+            'PlatedDish should initially have 2 ingredients'
+        );
+
+        // ===== STEP 4: IMPORT EXCEL WITH is_horeca = VERDADERO =====
+        // Excel has same product code but:
+        // - is_horeca = VERDADERO (changing from FALSE to TRUE)
+        // - 3 new ingredients (replacing the 2 old ones)
+        $testFile = base_path('tests/Fixtures/plated_dish_update_horeca_field.xlsx');
+        $importProcess = $this->runImport($testFile);
+
+        // ===== STEP 5: VERIFY is_horeca WAS UPDATED TO TRUE =====
+        $updatedPlatedDish = PlatedDish::where('product_id', $product->id)->first();
+
+        $this->assertNotNull($updatedPlatedDish, 'PlatedDish should still exist after import');
+
+        $this->assertEquals(
+            $existingPlatedDish->id,
+            $updatedPlatedDish->id,
+            'PlatedDish ID should remain the same (updated, not recreated)'
+        );
+
+        $this->assertTrue(
+            $updatedPlatedDish->is_horeca,
+            'PlatedDish.is_horeca should be updated to TRUE after import'
+        );
+
+        // ===== STEP 6: VERIFY INGREDIENTS WERE UPDATED (3 NEW INGREDIENTS) =====
+        $updatedIngredients = $updatedPlatedDish->ingredients()->orderBy('order_index')->get();
+
+        $this->assertCount(
+            3,
+            $updatedIngredients,
+            'PlatedDish should now have 3 ingredients (updated from 2)'
+        );
+
+        // Verify new ingredient names match Excel
+        $this->assertEquals('Ingredient A', $updatedIngredients[0]->ingredient_name);
+        $this->assertEquals('Ingredient B', $updatedIngredients[1]->ingredient_name);
+        $this->assertEquals('Ingredient C', $updatedIngredients[2]->ingredient_name);
+
+        // ===== STEP 7: VERIFY OLD INGREDIENTS WERE REMOVED =====
+        $oldIngredient1Exists = PlatedDishIngredient::where('plated_dish_id', $updatedPlatedDish->id)
+            ->where('ingredient_name', 'Old Ingredient 1')
+            ->exists();
+
+        $oldIngredient2Exists = PlatedDishIngredient::where('plated_dish_id', $updatedPlatedDish->id)
+            ->where('ingredient_name', 'Old Ingredient 2')
+            ->exists();
+
+        $this->assertFalse(
+            $oldIngredient1Exists,
+            'Old Ingredient 1 should be removed after import'
+        );
+
+        $this->assertFalse(
+            $oldIngredient2Exists,
+            'Old Ingredient 2 should be removed after import'
+        );
+
+        // ===== STEP 8: VERIFY IMPORT WAS SUCCESSFUL =====
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete successfully'
+        );
+    }
 }

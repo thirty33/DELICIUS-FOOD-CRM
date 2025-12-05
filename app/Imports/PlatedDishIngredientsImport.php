@@ -7,6 +7,7 @@ use App\Enums\MeasureUnit;
 use App\Models\ImportProcess;
 use App\Models\PlatedDishIngredient;
 use App\Repositories\ImportRecordTrackingRepository;
+use App\Support\ImportExport\PlatedDishIngredientsSchema;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -49,25 +50,9 @@ class PlatedDishIngredientsImport implements
     /**
      * Header mapping between Excel headers and internal field names.
      *
-     * Excel headers (Spanish, as they appear in the file):
-     * - Laravel Excel converts them to snake_case automatically
-     * - "CODIGO DE PRODUCTO" becomes "codigo_de_producto"
-     * - "NOMBRE DE PRODUCTO" becomes "nombre_de_producto"
-     * - "EMPLATADO" becomes "emplatado"
-     * - "UNIDAD DE MEDIDA" becomes "unidad_de_medida"
-     * - "CANTIDAD" becomes "cantidad"
-     * - "CANTIDAD MAXIMA (HORECA)" becomes "cantidad_maxima_horeca"
-     * - "VIDA UTIL" becomes "vida_util"
+     * NOTE: This is now centralized in PlatedDishIngredientsSchema class.
+     * Any changes to headers must be made in that class only.
      */
-    private $headingMap = [
-        'codigo_de_producto' => 'product_code',
-        'nombre_de_producto' => 'product_name',
-        'emplatado' => 'ingredient_code',
-        'unidad_de_medida' => 'measure_unit',
-        'cantidad' => 'quantity',
-        'cantidad_maxima_horeca' => 'max_quantity_horeca',
-        'vida_util' => 'shelf_life',
-    ];
 
     /**
      * Prepare data for validation by normalizing measure units
@@ -115,9 +100,13 @@ class PlatedDishIngredientsImport implements
                 continue;
             }
 
+            // Extract is_horeca from first row (all rows have same value for product-level field)
+            $isHoreca = $this->convertToBoolean($ingredientRows[0]['es_horeca'] ?? false);
+
             // Create or update PlatedDish (even if no ingredients)
             $platedDish = $this->repository->createOrUpdatePlatedDish($product->id, [
                 'is_active' => true,
+                'is_horeca' => $isHoreca,
             ]);
 
             // Check if product has any valid ingredients
@@ -226,15 +215,7 @@ class PlatedDishIngredientsImport implements
      */
     public function getExpectedHeaders(): array
     {
-        return [
-            'CODIGO DE PRODUCTO',
-            'NOMBRE DE PRODUCTO',
-            'EMPLATADO',
-            'UNIDAD DE MEDIDA',
-            'CANTIDAD',
-            'CANTIDAD MAXIMA (HORECA)',
-            'VIDA UTIL',
-        ];
+        return PlatedDishIngredientsSchema::getHeaderValues();
     }
 
     /**
@@ -244,7 +225,7 @@ class PlatedDishIngredientsImport implements
      */
     public function getHeadingMap(): array
     {
-        return $this->headingMap;
+        return PlatedDishIngredientsSchema::getHeadingMap();
     }
 
     /**
@@ -489,5 +470,35 @@ class PlatedDishIngredientsImport implements
 
             throw $e;
         }
+    }
+
+    /**
+     * Convert Excel boolean values to PHP boolean
+     *
+     * Handles various Excel representations of boolean values:
+     * - VERDADERO, FALSO (Spanish)
+     * - TRUE, FALSE (English)
+     * - 1, 0 (Numeric)
+     * - SI, NO (Spanish yes/no)
+     *
+     * @param mixed $value Excel cell value
+     * @return bool
+     */
+    private function convertToBoolean($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $value = strtoupper(trim($value));
+            return in_array($value, ['VERDADERO', 'TRUE', 'SI', 'YES', '1']);
+        }
+
+        if (is_numeric($value)) {
+            return $value == 1;
+        }
+
+        return false;
     }
 }

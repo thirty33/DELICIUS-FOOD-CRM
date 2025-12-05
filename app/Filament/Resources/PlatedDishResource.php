@@ -63,6 +63,12 @@ class PlatedDishResource extends Resource
                     ->label(__('Activo'))
                     ->default(true)
                     ->inline(false),
+
+                Forms\Components\Toggle::make('is_horeca')
+                    ->label(__('ES HORECA'))
+                    ->default(false)
+                    ->inline(false)
+                    ->helperText(__('Indica si este emplatado es para clientes del canal HORECA')),
             ]);
     }
 
@@ -103,6 +109,13 @@ class PlatedDishResource extends Resource
                     ->toggleable()
                     ->alignCenter(),
 
+                Tables\Columns\IconColumn::make('is_horeca')
+                    ->label(__('HORECA'))
+                    ->boolean()
+                    ->sortable()
+                    ->toggleable()
+                    ->alignCenter(),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->label(__('Creado'))
                     ->date('d/m/Y H:i')
@@ -128,6 +141,12 @@ class PlatedDishResource extends Resource
                     ->placeholder(__('Todos'))
                     ->trueLabel(__('Solo activos'))
                     ->falseLabel(__('Solo inactivos')),
+
+                Tables\Filters\TernaryFilter::make('is_horeca')
+                    ->label(__('HORECA'))
+                    ->placeholder(__('Todos'))
+                    ->trueLabel(__('Solo HORECA'))
+                    ->falseLabel(__('Solo no HORECA')),
             ])
             ->headerActions([
                 Tables\Actions\Action::make('import_plated_dish_ingredients')

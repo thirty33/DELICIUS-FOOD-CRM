@@ -3,6 +3,7 @@
 namespace Tests\Feature\Exports;
 
 use App\Exports\PlatedDishIngredientsTemplateExport;
+use App\Support\ImportExport\PlatedDishIngredientsSchema;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -53,16 +54,8 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
      */
     public function test_template_has_7_headers_in_correct_order(): void
     {
-        // Expected headers - MUST match PlatedDishIngredientsImport expectations (7 columns)
-        $expectedHeaders = [
-            'CODIGO DE PRODUCTO',      // 1
-            'NOMBRE DE PRODUCTO',      // 2
-            'EMPLATADO',               // 3 - Ingredient code
-            'UNIDAD DE MEDIDA',        // 4
-            'CANTIDAD',                // 5
-            'CANTIDAD MAXIMA (HORECA)', // 6
-            'VIDA UTIL',               // 7
-        ];
+        // Expected headers from PlatedDishIngredientsSchema (centralized)
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
 
         // Generate template file
         $filePath = $this->generateTemplate();
@@ -82,8 +75,9 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
             }
         }
 
-        // Assert we have exactly 7 headers
-        $this->assertCount(7, $actualHeaders, 'Template should have exactly 7 headers');
+        // Assert we have expected number of headers
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Template should have exactly {$expectedCount} headers");
 
         // Assert headers match exactly in correct order
         $this->assertEquals(
@@ -104,16 +98,8 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
      */
     public function test_template_includes_vida_util_header(): void
     {
-        // Expected headers - MUST match PlatedDishIngredientsImport expectations (7 columns)
-        $expectedHeaders = [
-            'CODIGO DE PRODUCTO',      // 1
-            'NOMBRE DE PRODUCTO',      // 2
-            'EMPLATADO',               // 3 - Ingredient code
-            'UNIDAD DE MEDIDA',        // 4
-            'CANTIDAD',                // 5
-            'CANTIDAD MAXIMA (HORECA)', // 6
-            'VIDA UTIL',               // 7 - NEW FIELD
-        ];
+        // Expected headers from PlatedDishIngredientsSchema (centralized)
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
 
         // Generate template file
         $filePath = $this->generateTemplate();
@@ -133,8 +119,9 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
             }
         }
 
-        // Assert we have exactly 7 headers
-        $this->assertCount(7, $actualHeaders, 'Template should have exactly 7 headers including VIDA UTIL');
+        // Assert we have expected number of headers
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Template should have exactly {$expectedCount} headers including VIDA UTIL");
 
         // Assert headers match exactly in correct order
         $this->assertEquals(
@@ -375,6 +362,78 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
             \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
             $vidaUtilStyle->getFill()->getFillType(),
             'VIDA UTIL header (G1) should have solid fill type'
+        );
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * Test that template includes es_horeca header "ES HORECA" as 8th column
+     *
+     * This test validates that the template export includes the new "ES HORECA" column
+     * to match the updated import expectations (8 columns instead of 7).
+     */
+    public function test_template_includes_es_horeca_header(): void
+    {
+        // Expected headers from PlatedDishIngredientsSchema (centralized)
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
+
+        // Generate template file
+        $filePath = $this->generateTemplate();
+
+        // Load Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Read headers from row 1
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        // Assert we have expected number of headers
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Template should have exactly {$expectedCount} headers including ES HORECA");
+
+        // Assert headers match exactly in correct order
+        $this->assertEquals(
+            $expectedHeaders,
+            $actualHeaders,
+            'Template headers MUST include ES HORECA as 8th column'
+        );
+
+        // Verify "ES HORECA" is in Column H (8th column)
+        $esHorecaHeader = $sheet->getCell('H1')->getValue();
+        $this->assertEquals(
+            'ES HORECA',
+            $esHorecaHeader,
+            'Column H should contain "ES HORECA" header'
+        );
+
+        // Verify "ES HORECA" header cell has proper styling (bold font, green background)
+        $esHorecaStyle = $sheet->getStyle('H1');
+
+        $this->assertTrue(
+            $esHorecaStyle->getFont()->getBold(),
+            'ES HORECA header (H1) should have bold font'
+        );
+
+        $this->assertEquals(
+            'E2EFDA',
+            $esHorecaStyle->getFill()->getStartColor()->getRGB(),
+            'ES HORECA header (H1) should have green background (#E2EFDA)'
+        );
+
+        $this->assertEquals(
+            \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            $esHorecaStyle->getFill()->getFillType(),
+            'ES HORECA header (H1) should have solid fill type'
         );
 
         // Clean up

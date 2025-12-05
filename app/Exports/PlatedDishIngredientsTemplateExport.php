@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Support\ImportExport\PlatedDishIngredientsSchema;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -35,24 +36,9 @@ class PlatedDishIngredientsTemplateExport implements FromArray, WithStyles, Shou
      * Headers matching PlatedDishIngredientsImport expected headers
      * IMPORTANT: These MUST match the import headings exactly (7 columns total)
      *
-     * From PlatedDishIngredientsImport::getExpectedHeaders():
-     * 1. CODIGO DE PRODUCTO
-     * 2. NOMBRE DE PRODUCTO
-     * 3. EMPLATADO (ingredient code)
-     * 4. UNIDAD DE MEDIDA
-     * 5. CANTIDAD
-     * 6. CANTIDAD MAXIMA (HORECA)
-     * 7. VIDA UTIL
+     * NOTE: Headers are now centralized in PlatedDishIngredientsSchema class.
+     * Any changes to headers must be made in that class only.
      */
-    private array $headers = [
-        'CODIGO DE PRODUCTO',
-        'NOMBRE DE PRODUCTO',
-        'EMPLATADO',
-        'UNIDAD DE MEDIDA',
-        'CANTIDAD',
-        'CANTIDAD MAXIMA (HORECA)',
-        'VIDA UTIL',
-    ];
 
     /**
      * Return array with only headers (no data rows)
@@ -61,7 +47,7 @@ class PlatedDishIngredientsTemplateExport implements FromArray, WithStyles, Shou
      */
     public function array(): array
     {
-        return [$this->headers];
+        return [PlatedDishIngredientsSchema::getHeaderValues()];
     }
 
     /**

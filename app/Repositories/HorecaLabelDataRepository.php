@@ -13,7 +13,7 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
      *
      * Business logic:
      * 1. Get all order lines from orders
-     * 2. Filter products that have plated dishes (HORECA products)
+     * 2. Filter products that have plated dishes (HORECA products with is_horeca = true)
      * 3. For each branch, calculate total quantity needed per ingredient
      * 4. Split labels based on max_quantity_horeca
      *
@@ -41,6 +41,12 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
                 }
 
                 $platedDish = $orderLine->product->platedDish;
+
+                // Skip if plated dish is not HORECA (is_horeca = false)
+                if (!$platedDish->is_horeca) {
+                    continue;
+                }
+
                 $branch = $order->user->branch ?? null;
 
                 // Skip if no branch found

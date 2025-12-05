@@ -147,6 +147,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDish = PlatedDish::create([
             'product_id' => $horecaProduct->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // Create ingredient: 300 GR per dish, max 1000 GR per label
@@ -255,6 +256,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDish = PlatedDish::create([
             'product_id' => $horecaProduct->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // Create ingredient: 300 GR per dish, max 1000 GR per label
@@ -363,6 +365,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDish = PlatedDish::create([
             'product_id' => $horecaProduct->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // Create ingredient 1: Solid (GR)
@@ -459,6 +462,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDishValid = PlatedDish::create([
             'product_id' => $horecaProductValid->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         PlatedDishIngredient::create([
@@ -500,6 +504,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         PlatedDish::create([
             'product_id' => $horecaProductNoIngredients->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
         // NO ingredients created for this plated dish
 
@@ -632,6 +637,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDishMZC = PlatedDish::create([
             'product_id' => $this->horecaProduct->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         PlatedDishIngredient::create([
@@ -864,6 +870,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDishBowl = PlatedDish::create([
             'product_id' => $productBowl->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // Bowl ingredients (low max limits to force splits)
@@ -910,6 +917,7 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $platedDishSalad = PlatedDish::create([
             'product_id' => $productSalad->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // Salad ingredients

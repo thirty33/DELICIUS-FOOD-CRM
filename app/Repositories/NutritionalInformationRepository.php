@@ -359,7 +359,7 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
     /**
      * Get products for label generation
      * Filters by product IDs and generate_label flag
-     * Excludes HORECA products (products with platedDish)
+     * Excludes HORECA products (products with platedDish where is_horeca = true)
      *
      * @param array $productIds
      * @param array $quantities Array with structure [product_id => quantity]. If empty, returns one instance per product.
@@ -372,7 +372,15 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
             ->whereHas('nutritionalInformation', function ($query) {
                 $query->where('generate_label', true);
             })
-            ->whereDoesntHave('platedDish')  // Exclude HORECA products (they have their own label system)
+            ->where(function ($query) {
+                // Include products that either:
+                // 1. Don't have a platedDish at all, OR
+                // 2. Have a platedDish but is_horeca = false
+                $query->whereDoesntHave('platedDish')
+                    ->orWhereHas('platedDish', function ($q) {
+                        $q->where('is_horeca', false);
+                    });
+            })
             ->get();
 
         // If no quantities specified, return products as-is (one per product)
@@ -395,7 +403,7 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
     /**
      * Calculate total number of labels that will be generated
      * Filters products by generate_label flag and sums their quantities
-     * Excludes HORECA products (products with platedDish)
+     * Excludes HORECA products (products with platedDish where is_horeca = true)
      *
      * @param array $productIds Array of product IDs
      * @param array $quantities Array with structure [product_id => quantity]
@@ -409,7 +417,15 @@ class NutritionalInformationRepository implements NutritionalInformationReposito
             ->whereHas('nutritionalInformation', function ($query) {
                 $query->where('generate_label', true);
             })
-            ->whereDoesntHave('platedDish')  // Exclude HORECA products
+            ->where(function ($query) {
+                // Include products that either:
+                // 1. Don't have a platedDish at all, OR
+                // 2. Have a platedDish but is_horeca = false
+                $query->whereDoesntHave('platedDish')
+                    ->orWhereHas('platedDish', function ($q) {
+                        $q->where('is_horeca', false);
+                    });
+            })
             ->pluck('id')
             ->toArray();
 
