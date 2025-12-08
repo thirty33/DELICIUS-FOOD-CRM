@@ -36,6 +36,7 @@ class ExportProcess extends Model
     const TYPE_VOUCHERS = 'vouchers';
     const TYPE_NUTRITIONAL_INFORMATION = 'informacion nutricional';
     const TYPE_PLATED_DISH_INGREDIENTS = 'emplatados';
+    const TYPE_CONSOLIDADO_EMPLATADO = 'consolidado emplatado';
 
     // Constantes para los estados
     const STATUS_QUEUED = 'en cola';
@@ -64,6 +65,7 @@ class ExportProcess extends Model
             self::TYPE_VOUCHERS,
             self::TYPE_NUTRITIONAL_INFORMATION,
             self::TYPE_PLATED_DISH_INGREDIENTS,
+            self::TYPE_CONSOLIDADO_EMPLATADO,
         ];
     }
 

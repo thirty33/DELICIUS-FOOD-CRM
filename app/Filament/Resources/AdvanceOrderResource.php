@@ -4,14 +4,17 @@ namespace App\Filament\Resources;
 
 use App\Enums\AdvanceOrderStatus;
 use App\Exports\AdvanceOrderReportExport;
+use App\Exports\ConsolidadoEmplatadoDataExport;
 use App\Filament\Resources\AdvanceOrderResource\Pages;
 use App\Filament\Resources\AdvanceOrderResource\RelationManagers;
 use App\Forms\AdvanceOrderReportOptionsForm;
 use App\Models\AdvanceOrder;
 use App\Models\ExportProcess;
+use App\Services\ExportService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
@@ -205,6 +208,7 @@ class AdvanceOrderResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\BulkAction::make('generate_consolidated_report')
+                        ->extraAttributes(['class' => 'whitespace-nowrap'])
                         ->label('Generar reporte consolidado')
                         ->icon('heroicon-o-document-arrow-down')
                         ->color('success')
@@ -297,7 +301,118 @@ class AdvanceOrderResource extends Resource
                             }
                         })
                         ->deselectRecordsAfterCompletion(),
-                ]),
+                    Tables\Actions\BulkAction::make('generate_consolidado_emplatado_report')
+                        ->extraAttributes(['class' => 'whitespace-nowrap'])
+                        ->label('Generar reporte consolidado emplatado')
+                        ->icon('heroicon-o-document-text')
+                        ->color('info')
+                        ->action(function (Collection $records, ExportService $exportService, \App\Repositories\ConsolidadoEmplatadoRepository $repository) {
+                            Log::info('=== CONSOLIDADO EMPLATADO BULK ACTION STARTED ===', [
+                                'records_count' => $records->count(),
+                            ]);
+
+                            try {
+                                // Filter only EXECUTED advance orders
+                                $executedRecords = $records->filter(function ($record) {
+                                    return $record->status === \App\Enums\AdvanceOrderStatus::EXECUTED;
+                                });
+
+                                Log::info('Filtered EXECUTED records', [
+                                    'total_records' => $records->count(),
+                                    'executed_records' => $executedRecords->count(),
+                                ]);
+
+                                // Get advance order IDs from executed records only
+                                $advanceOrderIds = $executedRecords->pluck('id');
+
+                                if ($advanceOrderIds->isEmpty()) {
+                                    Log::warning('No executed records found');
+                                    \Filament\Notifications\Notification::make()
+                                        ->warning()
+                                        ->title('Sin órdenes ejecutadas')
+                                        ->body('Solo se pueden generar reportes de órdenes de producción ejecutadas. Por favor, selecciona al menos una OP con estado "Ejecutado".')
+                                        ->send();
+                                    return;
+                                }
+
+                                // Notify if some records were filtered out
+                                $filteredCount = $records->count() - $executedRecords->count();
+                                if ($filteredCount > 0) {
+                                    Log::info('Some records filtered out', ['filtered_count' => $filteredCount]);
+                                    \Filament\Notifications\Notification::make()
+                                        ->info()
+                                        ->title('Registros filtrados')
+                                        ->body("Se excluyeron {$filteredCount} OP(s) que no están en estado ejecutado.")
+                                        ->send();
+                                }
+
+                                Log::info('Advance order IDs', [
+                                    'ids' => $advanceOrderIds->toArray(),
+                                ]);
+
+                                // Extract branch names BEFORE creating export (critical for queue serialization)
+                                Log::info('Extracting branch names from advance orders...');
+                                $branchNames = $repository->getBranchNamesFromAdvanceOrders($advanceOrderIds->toArray());
+                                Log::info('Branch names extracted', [
+                                    'branch_names' => $branchNames,
+                                    'count' => count($branchNames),
+                                ]);
+
+                                // Generate filename
+                                $idsString = $advanceOrderIds->implode('-');
+                                $fileName = "exports/consolidado-emplatado/consolidado-emplatado-{$idsString}-" . now()->format('Y-m-d-His') . '.xlsx';
+                                Log::info('Generated filename', ['filename' => $fileName]);
+
+                                // Execute export via ExportService (creates ExportProcess and generates file)
+                                Log::info('Calling ExportService->export()...', [
+                                    'exporter_class' => ConsolidadoEmplatadoDataExport::class,
+                                    'advance_order_ids' => $advanceOrderIds->toArray(),
+                                    'branch_names' => $branchNames,
+                                ]);
+
+                                $exportProcess = $exportService->export(
+                                    ConsolidadoEmplatadoDataExport::class,
+                                    $advanceOrderIds,
+                                    ExportProcess::TYPE_CONSOLIDADO_EMPLATADO,
+                                    $fileName,
+                                    [$branchNames], // Pass branch names as additional argument
+                                    's3' // Store to S3
+                                );
+
+                                Log::info('ExportService->export() completed', [
+                                    'export_process_id' => $exportProcess->id,
+                                    'export_process_status' => $exportProcess->status,
+                                    'export_process_file_url' => $exportProcess->file_url,
+                                ]);
+
+                                // Export is queued - show success message
+                                // The queue worker will process it and update the status
+                                Log::info('Export queued successfully, will be processed by queue worker');
+                                \Filament\Notifications\Notification::make()
+                                    ->success()
+                                    ->title('Exportación iniciada')
+                                    ->body('El reporte de consolidado emplatado se está generando en segundo plano. Recibirás una notificación cuando esté listo.')
+                                    ->send();
+
+                            } catch (\Exception $e) {
+                                Log::error('=== EXCEPTION IN CONSOLIDADO EMPLATADO BULK ACTION ===', [
+                                    'error_message' => $e->getMessage(),
+                                    'error_file' => $e->getFile(),
+                                    'error_line' => $e->getLine(),
+                                    'trace' => $e->getTraceAsString(),
+                                ]);
+
+                                \Filament\Notifications\Notification::make()
+                                    ->danger()
+                                    ->title('Error')
+                                    ->body('Error al iniciar la exportación: ' . $e->getMessage())
+                                    ->send();
+                            }
+
+                            Log::info('=== CONSOLIDADO EMPLATADO BULK ACTION FINISHED ===');
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                ])->dropdownWidth(MaxWidth::ExtraSmall)
             ])
             ->defaultSort('created_at', 'desc');
     }

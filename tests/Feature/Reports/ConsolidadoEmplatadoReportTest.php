@@ -4,9 +4,11 @@ namespace Tests\Feature\Reports;
 
 use App\Enums\AdvanceOrderStatus;
 use App\Enums\OrderStatus;
+use App\Exports\ConsolidadoEmplatadoDataExport;
 use App\Models\AdvanceOrder;
 use App\Repositories\OrderRepository;
 use App\Repositories\ConsolidadoEmplatadoRepository;
+use App\Support\ImportExport\ConsolidadoEmplatadoSchema;
 use App\Models\AdvanceOrderOrder;
 use App\Models\AdvanceOrderOrderLine;
 use App\Models\Branch;
@@ -22,6 +24,7 @@ use App\Models\Product;
 use App\Models\ProductionArea;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 /**
@@ -90,6 +93,7 @@ class ConsolidadoEmplatadoReportTest extends TestCase
         $platedDish = PlatedDish::create([
             'product_id' => $product->id,
             'is_active' => true,
+            'is_horeca' => true,
         ]);
 
         // 5. CREATE INGREDIENTS (2 ingredients)
@@ -535,5 +539,174 @@ class ConsolidadoEmplatadoReportTest extends TestCase
             '1 BOLSA DE 320 GRAMOS',
             '1 BOLSA DE 180 GRAMOS',
         ], $ingredient2['total_bolsas']);
+
+        // ====================================================================
+        // 15. TEST FLAT FORMAT - Validate Excel-ready format
+        // ====================================================================
+
+        // Reset schema before test (cleanup from previous calls)
+        ConsolidadoEmplatadoSchema::resetClientColumns();
+
+        // Configure schema with branch names BEFORE getting flat data
+        // This is now required since Repository no longer configures schema automatically
+        $branchNamesForSchema = $consolidadoRepository->getBranchNamesFromAdvanceOrders([$advanceOrder->id]);
+        ConsolidadoEmplatadoSchema::setClientColumns($branchNamesForSchema);
+
+        // Get flat format data
+        $flatData = $consolidadoRepository->getConsolidatedPlatedDishData([$advanceOrder->id], true);
+
+        // Verify flat data structure
+        $this->assertIsArray($flatData);
+        $this->assertCount(3, $flatData); // 2 ingredient rows + 1 totals row
+
+        // Verify schema was configured with branches
+        $configuredBranches = ConsolidadoEmplatadoSchema::getClientColumns();
+        $this->assertCount(4, $configuredBranches);
+        $this->assertArrayHasKey('client_aliace_horeca', $configuredBranches);
+        $this->assertArrayHasKey('client_otero_horeca', $configuredBranches);
+        $this->assertArrayHasKey('client_unicon_lo_espejo', $configuredBranches);
+        $this->assertArrayHasKey('client_unicon_panamerica', $configuredBranches);
+
+        // Verify schema headers
+        $headers = ConsolidadoEmplatadoSchema::getHeaders();
+        $this->assertArrayHasKey('plato', $headers);
+        $this->assertArrayHasKey('ingrediente', $headers);
+        $this->assertArrayHasKey('cantidad_x_pax', $headers);
+        $this->assertArrayHasKey('individual', $headers);
+        $this->assertArrayHasKey('client_aliace_horeca', $headers);
+        $this->assertArrayHasKey('client_otero_horeca', $headers);
+        $this->assertArrayHasKey('client_unicon_lo_espejo', $headers);
+        $this->assertArrayHasKey('client_unicon_panamerica', $headers);
+        $this->assertArrayHasKey('total_horeca', $headers);
+        $this->assertArrayHasKey('total_bolsas', $headers);
+
+        // ====================================================================
+        // ROW 1: INGREDIENT 1 (Tomaticán)
+        // ====================================================================
+        $row1 = $flatData[0];
+
+        // Fixed prefix columns
+        $this->assertEquals('HORECA TOMATICAN DE VACUNO CON ARROZ CASERO', $row1['plato']);
+        $this->assertEquals('MZC - TOMATICAN DE VACUNO GRANEL', $row1['ingrediente']);
+        $this->assertEquals('200 GRAMOS', $row1['cantidad_x_pax']);
+        $this->assertEquals('0', $row1['individual']);
+
+        // Dynamic client columns (sorted alphabetically: ALIACE, OTERO, UNICON LE, UNICON PA)
+        $this->assertEquals("3 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 800 GRAMOS", $row1['client_aliace_horeca']);
+        $this->assertEquals("1 BOLSA DE 1000 GRAMOS\n1 BOLSA DE 200 GRAMOS", $row1['client_otero_horeca']);
+        $this->assertEquals("8 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 800 GRAMOS", $row1['client_unicon_lo_espejo']);
+        $this->assertEquals("5 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 200 GRAMOS", $row1['client_unicon_panamerica']);
+
+        // Fixed suffix columns
+        $this->assertEquals('95', $row1['total_horeca']);
+        $this->assertEquals("17 BOLSAS DE 1000 GRAMOS\n2 BOLSAS DE 800 GRAMOS\n2 BOLSAS DE 200 GRAMOS", $row1['total_bolsas']);
+
+        // ====================================================================
+        // ROW 2: INGREDIENT 2 (Arroz) - plato should be empty
+        // ====================================================================
+        $row2 = $flatData[1];
+
+        // Fixed prefix columns
+        $this->assertEquals('', $row2['plato']); // Empty for second ingredient
+        $this->assertEquals('MZC - ARROZ CASERO', $row2['ingrediente']);
+        $this->assertEquals('220 GRAMOS', $row2['cantidad_x_pax']);
+        $this->assertEquals('0', $row2['individual']);
+
+        // Dynamic client columns
+        $this->assertEquals("4 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 180 GRAMOS", $row2['client_aliace_horeca']);
+        $this->assertEquals("1 BOLSA DE 1000 GRAMOS\n1 BOLSA DE 320 GRAMOS", $row2['client_otero_horeca']);
+        $this->assertEquals("9 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 680 GRAMOS", $row2['client_unicon_lo_espejo']);
+        $this->assertEquals("5 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 720 GRAMOS", $row2['client_unicon_panamerica']);
+
+        // Fixed suffix columns
+        $this->assertEquals('95', $row2['total_horeca']);
+        $this->assertEquals("19 BOLSAS DE 1000 GRAMOS\n1 BOLSA DE 720 GRAMOS\n1 BOLSA DE 680 GRAMOS\n1 BOLSA DE 320 GRAMOS\n1 BOLSA DE 180 GRAMOS", $row2['total_bolsas']);
+
+        // Verify all keys in rows match schema keys
+        $schemaKeys = ConsolidadoEmplatadoSchema::getHeaderKeys();
+        $this->assertEquals($schemaKeys, array_keys($row1));
+        $this->assertEquals($schemaKeys, array_keys($row2));
+
+        // ====================================================================
+        // 16. TEST EXCEL EXPORT - Generate actual Excel file
+        // ====================================================================
+
+        // Reset schema again before export
+        ConsolidadoEmplatadoSchema::resetClientColumns();
+
+        // Extract branch names for export
+        $branchNames = $consolidadoRepository->getBranchNamesFromAdvanceOrders([$advanceOrder->id]);
+
+        // Create export instance with branch names
+        $export = new ConsolidadoEmplatadoDataExport(collect([$advanceOrder->id]), $branchNames, 999);
+
+        // Ensure test-exports directory exists
+        $testExportsDir = storage_path('app/test-exports');
+        if (!is_dir($testExportsDir)) {
+            mkdir($testExportsDir, 0755, true);
+        }
+
+        // Generate Excel file
+        $fileName = 'test-exports/consolidado-emplatado-' . now()->format('Y-m-d-His') . '.xlsx';
+        $filePath = storage_path('app/' . $fileName);
+
+        // Store using Laravel Excel
+        $export->store($fileName, 'local');
+
+        // Verify file exists
+        $this->assertFileExists($filePath, "Excel file should be created at {$filePath}");
+
+        // Load Excel file using PhpSpreadsheet
+        $spreadsheet = IOFactory::load($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Verify title (row 1)
+        $this->assertEquals('CONSOLIDADO DE INGREDIENTES - EMPLATADO', $sheet->getCellByColumnAndRow(1, 1)->getValue());
+
+        // Verify date row (row 2)
+        $dateValue = $sheet->getCellByColumnAndRow(1, 2)->getValue();
+        $this->assertStringContainsString('FECHA:', $dateValue);
+
+        // Verify headers (row 3)
+        $expectedHeaders = array_values(ConsolidadoEmplatadoSchema::getHeaders());
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 3)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        $this->assertEquals($expectedHeaders, $actualHeaders, 'Excel headers should match schema headers');
+
+        // Verify row count (1 title + 1 date + 1 header + 2 ingredient rows + 1 totals row)
+        $lastRow = $sheet->getHighestRow();
+        $this->assertEquals(6, $lastRow, 'Should have 1 title + 1 date + 1 header + 2 ingredient rows + 1 totals row');
+
+        // Verify data row 4 (Ingredient 1: Tomaticán)
+        $this->assertEquals('HORECA TOMATICAN DE VACUNO CON ARROZ CASERO', $sheet->getCellByColumnAndRow(1, 4)->getValue());
+        $this->assertEquals('MZC - TOMATICAN DE VACUNO GRANEL', $sheet->getCellByColumnAndRow(2, 4)->getValue());
+        $this->assertEquals('200 GRAMOS', $sheet->getCellByColumnAndRow(3, 4)->getValue());
+        $this->assertEquals('0', $sheet->getCellByColumnAndRow(4, 4)->getValue());
+
+        // Verify data row 5 (Ingredient 2: Arroz) - plato should be empty
+        $this->assertEquals('', $sheet->getCellByColumnAndRow(1, 5)->getValue());
+        $this->assertEquals('MZC - ARROZ CASERO', $sheet->getCellByColumnAndRow(2, 5)->getValue());
+        $this->assertEquals('220 GRAMOS', $sheet->getCellByColumnAndRow(3, 5)->getValue());
+        $this->assertEquals('0', $sheet->getCellByColumnAndRow(4, 5)->getValue());
+
+        // Print absolute file path for user verification
+        echo "\n\n";
+        echo "====================================================================\n";
+        echo "✅ EXCEL FILE GENERATED SUCCESSFULLY\n";
+        echo "====================================================================\n";
+        echo "Absolute Path: {$filePath}\n";
+        echo "====================================================================\n";
+        echo "\n\n";
+
+        // DO NOT delete the file - user wants to review it manually
+        // File will remain at: /home/joel/DELICIUS-FOOD-CRM/storage/app/test-exports/consolidado-emplatado-*.xlsx
     }
 }

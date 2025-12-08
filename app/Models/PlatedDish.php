@@ -14,6 +14,7 @@ class PlatedDish extends Model
         'product_id',
         'is_active',
         'is_horeca',
+        'related_product_id',
     ];
 
     protected $casts = [
@@ -67,5 +68,14 @@ class PlatedDish extends Model
     public function getIngredientsCount(): int
     {
         return $this->ingredients()->count();
+    }
+
+    /**
+     * Get the related INDIVIDUAL product
+     * Only applicable for HORECA products (is_horeca = true)
+     */
+    public function relatedProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'related_product_id');
     }
 }
