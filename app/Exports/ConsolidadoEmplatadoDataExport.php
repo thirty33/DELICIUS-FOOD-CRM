@@ -46,13 +46,7 @@ class ConsolidadoEmplatadoDataExport implements
 
     public function __construct(Collection $advanceOrderIds, array $branchNames, int $exportProcessId)
     {
-        \Log::info('=== ConsolidadoEmplatadoDataExport CONSTRUCTOR CALLED ===', [
-            'advance_order_ids' => $advanceOrderIds->toArray(),
-            'branch_names' => $branchNames,
-            'branch_names_count' => count($branchNames),
-            'export_process_id' => $exportProcessId,
-        ]);
-
+        
         $this->advanceOrderIds = $advanceOrderIds->toArray();
         $this->branchNames = $branchNames;
         $this->exportProcessId = $exportProcessId;
@@ -70,13 +64,10 @@ class ConsolidadoEmplatadoDataExport implements
 
         // Configure schema with branch names BEFORE getting data
         // This is critical for queue serialization - branch names are stored as property
-        \Log::info('Configuring schema with branch names...', ['branch_names' => $this->branchNames]);
         ConsolidadoEmplatadoSchema::setClientColumns($this->branchNames);
 
         // Get flat format data
-        \Log::info('Getting flat format data from repository...');
         $this->flatData = $this->repository->getConsolidatedPlatedDishData($this->advanceOrderIds, true);
-        \Log::info('Flat data retrieved', ['row_count' => count($this->flatData)]);
     }
 
     /**
@@ -84,19 +75,7 @@ class ConsolidadoEmplatadoDataExport implements
      */
     public function collection(): Collection
     {
-        \Log::info('=== collection() method called ===', [
-            'branch_names' => $this->branchNames,
-            'branch_names_count' => count($this->branchNames),
-        ]);
-
-        // Re-configure schema (in case this is called after queue deserialization)
-        \Log::info('Re-configuring schema with branch names...');
-        ConsolidadoEmplatadoSchema::setClientColumns($this->branchNames);
-
-        \Log::info('Schema configured. Headers:', [
-            'headers' => ConsolidadoEmplatadoSchema::getHeaders(),
-        ]);
-
+        
         // Get total column count from schema
         $columnCount = count(ConsolidadoEmplatadoSchema::getHeaders());
 
@@ -278,15 +257,7 @@ class ConsolidadoEmplatadoDataExport implements
                 // TOTAL HORECA is second-to-last column (columnCount - 1), TOTAL BOLSAS is last (columnCount)
                 $totalHorecaColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnCount - 1); // e.g., column 13 = M
                 $totalBolsasColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnCount); // e.g., column 14 = N
-
-                \Log::info('AfterSheet: Column positions for styling', [
-                    'branchNames' => $this->branchNames,
-                    'columnCount' => $columnCount,
-                    'totalHorecaColumn' => $totalHorecaColumn,
-                    'totalBolsasColumn' => $totalBolsasColumn,
-                    'highestColumn' => $highestColumn,
-                ]);
-
+                
                 // Step 0: Merge title row (row 1) across all columns
                 $sheet->mergeCells("A1:{$highestColumn}1");
 

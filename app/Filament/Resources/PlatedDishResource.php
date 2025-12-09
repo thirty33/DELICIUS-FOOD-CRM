@@ -68,7 +68,26 @@ class PlatedDishResource extends Resource
                     ->label(__('ES HORECA'))
                     ->default(false)
                     ->inline(false)
-                    ->helperText(__('Indica si este emplatado es para clientes del canal HORECA')),
+                    ->helperText(__('Indica si este emplatado es para clientes del canal HORECA'))
+                    ->live(),
+
+                Forms\Components\Select::make('related_product_id')
+                    ->label(__('Producto Relacionado'))
+                    ->options(function (Forms\Get $get, ?PlatedDish $record, \App\Contracts\PlatedDishRepositoryInterface $repository) {
+                        $isHoreca = (bool) $get('is_horeca');
+                        $excludeProductId = $record?->product_id;
+
+                        return $repository->getRelatedProductOptions($isHoreca, $excludeProductId);
+                    })
+                    ->searchable()
+                    ->preload()
+                    ->nullable()
+                    ->helperText(function (Forms\Get $get) {
+                        $isHoreca = (bool) $get('is_horeca');
+                        return $isHoreca
+                            ? __('Selecciona el producto INDIVIDUAL relacionado (solo productos NO HORECA con ingredientes)')
+                            : __('Selecciona el producto HORECA relacionado (solo productos HORECA con ingredientes)');
+                    }),
             ]);
     }
 

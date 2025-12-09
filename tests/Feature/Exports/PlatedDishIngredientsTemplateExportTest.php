@@ -441,6 +441,82 @@ class PlatedDishIngredientsTemplateExportTest extends TestCase
     }
 
     /**
+     * Test that template includes producto_relacionado header "PRODUCTO RELACIONADO" as 9th column
+     *
+     * This test validates that the template export includes the new "PRODUCTO RELACIONADO" column
+     * to match the updated import expectations (9 columns instead of 8).
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because PlatedDishIngredientsTemplateExport does not export
+     * "PRODUCTO RELACIONADO" column yet.
+     */
+    public function test_template_includes_producto_relacionado_header(): void
+    {
+        // Expected headers from PlatedDishIngredientsSchema (centralized)
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
+
+        // Generate template file
+        $filePath = $this->generateTemplate();
+
+        // Load Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Read headers from row 1
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        // Assert we have expected number of headers (9 columns)
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Template should have exactly {$expectedCount} headers including PRODUCTO RELACIONADO");
+
+        // Assert headers match exactly in correct order
+        $this->assertEquals(
+            $expectedHeaders,
+            $actualHeaders,
+            'Template headers MUST include PRODUCTO RELACIONADO as 9th column'
+        );
+
+        // Verify "PRODUCTO RELACIONADO" is in Column I (9th column)
+        $productoRelacionadoHeader = $sheet->getCell('I1')->getValue();
+        $this->assertEquals(
+            'PRODUCTO RELACIONADO',
+            $productoRelacionadoHeader,
+            'Column I should contain "PRODUCTO RELACIONADO" header'
+        );
+
+        // Verify "PRODUCTO RELACIONADO" header cell has proper styling (bold font, green background)
+        $productoRelacionadoStyle = $sheet->getStyle('I1');
+
+        $this->assertTrue(
+            $productoRelacionadoStyle->getFont()->getBold(),
+            'PRODUCTO RELACIONADO header (I1) should have bold font'
+        );
+
+        $this->assertEquals(
+            'E2EFDA',
+            $productoRelacionadoStyle->getFill()->getStartColor()->getRGB(),
+            'PRODUCTO RELACIONADO header (I1) should have green background (#E2EFDA)'
+        );
+
+        $this->assertEquals(
+            \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            $productoRelacionadoStyle->getFill()->getFillType(),
+            'PRODUCTO RELACIONADO header (I1) should have solid fill type'
+        );
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
      * Helper: Generate plated dish ingredients template file
      *
      * @return string Path to generated file

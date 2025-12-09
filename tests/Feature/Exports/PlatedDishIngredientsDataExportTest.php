@@ -690,4 +690,230 @@ class PlatedDishIngredientsDataExportTest extends TestCase
         // Clean up
         $this->cleanupTestFile($filePath);
     }
+
+    /**
+     * Test that export includes related_product_id field with correct values
+     *
+     * This test validates that the 9th column "PRODUCTO RELACIONADO" is included
+     * in the export and that related_product_id values from database are exported
+     * correctly as product codes.
+     *
+     * EXPECTED STRUCTURE:
+     * - Headers: 9 columns including "PRODUCTO RELACIONADO" as the last column
+     * - Data: Each product row includes related product CODE in Column I
+     * - Values: Product code of the related product, or empty if no related product
+     *
+     * IMPORTANT:
+     * - related_product_id is a PLATED DISH level field (not ingredient level)
+     * - All ingredient rows for the same product MUST have the same related product value
+     * - Product with 3 ingredients = 3 rows with same related product code
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because PlatedDishIngredientsDataExport does not export
+     * "PRODUCTO RELACIONADO" column yet.
+     */
+    public function test_export_includes_related_product_field_with_correct_values(): void
+    {
+        // ===== 1. CREATE TEST DATA WITH RELATED PRODUCTS =====
+
+        // Create related product (NON-HORECA individual product)
+        $relatedProduct = Product::create([
+            'code' => 'INDIVIDUAL-PROD-001',
+            'name' => 'Individual Product for Related',
+            'description' => 'Test individual product used as related',
+            'price' => 5000,
+            'category_id' => $this->category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+            'active' => true,
+        ]);
+
+        // Create PlatedDish for related product (NON-HORECA)
+        $relatedPlatedDish = PlatedDish::create([
+            'product_id' => $relatedProduct->id,
+            'is_active' => true,
+            'is_horeca' => false,
+        ]);
+
+        // Add an ingredient to related product so it's valid
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $relatedPlatedDish->id,
+            'ingredient_name' => 'Related Ingredient',
+            'measure_unit' => 'GR',
+            'quantity' => 50,
+            'order_index' => 0,
+            'is_optional' => false,
+        ]);
+
+        // Product 1: HORECA with related product (3 ingredients)
+        $product1 = Product::create([
+            'code' => 'HORECA-WITH-RELATED-001',
+            'name' => 'HORECA Product With Related',
+            'description' => 'Test HORECA product with related product',
+            'price' => 15000,
+            'category_id' => $this->category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+            'active' => true,
+        ]);
+
+        $platedDish1 = PlatedDish::create([
+            'product_id' => $product1->id,
+            'is_active' => true,
+            'is_horeca' => true,
+            'related_product_id' => $relatedProduct->id, // Has related product
+        ]);
+
+        // Create 3 ingredients for Product 1
+        for ($i = 1; $i <= 3; $i++) {
+            PlatedDishIngredient::create([
+                'plated_dish_id' => $platedDish1->id,
+                'ingredient_name' => "RELATED-ING-{$i}",
+                'measure_unit' => 'GR',
+                'quantity' => 100 * $i,
+                'max_quantity_horeca' => 150 * $i,
+                'order_index' => $i - 1,
+                'is_optional' => false,
+                'shelf_life' => 7 * $i,
+            ]);
+        }
+
+        // Product 2: HORECA without related product (2 ingredients)
+        $product2 = Product::create([
+            'code' => 'HORECA-NO-RELATED-001',
+            'name' => 'HORECA Product Without Related',
+            'description' => 'Test HORECA product without related product',
+            'price' => 12000,
+            'category_id' => $this->category->id,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+            'active' => true,
+        ]);
+
+        $platedDish2 = PlatedDish::create([
+            'product_id' => $product2->id,
+            'is_active' => true,
+            'is_horeca' => true,
+            'related_product_id' => null, // No related product
+        ]);
+
+        // Create 2 ingredients for Product 2
+        for ($i = 1; $i <= 2; $i++) {
+            PlatedDishIngredient::create([
+                'plated_dish_id' => $platedDish2->id,
+                'ingredient_name' => "NO-RELATED-ING-{$i}",
+                'measure_unit' => 'ML',
+                'quantity' => 50 * $i,
+                'max_quantity_horeca' => 75 * $i,
+                'order_index' => $i - 1,
+                'is_optional' => false,
+                'shelf_life' => 15 * $i,
+            ]);
+        }
+
+        // ===== 2. GENERATE EXPORT FILE =====
+        $platedDishIds = collect([$platedDish1->id, $platedDish2->id]);
+        $filePath = $this->generatePlatedDishExport($platedDishIds);
+
+        // Load Excel file
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // ===== 3. VERIFY HEADERS INCLUDE "PRODUCTO RELACIONADO" =====
+        $expectedHeaders = PlatedDishIngredientsSchema::getHeaderValues();
+
+        // Read headers from row 1
+        $actualHeaders = [];
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $headerValue = $sheet->getCellByColumnAndRow($col, 1)->getValue();
+            if ($headerValue) {
+                $actualHeaders[] = $headerValue;
+            }
+        }
+
+        // Assert we have 9 headers including PRODUCTO RELACIONADO
+        $expectedCount = PlatedDishIngredientsSchema::getHeaderCount();
+        $this->assertCount($expectedCount, $actualHeaders, "Should have exactly {$expectedCount} headers including PRODUCTO RELACIONADO");
+
+        // Assert headers match exactly
+        $this->assertEquals(
+            $expectedHeaders,
+            $actualHeaders,
+            'Export headers MUST include PRODUCTO RELACIONADO as 9th column'
+        );
+
+        // Verify "PRODUCTO RELACIONADO" is in Column I (9th column)
+        $productoRelacionadoHeader = $sheet->getCell('I1')->getValue();
+        $this->assertEquals(
+            'PRODUCTO RELACIONADO',
+            $productoRelacionadoHeader,
+            'Column I should contain "PRODUCTO RELACIONADO" header'
+        );
+
+        // ===== 4. VERIFY PRODUCT 1 RELATED PRODUCT VALUES (3 ROWS - ALL SAME CODE) =====
+        // Rows 2-4 are for Product 1 (3 ingredients)
+        for ($row = 2; $row <= 4; $row++) {
+            // Column I: PRODUCTO RELACIONADO
+            $excelRelatedProduct = $sheet->getCell("I{$row}")->getValue();
+
+            $this->assertNotNull(
+                $excelRelatedProduct,
+                "Row {$row}: related_product should not be null in Excel for Product 1"
+            );
+
+            $this->assertEquals(
+                $relatedProduct->code,
+                $excelRelatedProduct,
+                "Row {$row}: Product 1 related_product should be '{$relatedProduct->code}' in Excel"
+            );
+        }
+
+        // ===== 5. VERIFY PRODUCT 2 HAS EMPTY RELATED PRODUCT (2 ROWS - ALL EMPTY) =====
+        // Rows 5-6 are for Product 2 (2 ingredients)
+        for ($row = 5; $row <= 6; $row++) {
+            // Column I: PRODUCTO RELACIONADO
+            $excelRelatedProduct = $sheet->getCell("I{$row}")->getValue();
+
+            $this->assertTrue(
+                $excelRelatedProduct === null || $excelRelatedProduct === '',
+                "Row {$row}: Product 2 related_product should be empty in Excel (no related product)"
+            );
+        }
+
+        // ===== 6. VERIFY RELATED PRODUCT VALUES ARE CONSISTENT PER PRODUCT =====
+        // Product 1: All 3 rows should have same related product code
+        $product1Row1Related = $sheet->getCell('I2')->getValue();
+        $product1Row2Related = $sheet->getCell('I3')->getValue();
+        $product1Row3Related = $sheet->getCell('I4')->getValue();
+
+        $this->assertEquals(
+            $product1Row1Related,
+            $product1Row2Related,
+            'Product 1: All ingredient rows must have same related_product value (row 2 vs row 3)'
+        );
+
+        $this->assertEquals(
+            $product1Row1Related,
+            $product1Row3Related,
+            'Product 1: All ingredient rows must have same related_product value (row 2 vs row 4)'
+        );
+
+        // Product 2: All 2 rows should have same (empty) value
+        $product2Row1Related = $sheet->getCell('I5')->getValue();
+        $product2Row2Related = $sheet->getCell('I6')->getValue();
+
+        $this->assertEquals(
+            $product2Row1Related,
+            $product2Row2Related,
+            'Product 2: All ingredient rows must have same related_product value (both empty)'
+        );
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
 }

@@ -49,6 +49,7 @@ class PlatedDishIngredientsSchema
             'cantidad_maxima_horeca' => 'CANTIDAD MAXIMA (HORECA)',
             'vida_util' => 'VIDA UTIL',
             'es_horeca' => 'ES HORECA',
+            'producto_relacionado' => 'PRODUCTO RELACIONADO',
         ];
     }
 
@@ -83,6 +84,7 @@ class PlatedDishIngredientsSchema
             'cantidad' => 'quantity',
             'cantidad_maxima_horeca' => 'max_quantity_horeca',
             'vida_util' => 'shelf_life',
+            'producto_relacionado' => 'related_product_code',
         ];
     }
 

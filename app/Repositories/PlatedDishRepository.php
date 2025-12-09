@@ -93,4 +93,37 @@ class PlatedDishRepository implements PlatedDishRepositoryInterface
             ->with(['ingredients', 'product'])
             ->get();
     }
+
+    /**
+     * Get products that can be related to a PlatedDish
+     *
+     * If the current PlatedDish is HORECA, returns NON-HORECA products with platedDish that has ingredients
+     * If the current PlatedDish is NOT HORECA, returns HORECA products with platedDish that has ingredients
+     *
+     * @param bool $isHoreca Whether the current PlatedDish is HORECA
+     * @param int|null $excludeProductId Product ID to exclude (current product)
+     * @return \Illuminate\Support\Collection Collection of products with format: id => "code - name"
+     */
+    public function getRelatedProductOptions(bool $isHoreca, ?int $excludeProductId = null): \Illuminate\Support\Collection
+    {
+        $query = Product::query()
+            ->whereHas('platedDish', function ($q) use ($isHoreca) {
+                // If current is HORECA -> show NON-HORECA products
+                // If current is NOT HORECA -> show HORECA products
+                $q->where('is_horeca', !$isHoreca)
+                    // Ensure platedDish has at least one ingredient
+                    ->has('ingredients');
+            })
+            ->where('active', true)
+            ->orderBy('code');
+
+        if ($excludeProductId) {
+            $query->where('id', '!=', $excludeProductId);
+        }
+
+        return $query->get()
+            ->mapWithKeys(fn (Product $product) => [
+                $product->id => "{$product->code} - {$product->name}"
+            ]);
+    }
 }

@@ -62,4 +62,16 @@ interface PlatedDishRepositoryInterface
      * @return \Illuminate\Support\Collection
      */
     public function getPlatedDishesWithIngredients(array $productIds): \Illuminate\Support\Collection;
+
+    /**
+     * Get products that can be related to a PlatedDish
+     *
+     * If the current PlatedDish is HORECA, returns NON-HORECA products with platedDish that has ingredients
+     * If the current PlatedDish is NOT HORECA, returns HORECA products with platedDish that has ingredients
+     *
+     * @param bool $isHoreca Whether the current PlatedDish is HORECA
+     * @param int|null $excludeProductId Product ID to exclude (current product)
+     * @return \Illuminate\Support\Collection Collection of products with format: id => "code - name"
+     */
+    public function getRelatedProductOptions(bool $isHoreca, ?int $excludeProductId = null): \Illuminate\Support\Collection;
 }

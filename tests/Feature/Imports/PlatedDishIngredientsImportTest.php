@@ -46,7 +46,7 @@ class PlatedDishIngredientsImportTest extends TestCase
     /**
      * Helper: Create a test product
      */
-    private function createTestProduct(string $code, string $name = null): Product
+    private function createTestProduct(string $code, ?string $name = null): Product
     {
         return Product::create([
             'name' => $name ?? "Test Product {$code}",
@@ -1642,6 +1642,316 @@ class PlatedDishIngredientsImportTest extends TestCase
             \App\Models\ImportProcess::STATUS_PROCESSED,
             $importProcess->status,
             'Import should complete successfully'
+        );
+    }
+
+    /**
+     * Test that PRODUCTO RELACIONADO field is imported and saved to plated_dishes.related_product_id
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because:
+     * 1. Schema does not have 'producto_relacionado' column yet
+     * 2. Import does not process 'related_product_id' field yet
+     * 3. PlatedDish may need migration for related_product_id field
+     *
+     * SCENARIO:
+     * 1. Create main product (PROD-RELATED-001) - will be HORECA
+     * 2. Create related product (PROD-INDIVIDUAL-001) - will be NON-HORECA with ingredients
+     * 3. Import Excel with PRODUCTO RELACIONADO = PROD-INDIVIDUAL-001
+     * 4. Verify PlatedDish is created with related_product_id pointing to PROD-INDIVIDUAL-001
+     *
+     * Test Data: plated_dish_with_related_product.xlsx
+     * - Main product: PROD-RELATED-001 (HORECA)
+     * - Related product: PROD-INDIVIDUAL-001 (NON-HORECA)
+     * - 5 ingredients
+     * - PRODUCTO RELACIONADO repeated for each row = PROD-INDIVIDUAL-001
+     */
+    public function test_imports_related_product_id_field_to_plated_dish_table(): void
+    {
+        // ===== STEP 1: CREATE MAIN PRODUCT (HORECA) =====
+        $mainProduct = $this->createTestProduct('PROD-RELATED-001', 'Test Product With Related');
+
+        // ===== STEP 2: CREATE RELATED PRODUCT (NON-HORECA) WITH PLATEDDISH AND INGREDIENTS =====
+        $relatedProduct = $this->createTestProduct('PROD-INDIVIDUAL-001', 'Test Individual Product');
+
+        // Create PlatedDish for related product (NON-HORECA with ingredients)
+        $relatedPlatedDish = PlatedDish::create([
+            'product_id' => $relatedProduct->id,
+            'is_active' => true,
+            'is_horeca' => false, // NON-HORECA
+        ]);
+
+        // Create at least one ingredient for the related PlatedDish
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $relatedPlatedDish->id,
+            'ingredient_name' => 'Related Product Ingredient',
+            'measure_unit' => 'GR',
+            'quantity' => 100,
+            'max_quantity_horeca' => 150,
+            'order_index' => 0,
+            'is_optional' => false,
+            'shelf_life' => 5,
+        ]);
+
+        // ===== STEP 3: IMPORT EXCEL WITH PRODUCTO RELACIONADO =====
+        $testFile = base_path('tests/Fixtures/plated_dish_with_related_product.xlsx');
+        $importProcess = $this->runImport($testFile);
+
+        // ===== STEP 4: VERIFY PLATED DISH WAS CREATED =====
+        $platedDish = PlatedDish::where('product_id', $mainProduct->id)->first();
+        $this->assertNotNull($platedDish, 'PlatedDish should be created for main product');
+
+        // ===== STEP 5: VERIFY RELATED_PRODUCT_ID IS SAVED TO PLATED_DISHES TABLE =====
+        // TDD RED: This will FAIL because related_product_id is not processed during import
+        $this->assertEquals(
+            $relatedProduct->id,
+            $platedDish->related_product_id,
+            'PlatedDish.related_product_id should be set to the related product ID (PROD-INDIVIDUAL-001)'
+        );
+
+        // ===== STEP 6: VERIFY IS_HORECA IS SET CORRECTLY =====
+        $this->assertTrue(
+            $platedDish->is_horeca,
+            'PlatedDish.is_horeca should be TRUE (from Excel ES HORECA = VERDADERO)'
+        );
+
+        // ===== STEP 7: VERIFY INGREDIENTS WERE CREATED (5 INGREDIENTS) =====
+        $ingredients = $platedDish->ingredients()->orderBy('order_index')->get();
+        $this->assertCount(5, $ingredients, 'Should have 5 ingredients');
+
+        // Verify ingredient names
+        $expectedIngredients = [
+            'Ingredient Alpha',
+            'Ingredient Beta',
+            'Ingredient Gamma',
+            'Ingredient Delta',
+            'Ingredient Epsilon',
+        ];
+
+        foreach ($expectedIngredients as $index => $expectedName) {
+            $this->assertEquals(
+                $expectedName,
+                $ingredients[$index]->ingredient_name,
+                "Ingredient at index {$index} should be '{$expectedName}'"
+            );
+        }
+
+        // ===== STEP 8: VERIFY IMPORT WAS SUCCESSFUL =====
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete successfully'
+        );
+    }
+
+    /**
+     * Test that error log contains message when related product not found during CREATION
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because:
+     * 1. Import currently logs warning but doesn't add to ImportProcess error_log
+     * 2. Need to track invalid related product codes in error_log
+     *
+     * SCENARIO:
+     * 1. Create main product (PROD-NEW-INVALID-REL-001)
+     * 2. Import Excel with PRODUCTO RELACIONADO = PROD-DOES-NOT-EXIST-999 (doesn't exist)
+     * 3. Verify error_log contains descriptive message about invalid related product
+     * 4. PlatedDish should still be created but with related_product_id = null
+     *
+     * Test Data: plated_dish_with_invalid_related_product.xlsx
+     * - Product: PROD-NEW-INVALID-REL-001
+     * - Invalid Related: PROD-DOES-NOT-EXIST-999
+     * - 3 ingredients
+     */
+    public function test_logs_error_when_related_product_not_found_on_creation(): void
+    {
+        // ===== STEP 1: CREATE MAIN PRODUCT =====
+        $mainProduct = $this->createTestProduct('PROD-NEW-INVALID-REL-001', 'New Product With Invalid Related');
+
+        // ===== STEP 2: DO NOT CREATE THE RELATED PRODUCT (it should not exist) =====
+        // PROD-DOES-NOT-EXIST-999 intentionally not created
+
+        // ===== STEP 3: IMPORT EXCEL WITH INVALID RELATED PRODUCT =====
+        $testFile = base_path('tests/Fixtures/plated_dish_with_invalid_related_product.xlsx');
+        $this->assertFileExists($testFile, 'Test Excel file should exist');
+
+        $importService = app(ImportService::class);
+        $repository = app(\App\Contracts\PlatedDishRepositoryInterface::class);
+
+        $importProcess = $importService->importWithRepository(
+            \App\Imports\PlatedDishIngredientsImport::class,
+            $testFile,
+            \App\Models\ImportProcess::TYPE_PLATED_DISH_INGREDIENTS,
+            $repository
+        );
+
+        // ===== STEP 4: VERIFY PLATED DISH WAS CREATED =====
+        $platedDish = PlatedDish::where('product_id', $mainProduct->id)->first();
+        $this->assertNotNull($platedDish, 'PlatedDish should be created for main product');
+
+        // ===== STEP 5: VERIFY RELATED_PRODUCT_ID IS NULL (product doesn't exist) =====
+        $this->assertNull(
+            $platedDish->related_product_id,
+            'PlatedDish.related_product_id should be NULL when related product code does not exist'
+        );
+
+        // ===== STEP 6: VERIFY INGREDIENTS WERE CREATED (3 INGREDIENTS) =====
+        $ingredients = $platedDish->ingredients()->orderBy('order_index')->get();
+        $this->assertCount(3, $ingredients, 'Should have 3 ingredients');
+
+        // ===== STEP 7: VERIFY ERROR LOG CONTAINS DESCRIPTIVE MESSAGE =====
+        // TDD RED: This will FAIL because error_log is not populated with this warning
+        $importProcess->refresh();
+        $errorLog = $importProcess->error_log ?? [];
+
+        $this->assertNotEmpty(
+            $errorLog,
+            'ImportProcess.error_log should contain error about invalid related product'
+        );
+
+        // Check that error message mentions the invalid product code
+        $errorLogJson = json_encode($errorLog);
+        $this->assertStringContainsString(
+            'PROD-DOES-NOT-EXIST-999',
+            $errorLogJson,
+            'Error log should mention the invalid related product code: PROD-DOES-NOT-EXIST-999'
+        );
+
+        // ===== STEP 8: VERIFY IMPORT STATUS =====
+        // Import should complete with warnings/errors status
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
+            $importProcess->status,
+            'Import should complete with PROCESSED_WITH_ERRORS status when related product not found'
+        );
+    }
+
+    /**
+     * Test that error log contains message when related product not found during UPDATE
+     *
+     * TDD RED PHASE:
+     * This test will FAIL because:
+     * 1. Import currently logs warning but doesn't add to ImportProcess error_log
+     * 2. Need to track invalid related product codes in error_log
+     *
+     * SCENARIO:
+     * 1. Create product (PROD-EXISTING-UPDATE-001) with existing PlatedDish and valid related product
+     * 2. Import Excel with PRODUCTO RELACIONADO changed to PROD-INVALID-UPDATE-999 (doesn't exist)
+     * 3. Verify error_log contains descriptive message about invalid related product
+     * 4. PlatedDish should be updated but with related_product_id = null (or unchanged)
+     *
+     * Test Data: plated_dish_update_invalid_related_product.xlsx
+     * - Product: PROD-EXISTING-UPDATE-001
+     * - Invalid Related: PROD-INVALID-UPDATE-999
+     * - 2 ingredients
+     */
+    public function test_logs_error_when_related_product_not_found_on_update(): void
+    {
+        // ===== STEP 1: CREATE MAIN PRODUCT =====
+        $mainProduct = $this->createTestProduct('PROD-EXISTING-UPDATE-001', 'Existing Product Update Invalid Related');
+
+        // ===== STEP 2: CREATE VALID RELATED PRODUCT =====
+        $validRelatedProduct = $this->createTestProduct('PROD-VALID-RELATED-001', 'Valid Related Product');
+
+        // Create PlatedDish for valid related product (so it can be referenced)
+        $validRelatedPlatedDish = PlatedDish::create([
+            'product_id' => $validRelatedProduct->id,
+            'is_active' => true,
+            'is_horeca' => false,
+        ]);
+
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $validRelatedPlatedDish->id,
+            'ingredient_name' => 'Valid Related Ingredient',
+            'measure_unit' => 'GR',
+            'quantity' => 50,
+            'max_quantity_horeca' => 75,
+            'order_index' => 0,
+            'is_optional' => false,
+            'shelf_life' => 5,
+        ]);
+
+        // ===== STEP 3: CREATE EXISTING PLATED DISH WITH VALID RELATED PRODUCT =====
+        $existingPlatedDish = PlatedDish::create([
+            'product_id' => $mainProduct->id,
+            'is_active' => true,
+            'is_horeca' => true,
+            'related_product_id' => $validRelatedProduct->id, // Valid reference
+        ]);
+
+        // Create existing ingredients
+        PlatedDishIngredient::create([
+            'plated_dish_id' => $existingPlatedDish->id,
+            'ingredient_name' => 'Old Ingredient',
+            'measure_unit' => 'GR',
+            'quantity' => 100,
+            'max_quantity_horeca' => 150,
+            'order_index' => 0,
+            'is_optional' => false,
+            'shelf_life' => 5,
+        ]);
+
+        // ===== STEP 4: VERIFY INITIAL STATE =====
+        $this->assertEquals(
+            $validRelatedProduct->id,
+            $existingPlatedDish->related_product_id,
+            'PlatedDish should initially have valid related_product_id'
+        );
+
+        // ===== STEP 5: IMPORT EXCEL WITH INVALID RELATED PRODUCT =====
+        // Excel changes PRODUCTO RELACIONADO to PROD-INVALID-UPDATE-999 (doesn't exist)
+        $testFile = base_path('tests/Fixtures/plated_dish_update_invalid_related_product.xlsx');
+        $this->assertFileExists($testFile, 'Test Excel file should exist');
+
+        $importService = app(ImportService::class);
+        $repository = app(\App\Contracts\PlatedDishRepositoryInterface::class);
+
+        $importProcess = $importService->importWithRepository(
+            \App\Imports\PlatedDishIngredientsImport::class,
+            $testFile,
+            \App\Models\ImportProcess::TYPE_PLATED_DISH_INGREDIENTS,
+            $repository
+        );
+
+        // ===== STEP 6: VERIFY PLATED DISH WAS UPDATED =====
+        $updatedPlatedDish = PlatedDish::where('product_id', $mainProduct->id)->first();
+        $this->assertNotNull($updatedPlatedDish, 'PlatedDish should still exist after update');
+
+        // ===== STEP 7: VERIFY RELATED_PRODUCT_ID IS NULL (invalid code) =====
+        $this->assertNull(
+            $updatedPlatedDish->related_product_id,
+            'PlatedDish.related_product_id should be NULL when updated with invalid related product code'
+        );
+
+        // ===== STEP 8: VERIFY INGREDIENTS WERE UPDATED (2 NEW INGREDIENTS) =====
+        $updatedIngredients = $updatedPlatedDish->ingredients()->orderBy('order_index')->get();
+        $this->assertCount(2, $updatedIngredients, 'Should have 2 ingredients after update');
+        $this->assertEquals('Updated Ingredient A', $updatedIngredients[0]->ingredient_name);
+        $this->assertEquals('Updated Ingredient B', $updatedIngredients[1]->ingredient_name);
+
+        // ===== STEP 9: VERIFY ERROR LOG CONTAINS DESCRIPTIVE MESSAGE =====
+        // TDD RED: This will FAIL because error_log is not populated with this warning
+        $importProcess->refresh();
+        $errorLog = $importProcess->error_log ?? [];
+
+        $this->assertNotEmpty(
+            $errorLog,
+            'ImportProcess.error_log should contain error about invalid related product on update'
+        );
+
+        // Check that error message mentions the invalid product code
+        $errorLogJson = json_encode($errorLog);
+        $this->assertStringContainsString(
+            'PROD-INVALID-UPDATE-999',
+            $errorLogJson,
+            'Error log should mention the invalid related product code: PROD-INVALID-UPDATE-999'
+        );
+
+        // ===== STEP 10: VERIFY IMPORT STATUS =====
+        $this->assertEquals(
+            \App\Models\ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
+            $importProcess->status,
+            'Import should complete with PROCESSED_WITH_ERRORS status when related product not found on update'
         );
     }
 }

@@ -75,6 +75,7 @@ class PlatedDishIngredientsDataExport implements
             $platedDishes = PlatedDish::with([
                 'product',
                 'ingredients',
+                'relatedProduct',
             ])
                 ->whereIn('id', $this->platedDishIds)
                 ->get();
@@ -98,6 +99,9 @@ class PlatedDishIngredientsDataExport implements
                     continue;
                 }
 
+                // Get related product code (if exists)
+                $relatedProductCode = $platedDish->relatedProduct?->code;
+
                 // Create one row per ingredient (VERTICAL FORMAT)
                 foreach ($ingredients as $ingredient) {
                     $rows->push([
@@ -109,6 +113,7 @@ class PlatedDishIngredientsDataExport implements
                         'cantidad_maxima_horeca' => $ingredient->max_quantity_horeca,
                         'vida_util' => $ingredient->shelf_life,
                         'es_horeca' => $platedDish->is_horeca ? 'VERDADERO' : 'FALSO',
+                        'producto_relacionado' => $relatedProductCode,
                     ]);
                 }
             }

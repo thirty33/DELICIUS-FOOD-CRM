@@ -103,10 +103,14 @@ class PlatedDishIngredientsImport implements
             // Extract is_horeca from first row (all rows have same value for product-level field)
             $isHoreca = $this->convertToBoolean($ingredientRows[0]['es_horeca'] ?? false);
 
+            // Extract related_product_code from first row and resolve to ID
+            $relatedProductId = $this->resolveRelatedProductId($ingredientRows[0]['producto_relacionado'] ?? null);
+
             // Create or update PlatedDish (even if no ingredients)
             $platedDish = $this->repository->createOrUpdatePlatedDish($product->id, [
                 'is_active' => true,
                 'is_horeca' => $isHoreca,
+                'related_product_id' => $relatedProductId,
             ]);
 
             // Check if product has any valid ingredients
@@ -500,5 +504,42 @@ class PlatedDishIngredientsImport implements
         }
 
         return false;
+    }
+
+    /**
+     * Resolve related product code to product ID
+     *
+     * Looks up the product by code and returns its ID.
+     * Returns null if code is empty or product not found.
+     * When product not found, logs error to ImportProcess error_log.
+     *
+     * @param mixed $relatedProductCode Product code from Excel
+     * @return int|null Product ID or null
+     */
+    private function resolveRelatedProductId($relatedProductCode): ?int
+    {
+        if (empty($relatedProductCode) || trim($relatedProductCode) === '') {
+            return null;
+        }
+
+        $trimmedCode = trim($relatedProductCode);
+        $relatedProduct = $this->repository->findProductByCode($trimmedCode);
+
+        if (!$relatedProduct) {
+            Log::warning('Related product not found during plated dish import', [
+                'related_product_code' => $trimmedCode,
+                'import_process_id' => $this->importProcessId
+            ]);
+
+            $this->updateImportProcessError([
+                'type' => 'related_product_not_found',
+                'message' => "El producto relacionado con código '{$trimmedCode}' no existe en la base de datos",
+                'related_product_code' => $trimmedCode,
+            ]);
+
+            return null;
+        }
+
+        return $relatedProduct->id;
     }
 }
