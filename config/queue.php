@@ -61,6 +61,28 @@ return [
             'suffix' => env('SQS_SUFFIX'),
             'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
             'after_commit' => false,
+            // 35 minutes - must be > worker timeout (30 min) for large exports
+            'retry_after' => (int) env('SQS_RETRY_AFTER', 2100),
+        ],
+
+        // SQS Disk: Automatically stores large payloads (>256KB) in S3
+        // Use this for jobs with large data like exports with many IDs
+        // Driver from defectivecode/laravel-sqs-extended package
+        'sqs-disk' => [
+            'driver' => 'sqs-disk',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'prefix' => env('SQS_PREFIX', 'https://sqs.us-east-1.amazonaws.com/your-account-id'),
+            'queue' => env('SQS_QUEUE', 'default'),
+            'suffix' => env('SQS_SUFFIX'),
+            'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+            'after_commit' => false,
+            'disk_options' => [
+                'always_store' => false, // Only store in S3 if payload > 256KB
+                'cleanup' => true,       // Delete S3 payload after job is processed
+                'disk' => 's3',
+                'prefix' => 'sqs-payloads',
+            ],
         ],
 
         'redis' => [

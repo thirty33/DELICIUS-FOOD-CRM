@@ -42,6 +42,8 @@ use App\Events\AdvanceOrderProductsBulkLoaded;
 use App\Listeners\CreateWarehouseTransactionForAdvanceOrder;
 use App\Listeners\CancelWarehouseTransactionForAdvanceOrder;
 use App\Listeners\SyncAdvanceOrderPivotsListener;
+use Maatwebsite\Excel\QueuedWriter;
+use App\Excel\ChunkAwareQueuedWriter;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -96,6 +98,15 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             LabelGeneratorInterface::class,
             NutritionalLabelGenerator::class
+        );
+
+        // Override Laravel Excel's QueuedWriter to use ChunkAwareQueuedWriter
+        // This allows exports to know which chunk they're processing
+        // and load only the relevant IDs from S3 instead of all IDs
+        // @see App\Excel\ChunkAwareQueuedWriter
+        $this->app->bind(
+            QueuedWriter::class,
+            ChunkAwareQueuedWriter::class
         );
 
         if ($this->app->environment('local')) {

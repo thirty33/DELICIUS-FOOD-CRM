@@ -29,6 +29,7 @@ use Filament\Forms\Get;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Exports\OrderLineConsolidatedExport;
 use App\Exports\OrderLineExport;
+use App\Services\OrderLineExportService;
 use App\Forms\OrderExportFilterForm;
 use App\Forms\AdvanceOrderGenerationForm;
 use App\Models\ExportProcess;
@@ -480,8 +481,8 @@ class OrderResource extends Resource
                         ->color('success')
                         ->form(OrderExportFilterForm::getSchema())
                         ->action(function (Collection $records, array $data) {
+                            $exportProcessId = null;
                             try {
-
                                 // Use repository to filter orders
                                 $orderRepository = new OrderRepository();
                                 $filteredOrderIds = $orderRepository->filterOrdersByRolesAndStatuses($records, $data);
@@ -495,28 +496,10 @@ class OrderResource extends Resource
                                     return;
                                 }
 
-                                $orderLineIds = OrderLine::whereIn('order_id', $filteredOrderIds)
-                                    ->pluck('id');
-
-                                $exportProcess = ExportProcess::create([
-                                    'type' => ExportProcess::TYPE_ORDER_LINES,
-                                    'status' => ExportProcess::STATUS_QUEUED,
-                                    'file_url' => '-'
-                                ]);
-
-                                $fileName = "exports/order-lines/lineas_pedido_export_{$exportProcess->id}_" . time() . '.xlsx';
-
-                                Excel::store(
-                                    new OrderLineExport($orderLineIds, $exportProcess->id),
-                                    $fileName,
-                                    's3',
-                                    \Maatwebsite\Excel\Excel::XLSX
-                                );
-
-                                $fileUrl = Storage::disk('s3')->url($fileName);
-                                $exportProcess->update([
-                                    'file_url' => $fileUrl
-                                ]);
+                                // Use the service via DI for export logic
+                                $exportService = app(OrderLineExportService::class);
+                                $exportProcess = $exportService->exportByOrderIds(collect($filteredOrderIds));
+                                $exportProcessId = $exportProcess->id;
 
                                 self::makeNotification(
                                     'Exportación iniciada',
@@ -526,7 +509,7 @@ class OrderResource extends Resource
                                 // Usar ExportErrorHandler para registrar el error de manera consistente
                                 ExportErrorHandler::handle(
                                     $e,
-                                    $exportProcess->id ?? 0,
+                                    $exportProcessId ?? 0,
                                     'bulk_export_order_lines'
                                 );
 

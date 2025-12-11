@@ -8,11 +8,13 @@ use App\Models\ExportProcess;
 use App\Enums\OrderStatus;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+// ShouldAutoSize removed - causes timeout on large exports due to calculateColumnWidths()
+// use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
@@ -24,21 +26,34 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithCustomQuerySize;
+use App\Exports\Concerns\HasChunkAwareness;
 use Throwable;
 
 class OrderLineExport implements
     FromQuery,
     WithHeadings,
     WithMapping,
-    ShouldAutoSize,
+    // ShouldAutoSize removed - causes timeout on large exports due to calculateColumnWidths()
     WithStyles,
     WithEvents,
     WithColumnFormatting,
     SkipsEmptyRows,
     ShouldQueue,
-    WithChunkReading
+    WithChunkReading,
+    WithCustomQuerySize
 {
-    use Exportable;
+    use Exportable, HasChunkAwareness;
+
+    /**
+     * Job timeout in seconds (20 minutes).
+     *
+     * Note: This timeout applies to jobs that inherit from this export.
+     * For AppendQueryToSheet jobs, the timeout is also set via middleware().
+     *
+     * @var int
+     */
+    public $timeout = 1200;
 
     /**
      * Headers modified to display user-friendly texts while maintaining compatibility
@@ -71,29 +86,179 @@ class OrderLineExport implements
     ];
 
     private $exportProcessId;
-    private $orderLineIds;
+    private $orderLineIdsS3BasePath;
+    private $totalChunks;
+    private $orderLineIds = null;
+    private $totalRecords = 0;
 
-    public function __construct(Collection $orderLineIds, int $exportProcessId)
-    {
-        $this->orderLineIds = $orderLineIds;
+    /**
+     * Constructor with backward-compatible signature.
+     *
+     * To avoid SQS 256KB message size limit and large whereIn queries,
+     * IDs can be stored in S3 as chunked files.
+     *
+     * @param Collection|null $orderLineIds Collection of order line IDs (used for tests, null for S3 mode)
+     * @param int $exportProcessId Export process ID for tracking
+     * @param string|null $orderLineIdsS3BasePath Optional S3 base path where chunked IDs are stored
+     * @param int|null $totalChunks Total number of chunks in S3 (required if using S3 mode)
+     * @param int|null $totalIds Total number of IDs (for querySize, optional)
+     */
+    public function __construct(
+        ?Collection $orderLineIds,
+        int $exportProcessId,
+        ?string $orderLineIdsS3BasePath = null,
+        ?int $totalChunks = null,
+        ?int $totalIds = null
+    ) {
         $this->exportProcessId = $exportProcessId;
+
+        // If S3 base path is provided, use chunked mode
+        // Otherwise, store IDs in memory (for tests and small exports)
+        if ($orderLineIdsS3BasePath !== null) {
+            $this->orderLineIdsS3BasePath = $orderLineIdsS3BasePath;
+            $this->totalChunks = $totalChunks ?? 1;
+            // Use provided total or calculate based on chunks
+            $this->totalRecords = $totalIds ?? ($this->totalChunks * $this->chunkSize());
+            Log::info('OrderLineExport: Using chunked S3 storage', [
+                'export_process_id' => $exportProcessId,
+                's3_base_path' => $orderLineIdsS3BasePath,
+                'total_chunks' => $this->totalChunks,
+                'total_records' => $this->totalRecords,
+            ]);
+        } elseif ($orderLineIds !== null) {
+            // For tests and backward compatibility: keep IDs in memory
+            $this->orderLineIds = $orderLineIds->toArray();
+            $this->totalRecords = count($this->orderLineIds);
+            Log::info('OrderLineExport: Using in-memory IDs', [
+                'export_process_id' => $exportProcessId,
+                'ids_count' => $this->totalRecords,
+            ]);
+        }
+    }
+
+    /**
+     * Return the total number of records for WithCustomQuerySize.
+     *
+     * This is used by ChunkAwareQueuedWriter to determine how many jobs to create
+     * without calling query()->count() which would fail without IDs loaded.
+     *
+     * @return int
+     */
+    public function querySize(): int
+    {
+        return $this->totalRecords;
+    }
+
+    /**
+     * Load order line IDs.
+     *
+     * Returns IDs from memory if available. If using S3 chunks and chunk awareness
+     * is available (via HasChunkAwareness trait), loads only the current chunk.
+     * Falls back to loading all chunks if chunk awareness is not available.
+     *
+     * @return array
+     */
+    private function loadOrderLineIds(): array
+    {
+        // If IDs are already in memory (test mode or OrderLineChunkedExportService), return them
+        if ($this->orderLineIds !== null) {
+            return $this->orderLineIds;
+        }
+
+        // If using S3 chunks and chunk awareness is available, load only current chunk
+        if ($this->orderLineIdsS3BasePath !== null && $this->hasChunkAwareness()) {
+            return $this->getIdsForCurrentChunk();
+        }
+
+        // Fallback: load all chunks from S3 (original behavior)
+        if ($this->orderLineIdsS3BasePath !== null) {
+            return $this->loadAllChunks();
+        }
+
+        // Fallback to empty array
+        return [];
+    }
+
+    /**
+     * Clean up all temporary S3 chunk files after export completion.
+     *
+     * @return void
+     */
+    private function cleanupS3TempFiles(): void
+    {
+        if ($this->orderLineIdsS3BasePath === null) {
+            return;
+        }
+
+        try {
+            $deletedCount = 0;
+
+            for ($i = 0; $i < $this->totalChunks; $i++) {
+                $chunkPath = "{$this->orderLineIdsS3BasePath}-chunk-{$i}.json";
+
+                if (Storage::disk('s3')->exists($chunkPath)) {
+                    Storage::disk('s3')->delete($chunkPath);
+                    $deletedCount++;
+                }
+            }
+
+            Log::info('OrderLineExport: Cleaned up S3 temp files', [
+                'export_process_id' => $this->exportProcessId,
+                's3_base_path' => $this->orderLineIdsS3BasePath,
+                'deleted_chunks' => $deletedCount,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('OrderLineExport: Failed to cleanup S3 temp files', [
+                'export_process_id' => $this->exportProcessId,
+                's3_base_path' => $this->orderLineIdsS3BasePath,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function query()
     {
+        $ids = $this->loadOrderLineIds();
+
         return OrderLine::with([
             'order.user',
             'order.user.company',
-            'order.user.branch', // NEW: Load branch information
+            'order.user.branch',
             'product.category'
-        ])->whereIn('id', $this->orderLineIds);
+        ])->whereIn('id', $ids);
     }
 
     public function chunkSize(): int
     {
-        return 100;
+        // Must match OrderLineExportService::$chunkSize for S3 chunk mode
+        // Each S3 chunk file contains 1000 IDs, so each job processes 1000 records
+        return 1000;
     }
 
+    /**
+     * Get the middleware the job should pass through.
+     *
+     * This middleware is used by AppendQueryToSheet jobs to set the timeout.
+     * Without this, the jobs would use the default queue timeout which may be too short.
+     *
+     * @return array
+     */
+    public function middleware(): array
+    {
+        return [
+            new \Illuminate\Queue\Middleware\WithoutOverlapping($this->exportProcessId),
+        ];
+    }
+
+    /**
+     * Determine the time at which the job should timeout.
+     *
+     * @return \DateTime
+     */
+    public function retryUntil(): \DateTime
+    {
+        return now()->addMinutes(20);
+    }
 
     public function map($orderLine): array
     {
@@ -266,6 +431,9 @@ class OrderLineExport implements
 
                 ExportProcess::where('id', $this->exportProcessId)
                     ->update(['status' => ExportProcess::STATUS_PROCESSED]);
+
+                // Clean up temporary S3 files
+                $this->cleanupS3TempFiles();
             },
         ];
     }
@@ -397,5 +565,8 @@ class OrderLineExport implements
             'line' => $e->getLine(),
             'trace' => $e->getTraceAsString()
         ]);
+
+        // Clean up temporary S3 files even on failure
+        $this->cleanupS3TempFiles();
     }
 }

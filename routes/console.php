@@ -36,7 +36,10 @@ Artisan::command('logs:clean', function () {
 Artisan::command('queue:process', function () {
     $this->info('Iniciando procesamiento de cola...');
     $exitCode = $this->call('queue:work', [
-        '--stop-when-empty' => true
+        '--stop-when-empty' => true,
+        '--timeout' => 1800, // 30 minutes for large exports (CloseSheet can take 20+ min)
+        '--memory' => 512,   // 512MB memory limit for large Excel exports
+        '--tries' => 3,      // Retry failed jobs up to 3 times
     ]);
     $this->info('Procesamiento de cola completado con código: ' . $exitCode);
 })->purpose('Procesar todos los trabajos en cola hasta vaciarla')
@@ -44,6 +47,6 @@ Artisan::command('queue:process', function () {
     ->withoutOverlapping();
 
 // Schedule: Update orders production status every minute
-Schedule::command('orders:update-production-status')
-    ->everyMinute()
-    ->withoutOverlapping();
+// Schedule::command('orders:update-production-status')
+//     ->everyMinute()
+//     ->withoutOverlapping();
