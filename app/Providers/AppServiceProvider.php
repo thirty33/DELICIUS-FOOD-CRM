@@ -23,6 +23,9 @@ use App\Services\NutritionalInformationDeletionService;
 use App\Jobs\DeleteNutritionalInformationJob;
 use App\Contracts\Labels\LabelGeneratorInterface;
 use App\Services\Labels\Generators\NutritionalLabelGenerator;
+use App\Contracts\ColumnDataProviderInterface;
+use App\Services\Reports\BranchColumnDataProvider;
+use App\Services\Reports\GrouperColumnDataProvider;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
@@ -98,6 +101,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             LabelGeneratorInterface::class,
             NutritionalLabelGenerator::class
+        );
+
+        // Bind column data provider for Consolidado Emplatado report
+        // PHASE 1: BranchColumnDataProvider (branch-based columns) - COMMENTED OUT
+        // $this->app->bind(
+        //     ColumnDataProviderInterface::class,
+        //     BranchColumnDataProvider::class
+        // );
+
+        // PHASE 2: GrouperColumnDataProvider (grouper-based columns)
+        // Groupers allow N companies to be grouped into 1 column
+        $this->app->bind(
+            ColumnDataProviderInterface::class,
+            GrouperColumnDataProvider::class
         );
 
         // Override Laravel Excel's QueuedWriter to use ChunkAwareQueuedWriter

@@ -2,12 +2,17 @@
 
 namespace App\Repositories;
 
+use App\Contracts\ColumnDataProviderInterface;
 use App\Contracts\ConsolidadoEmplatadoRepositoryInterface;
 use App\Models\AdvanceOrder;
 use App\Support\ImportExport\ConsolidadoEmplatadoSchema;
 
 class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryInterface
 {
+    public function __construct(
+        private ColumnDataProviderInterface $columnDataProvider
+    ) {}
+
     /**
      * Get consolidated plated dish report data with bag calculations.
      *
@@ -17,19 +22,24 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
      *
      * @param array $advanceOrderIds Array of advance order IDs to include in the report
      * @param bool $flatFormat If true, returns flat format ready for Excel; if false, returns nested format
-     * @return array Structured data with products, ingredients, branches, and bag calculations
+     * @return array Structured data with products, ingredients, columns, and bag calculations
      */
     public function getConsolidatedPlatedDishData(array $advanceOrderIds, bool $flatFormat = false): array
     {
-        // Query AdvanceOrders with all necessary relationships
-        $advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
-            ->with([
+        // Build eager load relationships including provider-specific ones
+        $eagerLoads = array_merge(
+            [
                 'associatedOrderLines.orderLine.product.platedDish.ingredients' => function ($query) {
                     $query->where('is_optional', false)->orderBy('order_index');
                 },
-                'associatedOrderLines.orderLine.product.platedDish.relatedProduct', // NEW: eager load related INDIVIDUAL product
-                'associatedOrderLines.order.user.branch',
-            ])
+                'associatedOrderLines.orderLine.product.platedDish.relatedProduct',
+            ],
+            $this->columnDataProvider->getEagerLoadRelationships()
+        );
+
+        // Query AdvanceOrders with all necessary relationships
+        $advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
+            ->with($eagerLoads)
             ->get();
 
         // NEW: Collect all related INDIVIDUAL product IDs
@@ -56,8 +66,21 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
         // Group data by product
         $productGroups = [];
 
+        // IMPORTANT: Deduplicate order lines that appear in multiple AdvanceOrders.
+        // The same order_line_id can appear in multiple AdvanceOrders (e.g., when AO 100
+        // contains all lines from AO 94 plus new ones). Without deduplication, quantities
+        // would be counted multiple times, causing doubled values in the report.
+        $processedOrderLineIds = [];
+
         foreach ($advanceOrders as $advanceOrder) {
             foreach ($advanceOrder->associatedOrderLines as $aoOrderLine) {
+                // Skip if this order_line_id was already processed from another AdvanceOrder
+                $orderLineId = $aoOrderLine->order_line_id;
+                if (isset($processedOrderLineIds[$orderLineId])) {
+                    continue;
+                }
+                $processedOrderLineIds[$orderLineId] = true;
+
                 $product = $aoOrderLine->orderLine->product;
                 $platedDish = $product->platedDish;
 
@@ -91,18 +114,16 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                         'product_code' => $product->code,
                         'related_product' => $relatedProduct,
                         'is_horeca' => $platedDish->is_horeca,
-                        'total_horeca' => 0, // Total HORECA plated dishes ordered
-                        'total_individual' => $individualTotal, // Total INDIVIDUAL products sold (for HORECA with related product)
+                        'total_horeca' => 0,
+                        'total_individual' => $individualTotal,
                         'ingredients' => [],
                     ];
                 }
 
                 // Accumulate quantities based on product type
                 if ($platedDish->is_horeca) {
-                    // HORECA product: accumulate to total_horeca
                     $productGroups[$productId]['total_horeca'] += $quantity;
                 } else {
-                    // INDIVIDUAL product: accumulate to total_individual
                     $productGroups[$productId]['total_individual'] += $quantity;
                 }
 
@@ -118,27 +139,30 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                             'measure_unit' => $ingredient->measure_unit,
                             'quantity_per_pax' => $ingredient->quantity,
                             'max_quantity_horeca' => $ingredient->max_quantity_horeca,
-                            'branches' => [],
+                            'columns' => [],
                         ];
                     }
 
-                    // ONLY process branches for HORECA products
-                    // INDIVIDUAL products without HORECA relation should NOT have branch data
+                    // ONLY process columns for HORECA products
+                    // INDIVIDUAL products without HORECA relation should NOT have column data
                     if ($platedDish->is_horeca) {
-                        // Add branch data
-                        $branch = $aoOrderLine->order->user->branch;
-                        $branchId = $branch->id;
+                        // Get column assignment from provider
+                        $columnData = $this->columnDataProvider->getColumnForOrderLine($aoOrderLine);
 
-                        if (!isset($productGroups[$productId]['ingredients'][$ingredientId]['branches'][$branchId])) {
-                            $productGroups[$productId]['ingredients'][$ingredientId]['branches'][$branchId] = [
-                                'branch_id' => $branch->id,
-                                'branch_name' => $branch->fantasy_name,
-                                'quantity' => 0,
-                            ];
+                        if ($columnData) {
+                            $columnKey = $columnData['column_key'];
+
+                            if (!isset($productGroups[$productId]['ingredients'][$ingredientId]['columns'][$columnKey])) {
+                                $productGroups[$productId]['ingredients'][$ingredientId]['columns'][$columnKey] = [
+                                    'column_key' => $columnData['column_key'],
+                                    'column_name' => $columnData['column_name'],
+                                    'quantity' => 0,
+                                ];
+                            }
+
+                            // Accumulate column quantities for this ingredient
+                            $productGroups[$productId]['ingredients'][$ingredientId]['columns'][$columnKey]['quantity'] += $quantity;
                         }
-
-                        // Accumulate branch quantities for this ingredient
-                        $productGroups[$productId]['ingredients'][$ingredientId]['branches'][$branchId]['quantity'] += $quantity;
                     }
                 }
             }
@@ -146,23 +170,23 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
 
         // Calculate bag divisions and format output for each ingredient
         foreach ($productGroups as &$productGroup) {
-            $totalHorecaForProduct = $productGroup['total_horeca']; // Get total from product level
-            $totalIndividualForProduct = $productGroup['total_individual']; // Get total INDIVIDUAL from product level
+            $totalHorecaForProduct = $productGroup['total_horeca'];
+            $totalIndividualForProduct = $productGroup['total_individual'];
 
             foreach ($productGroup['ingredients'] as &$ingredientData) {
-                // Calculate bags for each branch
-                $branchesWithBags = [];
-                foreach ($ingredientData['branches'] as $branchData) {
+                // Calculate bags for each column
+                $columnsWithBags = [];
+                foreach ($ingredientData['columns'] as $columnData) {
                     $bagCalculation = $this->calculateBagDivisionsForClient(
-                        $branchData['quantity'],
+                        $columnData['quantity'],
                         $ingredientData['quantity_per_pax'],
                         $ingredientData['max_quantity_horeca'],
                         $ingredientData['measure_unit']
                     );
 
-                    $branchesWithBags[] = [
-                        'branch_id' => $branchData['branch_id'],
-                        'branch_name' => $branchData['branch_name'],
+                    $columnsWithBags[] = [
+                        'column_key' => $columnData['column_key'],
+                        'column_name' => $columnData['column_name'],
                         'porciones' => $bagCalculation['porciones'],
                         'gramos' => $bagCalculation['gramos'],
                         'weights' => $bagCalculation['weights'],
@@ -171,16 +195,16 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                 }
 
                 // Calculate total bolsas description
-                $totalBolsas = $this->calculateTotalBolsasDescription($branchesWithBags, $ingredientData['measure_unit']);
+                $totalBolsas = $this->calculateTotalBolsasDescription($columnsWithBags, $ingredientData['measure_unit']);
 
-                // Replace branches array with detailed bag data
-                $ingredientData['individual'] = $totalIndividualForProduct; // Total INDIVIDUAL products sold
-                $ingredientData['clientes'] = $branchesWithBags;
-                $ingredientData['total_horeca'] = $totalHorecaForProduct; // Assign product-level total to ingredient
+                // Replace columns array with detailed bag data
+                $ingredientData['individual'] = $totalIndividualForProduct;
+                $ingredientData['clientes'] = $columnsWithBags;
+                $ingredientData['total_horeca'] = $totalHorecaForProduct;
                 $ingredientData['total_bolsas'] = $totalBolsas;
 
                 // Remove temporary fields
-                unset($ingredientData['branches']);
+                unset($ingredientData['columns']);
                 unset($ingredientData['ingredient_id']);
                 unset($ingredientData['max_quantity_horeca']);
             }
@@ -206,19 +230,22 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
      * where each row represents one ingredient with all client data in columns.
      *
      * IMPORTANT: The schema should be configured BEFORE calling this method.
-     * This method assumes ConsolidadoEmplatadoSchema is already configured with branch columns.
+     * This method assumes ConsolidadoEmplatadoSchema is already configured with column names.
      *
      * @param array $nestedData Nested structure from getConsolidatedPlatedDishData()
      * @return array Flat array ready for Excel export
      */
     private function transformToFlatFormat(array $nestedData): array
     {
-        // Step 1: Extract all unique branch names from data
-        $branchNames = $this->extractUniqueBranchNames($nestedData);
+        // Step 1: Get column names from SCHEMA (not from data)
+        // This ensures the order matches the schema headers and includes all columns
+        // even if some ingredients don't have data for certain columns.
+        // Previously this used extractUniqueColumnNames() which caused column misalignment
+        // because it extracted columns alphabetically from data and missed empty columns.
+        $columnNames = array_values(ConsolidadoEmplatadoSchema::getClientColumns());
 
         // Step 2: Schema should already be configured by caller (Export constructor)
         // DO NOT reset schema here - it causes schema to be reset between collection() and headings()
-        // ConsolidadoEmplatadoSchema::setClientColumns($branchNames);
 
         // Step 3: Get schema keys for mapping
         $fixedPrefixKeys = array_keys(ConsolidadoEmplatadoSchema::getFixedPrefixColumns());
@@ -236,34 +263,36 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
 
                 // Map fixed prefix columns using schema keys
                 // plato, ingrediente, cantidad_x_pax, individual
-                $row[$fixedPrefixKeys[0]] = $firstIngredient ? $productName : ''; // plato
-                $row[$fixedPrefixKeys[1]] = $ingredientData['ingredient_name']; // ingrediente
-                $row[$fixedPrefixKeys[2]] = $this->formatQuantityPerPax( // cantidad_x_pax
+                $row[$fixedPrefixKeys[0]] = $firstIngredient ? $productName : '';
+                $row[$fixedPrefixKeys[1]] = $ingredientData['ingredient_name'];
+                $row[$fixedPrefixKeys[2]] = $this->formatQuantityPerPax(
                     $ingredientData['quantity_per_pax'],
                     $ingredientData['measure_unit']
                 );
-                $row[$fixedPrefixKeys[3]] = (string) $ingredientData['individual']; // individual products sold
+                // Only show INDIVIDUAL value on first ingredient row (for Excel merge)
+                $row[$fixedPrefixKeys[3]] = $firstIngredient ? (string) $ingredientData['individual'] : '';
 
                 // Map client columns (dynamic)
-                $clientesIndexed = collect($ingredientData['clientes'])->keyBy('branch_name');
+                $clientesIndexed = collect($ingredientData['clientes'])->keyBy('column_name');
 
-                foreach ($branchNames as $branchName) {
-                    $columnKey = ConsolidadoEmplatadoSchema::getClientColumnKey($branchName);
+                foreach ($columnNames as $columnName) {
+                    $columnKey = ConsolidadoEmplatadoSchema::getClientColumnKey($columnName);
 
-                    if ($clientesIndexed->has($branchName)) {
-                        $clientData = $clientesIndexed->get($branchName);
+                    if ($clientesIndexed->has($columnName)) {
+                        $clientData = $clientesIndexed->get($columnName);
                         // Join description array with newlines for Excel cell
                         $row[$columnKey] = implode("\n", $clientData['descripcion']);
                     } else {
-                        // Branch has no orders for this ingredient
+                        // Column has no orders for this ingredient
                         $row[$columnKey] = '';
                     }
                 }
 
                 // Map fixed suffix columns using schema keys
                 // total_horeca, total_bolsas
-                $row[$fixedSuffixKeys[0]] = (string) $ingredientData['total_horeca']; // total_horeca
-                $row[$fixedSuffixKeys[1]] = implode("\n", $ingredientData['total_bolsas']); // total_bolsas
+                // Only show TOTAL HORECA value on first ingredient row (for Excel merge)
+                $row[$fixedSuffixKeys[0]] = $firstIngredient ? (string) $ingredientData['total_horeca'] : '';
+                $row[$fixedSuffixKeys[1]] = implode("\n", $ingredientData['total_bolsas']);
 
                 $flatRows[] = $row;
                 $firstIngredient = false;
@@ -271,7 +300,7 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
         }
 
         // Add totals row at the end
-        $totalsRow = $this->calculateTotalsRow($nestedData, $branchNames);
+        $totalsRow = $this->calculateTotalsRow($nestedData, $columnNames);
         $flatRows[] = $totalsRow;
 
         return $flatRows;
@@ -286,10 +315,10 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
      * - TOTAL BOLSAS column: Combined total (INDIVIDUAL + TOTAL HORECA)
      *
      * @param array $nestedData Nested structure from getConsolidatedPlatedDishData()
-     * @param array $branchNames Array of branch names for column mapping
+     * @param array $columnNames Array of column names for column mapping
      * @return array Totals row with only INDIVIDUAL, TOTAL HORECA, and TOTAL BOLSAS filled
      */
-    private function calculateTotalsRow(array $nestedData, array $branchNames): array
+    private function calculateTotalsRow(array $nestedData, array $columnNames): array
     {
         $fixedPrefixKeys = array_keys(ConsolidadoEmplatadoSchema::getFixedPrefixColumns());
         $fixedSuffixKeys = array_keys(ConsolidadoEmplatadoSchema::getFixedSuffixColumns());
@@ -309,71 +338,89 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
         $totalsRow = [];
 
         // Empty columns: PLATO, INGREDIENTE, CANTIDAD X PAX
-        $totalsRow[$fixedPrefixKeys[0]] = ''; // plato
-        $totalsRow[$fixedPrefixKeys[1]] = ''; // ingrediente
-        $totalsRow[$fixedPrefixKeys[2]] = ''; // cantidad_x_pax
+        $totalsRow[$fixedPrefixKeys[0]] = '';
+        $totalsRow[$fixedPrefixKeys[1]] = '';
+        $totalsRow[$fixedPrefixKeys[2]] = '';
 
         // INDIVIDUAL column with total
-        $totalsRow[$fixedPrefixKeys[3]] = "TOTAL {$totalIndividual}"; // individual
+        $totalsRow[$fixedPrefixKeys[3]] = "TOTAL {$totalIndividual}";
 
         // Empty client columns (dynamic)
-        foreach ($branchNames as $branchName) {
-            $columnKey = ConsolidadoEmplatadoSchema::getClientColumnKey($branchName);
+        foreach ($columnNames as $columnName) {
+            $columnKey = ConsolidadoEmplatadoSchema::getClientColumnKey($columnName);
             $totalsRow[$columnKey] = '';
         }
 
         // TOTAL HORECA column with total
-        $totalsRow[$fixedSuffixKeys[0]] = "TOTAL {$totalHoreca}"; // total_horeca
+        $totalsRow[$fixedSuffixKeys[0]] = "TOTAL {$totalHoreca}";
 
         // TOTAL BOLSAS column with combined total
-        $totalsRow[$fixedSuffixKeys[1]] = "TOTAL PLATOS {$totalPlatos}"; // total_bolsas
+        $totalsRow[$fixedSuffixKeys[1]] = "TOTAL PLATOS {$totalPlatos}";
 
         return $totalsRow;
     }
 
     /**
-     * Get unique branch names from advance order IDs (PUBLIC METHOD)
+     * Get unique column names from advance order IDs (PUBLIC METHOD)
      *
-     * This method is used to extract branch names BEFORE creating the export,
+     * This method is used to extract column names BEFORE creating the export,
      * so they can be passed to the export constructor and survive queue serialization.
      *
+     * @param array $advanceOrderIds Array of advance order IDs
+     * @return array Array of unique column names, sorted alphabetically
+     */
+    public function getColumnNamesFromAdvanceOrders(array $advanceOrderIds): array
+    {
+        // Build eager load relationships including provider-specific ones
+        $eagerLoads = array_merge(
+            ['associatedOrderLines.orderLine'],
+            $this->columnDataProvider->getEagerLoadRelationships()
+        );
+
+        $advanceOrders = AdvanceOrder::whereIn('id', $advanceOrderIds)
+            ->with($eagerLoads)
+            ->get();
+
+        return $this->columnDataProvider->getColumnNames($advanceOrders);
+    }
+
+    /**
+     * Get unique branch names from advance order IDs.
+     *
+     * @deprecated Use getColumnNamesFromAdvanceOrders() instead
      * @param array $advanceOrderIds Array of advance order IDs
      * @return array Array of unique branch fantasy names, sorted alphabetically
      */
     public function getBranchNamesFromAdvanceOrders(array $advanceOrderIds): array
     {
-        // Get nested data (not flat format)
-        $nestedData = $this->getConsolidatedPlatedDishData($advanceOrderIds, false);
-
-        // Extract unique branch names
-        return $this->extractUniqueBranchNames($nestedData);
+        return $this->getColumnNamesFromAdvanceOrders($advanceOrderIds);
     }
 
     /**
-     * Extract all unique branch names from nested data structure.
+     * Extract all unique column names from nested data structure.
      *
-     * Scans through all products and ingredients to collect unique branch names
+     * Scans through all products and ingredients to collect unique column names
      * that appear in the data. These will be used to configure schema columns.
      *
      * @param array $nestedData Nested structure from getConsolidatedPlatedDishData()
-     * @return array Array of unique branch fantasy names, sorted alphabetically
+     * @return array Array of unique column names, sorted alphabetically
      */
-    private function extractUniqueBranchNames(array $nestedData): array
+    private function extractUniqueColumnNames(array $nestedData): array
     {
-        $branchNames = [];
+        $columnNames = [];
 
         foreach ($nestedData as $productData) {
             foreach ($productData['ingredients'] as $ingredientData) {
                 foreach ($ingredientData['clientes'] as $clientData) {
-                    $branchNames[$clientData['branch_name']] = true;
+                    $columnNames[$clientData['column_name']] = true;
                 }
             }
         }
 
-        $uniqueBranches = array_keys($branchNames);
-        sort($uniqueBranches); // Sort alphabetically for consistent column order
+        $uniqueColumns = array_keys($columnNames);
+        sort($uniqueColumns);
 
-        return $uniqueBranches;
+        return $uniqueColumns;
     }
 
     /**
@@ -457,29 +504,32 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
 
         $parts = [];
         foreach ($grouped as $weight => $count) {
+            // Get the plural/singular unit name based on the weight quantity
+            $unitName = \App\Enums\MeasureUnit::getPluralNameFromString($measureUnit, $weight);
+
             if ($count === 1) {
-                $parts[] = "1 BOLSA DE {$weight} GRAMOS";
+                $parts[] = "1 BOLSA DE {$weight} {$unitName}";
             } else {
-                $parts[] = "{$count} BOLSAS DE {$weight} GRAMOS";
+                $parts[] = "{$count} BOLSAS DE {$weight} {$unitName}";
             }
         }
 
-        return $parts; // Return array instead of string
+        return $parts;
     }
 
     /**
      * Calculate consolidated total bags description for an ingredient.
      *
-     * @param array $branches Array of branch data with weights
+     * @param array $columns Array of column data with weights
      * @param string $measureUnit Measure unit
      * @return array Array of formatted total bags descriptions
      */
-    private function calculateTotalBolsasDescription(array $branches, string $measureUnit): array
+    private function calculateTotalBolsasDescription(array $columns, string $measureUnit): array
     {
         $allWeights = [];
 
-        foreach ($branches as $branchData) {
-            foreach ($branchData['weights'] as $weight) {
+        foreach ($columns as $columnData) {
+            foreach ($columnData['weights'] as $weight) {
                 $allWeights[] = $weight;
             }
         }

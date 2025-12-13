@@ -45,16 +45,11 @@ class HorecaLabelService
     {
         $elaborationDate = $elaborationDate ?: now()->format('d/m/Y');
 
-        // Step 1: Get order IDs related to this advance order
-        $orderIds = $this->advanceOrderRepository->getRelatedOrderIds($advanceOrderId);
-
-        if (empty($orderIds)) {
-            throw new \Exception("No se encontraron órdenes asociadas al Advance Order #{$advanceOrderId}");
-        }
-
-        // Step 2: Get HORECA label data (ingredients grouped by branch and quantity)
-        // Returns collection with weights arrays already calculated by repository
-        $labelData = $this->horecaRepository->getHorecaLabelDataByOrders($orderIds);
+        // Step 1: Get HORECA label data directly from AdvanceOrder
+        // This method uses associatedOrderLines which respects the production area filter
+        // applied when creating the AdvanceOrder (fixes bug where labels included ALL
+        // order lines from orders instead of only those in the OP)
+        $labelData = $this->horecaRepository->getHorecaLabelDataByAdvanceOrder($advanceOrderId);
 
         if ($labelData->isEmpty()) {
             throw new \Exception('No se encontraron ingredientes HORECA para las órdenes del Advance Order');
@@ -139,7 +134,11 @@ class HorecaLabelService
                 $expanded->push([
                     'ingredient_name' => $item['ingredient_name'],
                     'ingredient_product_code' => $item['ingredient_product_code'],
+                    'grouper_name' => $item['grouper_name'] ?? $item['branch_fantasy_name'],
+                    // Keep branch_fantasy_name for backward compatibility
                     'branch_fantasy_name' => $item['branch_fantasy_name'],
+                    'product_id' => $item['product_id'] ?? null,
+                    'product_name' => $item['product_name'] ?? null,
                     'measure_unit' => $item['measure_unit'],
                     'net_weight' => $weight,
                 ]);

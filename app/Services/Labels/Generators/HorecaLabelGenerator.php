@@ -71,19 +71,24 @@ class HorecaLabelGenerator extends AbstractLabelGenerator
         // HORECA labels ALWAYS hide nutritional table
         $nutritionalTableVisibility = "style='visibility: hidden;'";
 
-        // Get product name and branch from array (HORECA uses array data, not Product objects)
-        $productName = $product['ingredient_name'] ?? '';
+        // Get product name, ingredient name, and branch from array (HORECA uses array data, not Product objects)
+        $ingredientName = $product['ingredient_name'] ?? '';
+        $dishName = $product['product_name'] ?? ''; // The HORECA dish name (e.g., "LASAÑA BOLOÑESA")
         $branchName = $product['branch_fantasy_name'] ?? '';
+
+        // Build dish line HTML (only show if product_name is available)
+        $dishLineHtml = $dishName ? "<div class='dish-name'>{$dishName}</div>" : '';
 
         $html = "
         <div class='label-container'>
             <table class='main-layout' cellpadding='0' cellspacing='0'>
                 <tr>
-                    <!-- LEFT COLUMN: Barcode + Title + Ingredients + Dates -->
+                    <!-- LEFT COLUMN: Barcode + Dish Name + Ingredient Title + Ingredients + Dates -->
                     <td class='left-column'>
                         {$barcodeHtml}
 
-                        <div class='product-title'>{$productName}</div>
+                        {$dishLineHtml}
+                        <div class='product-title'>{$ingredientName}</div>
 
                         <div class='ingredients-block'>
                             <p><strong>Ingredientes:</strong> {$this->repository->getIngredients($product)}</p>
@@ -255,6 +260,14 @@ class HorecaLabelGenerator extends AbstractLabelGenerator
                 letter-spacing: 0.5px;
             }
 
+            .dish-name {
+                font-weight: bold;
+                font-size: 7px;
+                margin-bottom: 0.5mm;
+                background-color: #ffffff;
+                color: #333;
+            }
+
             .product-title {
                 font-weight: bold;
                 font-size: 9px;
@@ -287,6 +300,7 @@ class HorecaLabelGenerator extends AbstractLabelGenerator
             .dates-section .branch-line {
                 margin-top: 3mm;
                 background-color: #ffffff;
+                font-size: 8px;
             }
 
             /* CENTER COLUMN STYLES */
@@ -336,7 +350,7 @@ class HorecaLabelGenerator extends AbstractLabelGenerator
             }
 
             .weight-value {
-                font-size: 7px;
+                font-size: 12px;
                 margin: 0 0 0.3mm 0;
                 background-color: #ffffff;
                 text-align: left;

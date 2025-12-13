@@ -152,4 +152,48 @@ enum MeasureUnit: string
     {
         return $this === self::UNIT;
     }
+
+    /**
+     * Get the plural name in Spanish for bag descriptions
+     *
+     * Used in reports like "1 BOLSA DE 5 UNIDADES" or "2 BOLSAS DE 1000 GRAMOS"
+     *
+     * @param int|float $quantity The quantity to determine singular/plural
+     * @return string The Spanish name (singular or plural based on quantity)
+     */
+    public function getPluralName(int|float $quantity = 2): string
+    {
+        $isSingular = abs($quantity) == 1;
+
+        return match ($this) {
+            self::GRAMS => $isSingular ? 'GRAMO' : 'GRAMOS',
+            self::KILOGRAMS => $isSingular ? 'KILOGRAMO' : 'KILOGRAMOS',
+            self::MILLILITERS => $isSingular ? 'MILILITRO' : 'MILILITROS',
+            self::LITERS => $isSingular ? 'LITRO' : 'LITROS',
+            self::UNIT => $isSingular ? 'UNIDAD' : 'UNIDADES',
+            self::OUNCES => $isSingular ? 'ONZA' : 'ONZAS',
+            self::POUNDS => $isSingular ? 'LIBRA' : 'LIBRAS',
+        };
+    }
+
+    /**
+     * Get the plural name from a string measure unit value
+     *
+     * Static helper for when you have the string value instead of the enum
+     *
+     * @param string $measureUnit The measure unit string (e.g., 'GR', 'UND')
+     * @param int|float $quantity The quantity to determine singular/plural
+     * @return string The Spanish name, or the original string if not found
+     */
+    public static function getPluralNameFromString(string $measureUnit, int|float $quantity = 2): string
+    {
+        $enum = self::tryFrom($measureUnit);
+
+        if ($enum) {
+            return $enum->getPluralName($quantity);
+        }
+
+        // Fallback: return the original string if not a valid enum value
+        return $measureUnit;
+    }
 }

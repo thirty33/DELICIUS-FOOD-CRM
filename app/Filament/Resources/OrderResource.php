@@ -345,6 +345,22 @@ class OrderResource extends Resource
                         }
                     })
                     ->columnSpan(1),
+                Tables\Filters\SelectFilter::make('user_comment')
+                    ->label(__('Comentarios'))
+                    ->options([
+                        'with_comments' => 'Con comentarios',
+                        'without_comments' => 'Sin comentarios',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if ($data['value'] === 'with_comments') {
+                            $query->whereNotNull('user_comment')->where('user_comment', '!=', '');
+                        } elseif ($data['value'] === 'without_comments') {
+                            $query->where(function (Builder $q) {
+                                $q->whereNull('user_comment')->orWhere('user_comment', '=', '');
+                            });
+                        }
+                    })
+                    ->columnSpan(1),
             ], layout: Tables\Enums\FiltersLayout::AboveContent)
             ->filtersFormColumns(2)
             ->actions([
@@ -420,6 +436,18 @@ class OrderResource extends Resource
                                 )->send();
                             }
                         }),
+                    Tables\Actions\Action::make('show_comment')
+                        ->label('Ver comentario')
+                        ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                        ->color('gray')
+                        ->visible(fn(Order $record) => !empty($record->user_comment))
+                        ->modalHeading(fn(Order $record) => 'Comentario - Pedido #' . $record->id)
+                        ->modalWidth(MaxWidth::Small)
+                        ->modalContent(fn(Order $record) => view('filament.resources.order-resource.comment-modal', [
+                            'comment' => $record->user_comment
+                        ]))
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Cerrar'),
                     Tables\Actions\Action::make('facturar')
                         ->label('Facturar')
                         ->icon('heroicon-o-document-text')

@@ -288,16 +288,28 @@ class ConsolidadoEmplatadoDataExport implements
                     ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
                     ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('000000')); // Black borders
 
-                // Step 4: Merge cells in PLATO column for each product group
+                // Step 4: Merge cells in PLATO, INDIVIDUAL, and TOTAL HORECA columns for each product group
+                // These columns show product-level values that should span all ingredient rows
                 foreach ($this->productRowGroups as $group) {
                     $startRow = $group['start'];
                     $endRow = $group['end'];
 
                     if ($endRow > $startRow) {
+                        // Merge PLATO column (A)
                         $sheet->mergeCells("A{$startRow}:A{$endRow}");
-
-                        // Center the text vertically in the merged cell
                         $sheet->getStyle("A{$startRow}:A{$endRow}")
+                            ->getAlignment()
+                            ->setVertical(Alignment::VERTICAL_CENTER);
+
+                        // Merge INDIVIDUAL column (D)
+                        $sheet->mergeCells("D{$startRow}:D{$endRow}");
+                        $sheet->getStyle("D{$startRow}:D{$endRow}")
+                            ->getAlignment()
+                            ->setVertical(Alignment::VERTICAL_CENTER);
+
+                        // Merge TOTAL HORECA column (second-to-last)
+                        $sheet->mergeCells("{$totalHorecaColumn}{$startRow}:{$totalHorecaColumn}{$endRow}");
+                        $sheet->getStyle("{$totalHorecaColumn}{$startRow}:{$totalHorecaColumn}{$endRow}")
                             ->getAlignment()
                             ->setVertical(Alignment::VERTICAL_CENTER);
                     }

@@ -8,6 +8,7 @@ use App\Repositories\OrderRepository;
 use App\Support\ImportExport\ConsolidadoEmplatadoSchema;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Tests\Helpers\ReportGrouperTestHelper;
 use Tests\Helpers\TestDataFactory;
 use Tests\TestCase;
 
@@ -27,6 +28,7 @@ use Tests\TestCase;
 class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
 {
     use RefreshDatabase;
+    use ReportGrouperTestHelper;
 
     public function test_horeca_with_individual_product_shows_combined_name_and_totals(): void
     {
@@ -96,19 +98,27 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         $orderIndivB = TestDataFactory::createHorecaOrder($userB, $branchB, $individualProduct, 12, $deliveryDate);
 
         // ===============================================================
-        // 6. CREATE ADVANCE ORDER FROM ALL ORDERS (using repository)
+        // 6. CREATE REPORT GROUPERS (by branch, not company, to keep separate columns)
         // ===============================================================
-        $repository = new OrderRepository();
-        $advanceOrder = $repository->createAdvanceOrderFromOrders(
+        $this->createGroupersByBranchName([
+            ['name' => 'BRANCH A HORECA', 'branch_id' => $branchA->id],
+            ['name' => 'BRANCH B HORECA', 'branch_id' => $branchB->id],
+        ]);
+
+        // ===============================================================
+        // 7. CREATE ADVANCE ORDER FROM ALL ORDERS (using repository)
+        // ===============================================================
+        $orderRepository = new OrderRepository();
+        $advanceOrder = $orderRepository->createAdvanceOrderFromOrders(
             [$orderA->id, $orderB->id, $orderIndivA->id, $orderIndivB->id],
             now()->format('Y-m-d H:i:s'),
             [$productionArea->id]
         );
 
         // ===============================================================
-        // 7. EXECUTE REPOSITORY - NESTED FORMAT
+        // 8. EXECUTE REPOSITORY - NESTED FORMAT
         // ===============================================================
-        $repository = new ConsolidadoEmplatadoRepository();
+        $repository = app(ConsolidadoEmplatadoRepository::class);
         $nestedData = $repository->getConsolidatedPlatedDishData([$advanceOrder->id], false);
 
         // ===============================================================
@@ -150,12 +160,12 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         // Check clients
         $this->assertCount(2, $ingredient1['clientes']);
 
-        $clientA = collect($ingredient1['clientes'])->firstWhere('branch_name', 'BRANCH A HORECA');
+        $clientA = collect($ingredient1['clientes'])->firstWhere('column_name', 'BRANCH A HORECA');
         $this->assertNotNull($clientA);
         $this->assertEquals(10, $clientA['porciones']);
         $this->assertEquals(500, $clientA['gramos']); // 10 × 50 = 500
 
-        $clientB = collect($ingredient1['clientes'])->firstWhere('branch_name', 'BRANCH B HORECA');
+        $clientB = collect($ingredient1['clientes'])->firstWhere('column_name', 'BRANCH B HORECA');
         $this->assertNotNull($clientB);
         $this->assertEquals(5, $clientB['porciones']);
         $this->assertEquals(250, $clientB['gramos']); // 5 × 50 = 250
@@ -199,8 +209,8 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         $this->assertEquals('', $row2['plato']); // Empty for merged cell effect
         $this->assertEquals('JAMON', $row2['ingrediente']);
         $this->assertEquals('30 GRAMOS', $row2['cantidad_x_pax']);
-        $this->assertEquals('20', $row2['individual']); // String value
-        $this->assertEquals('15', $row2['total_horeca']);
+        $this->assertEquals('', $row2['individual']); // Empty for merged cell effect
+        $this->assertEquals('', $row2['total_horeca']); // Empty for merged cell effect
 
         // ===============================================================
         // 12. TEST EXCEL EXPORT USING ExportService
@@ -281,11 +291,11 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         $this->assertEquals('50 GRAMOS', $sheet->getCellByColumnAndRow(3, 4)->getValue());
         $this->assertEquals('20', $sheet->getCellByColumnAndRow(4, 4)->getValue()); // INDIVIDUAL column
 
-        // Verify data row 5 (Ingredient 2: JAMON) - plato should be empty
+        // Verify data row 5 (Ingredient 2: JAMON) - plato and individual should be empty for merged cell effect
         $this->assertEquals('', $sheet->getCellByColumnAndRow(1, 5)->getValue());
         $this->assertEquals('JAMON', $sheet->getCellByColumnAndRow(2, 5)->getValue());
         $this->assertEquals('30 GRAMOS', $sheet->getCellByColumnAndRow(3, 5)->getValue());
-        $this->assertEquals('20', $sheet->getCellByColumnAndRow(4, 5)->getValue()); // INDIVIDUAL column
+        $this->assertEquals('', $sheet->getCellByColumnAndRow(4, 5)->getValue()); // INDIVIDUAL column - empty for merged cell effect
 
         // ===============================================================
         // 13. SUMMARY OUTPUT
@@ -429,10 +439,18 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         $orderHorecaPastaB = TestDataFactory::createHorecaOrder($userB, $branchB, $horecaPasta, 12, $deliveryDate);
 
         // ===============================================================
-        // 7. CREATE ADVANCE ORDER FROM ALL ORDERS
+        // 7. CREATE REPORT GROUPERS (by branch, not company, to keep separate columns)
         // ===============================================================
-        $repository = new OrderRepository();
-        $advanceOrder = $repository->createAdvanceOrderFromOrders(
+        $this->createGroupersByBranchName([
+            ['name' => 'BRANCH A MIXED', 'branch_id' => $branchA->id],
+            ['name' => 'BRANCH B MIXED', 'branch_id' => $branchB->id],
+        ]);
+
+        // ===============================================================
+        // 8. CREATE ADVANCE ORDER FROM ALL ORDERS
+        // ===============================================================
+        $orderRepository = new OrderRepository();
+        $advanceOrder = $orderRepository->createAdvanceOrderFromOrders(
             [
                 $orderHorecaBurgerA->id,
                 $orderHorecaBurgerB->id,
@@ -448,9 +466,9 @@ class ConsolidadoEmplatadoWithIndividualProductTest extends TestCase
         );
 
         // ===============================================================
-        // 8. EXECUTE REPOSITORY - NESTED FORMAT
+        // 9. EXECUTE REPOSITORY - NESTED FORMAT
         // ===============================================================
-        $repository = new ConsolidadoEmplatadoRepository();
+        $repository = app(ConsolidadoEmplatadoRepository::class);
         $nestedData = $repository->getConsolidatedPlatedDishData([$advanceOrder->id], false);
 
         // ===============================================================

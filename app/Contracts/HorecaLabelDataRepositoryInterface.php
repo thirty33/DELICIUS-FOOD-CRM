@@ -35,4 +35,16 @@ interface HorecaLabelDataRepositoryInterface
      *   ]
      */
     public function getHorecaLabelDataByOrders(array $orderIds): Collection;
+
+    /**
+     * Get label data grouped by branch and max_quantity_horeca for an AdvanceOrder
+     *
+     * Unlike getHorecaLabelDataByOrders which loads ALL order lines from orders,
+     * this method only loads order lines that are associated with the AdvanceOrder
+     * (respecting the production area filter applied when creating the OP).
+     *
+     * @param int $advanceOrderId AdvanceOrder ID
+     * @return Collection Collection of label data items (same structure as getHorecaLabelDataByOrders)
+     */
+    public function getHorecaLabelDataByAdvanceOrder(int $advanceOrderId): Collection;
 }
