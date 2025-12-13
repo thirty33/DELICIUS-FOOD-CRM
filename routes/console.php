@@ -47,6 +47,6 @@ Artisan::command('queue:process', function () {
     ->withoutOverlapping();
 
 // Schedule: Update orders production status every minute
-// Schedule::command('orders:update-production-status')
-//     ->everyMinute()
-//     ->withoutOverlapping();
+Schedule::command('orders:update-production-status')
+    ->everyMinute()
+    ->withoutOverlapping();

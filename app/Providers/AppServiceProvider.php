@@ -23,6 +23,8 @@ use App\Services\NutritionalInformationDeletionService;
 use App\Jobs\DeleteNutritionalInformationJob;
 use App\Contracts\Labels\LabelGeneratorInterface;
 use App\Services\Labels\Generators\NutritionalLabelGenerator;
+use App\Contracts\NutritionalLabelDataPreparerInterface;
+use App\Services\Labels\NutritionalLabelDataPreparer;
 use App\Contracts\ColumnDataProviderInterface;
 use App\Services\Reports\BranchColumnDataProvider;
 use App\Services\Reports\GrouperColumnDataProvider;
@@ -101,6 +103,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             LabelGeneratorInterface::class,
             NutritionalLabelGenerator::class
+        );
+
+        // Bind nutritional label data preparer
+        // Used by NutritionalLabelService and GenerateProductLabels command
+        $this->app->bind(
+            NutritionalLabelDataPreparerInterface::class,
+            NutritionalLabelDataPreparer::class
         );
 
         // Bind column data provider for Consolidado Emplatado report

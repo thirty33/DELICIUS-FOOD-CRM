@@ -2,6 +2,7 @@
 
 namespace App\Services\Labels;
 
+use App\Contracts\NutritionalLabelDataPreparerInterface;
 use App\Jobs\GenerateNutritionalLabelsJob;
 use App\Models\ExportProcess;
 use App\Models\Product;
@@ -27,7 +28,8 @@ class NutritionalLabelService
     private const LABELS_PER_CHUNK = 100;
 
     public function __construct(
-        protected NutritionalInformationRepository $repository
+        protected NutritionalInformationRepository $repository,
+        protected NutritionalLabelDataPreparerInterface $dataPreparer
     ) {}
 
     /**
@@ -44,121 +46,171 @@ class NutritionalLabelService
     {
         $elaborationDate = $elaborationDate ?: now()->format('d/m/Y');
 
-        // Step 1: Validate products before creating chunks
-        // Fetch UNIQUE products to ensure they exist and have nutritional information
-        // Do NOT expand by quantities yet - we need unique products for grouping
-        $validationProducts = $this->repository->getProductsForLabelGeneration($productIds, []);
+        // NEW: Use helper to prepare all data (validation, grouping, chunking)
+        $preparedData = $this->dataPreparer->prepareData($productIds, $quantities, self::LABELS_PER_CHUNK);
 
-        if ($validationProducts->isEmpty()) {
-            throw new \Exception('No se encontraron productos con información nutricional y etiqueta habilitada');
-        }
-
-        // Step 2: Get valid product IDs from validated products
-        // Only create chunks for products that actually have nutritional information
-        $validProductIds = $validationProducts->pluck('id')->unique()->toArray();
-
-        // Step 3: Group UNIQUE products by production area
-        // Each product should belong to one production area (or "SIN CUARTO PRODUCTIVO")
-        $productsByArea = [];
-        foreach ($validationProducts as $product) {
-            $areaName = $product->productionAreas->first()?->name ?? 'SIN CUARTO PRODUCTIVO';
-
-            if (!isset($productsByArea[$areaName])) {
-                $productsByArea[$areaName] = [];
-            }
-
-            // Store unique product IDs only (no duplicates)
-            if (!in_array($product->id, $productsByArea[$areaName])) {
-                $productsByArea[$areaName][] = $product->id;
-            }
-        }
-
-        // Sort areas alphabetically for consistent ordering
-        ksort($productsByArea);
-
-        // Step 4: Expand product IDs by quantities within each area and create chunks
-        // Jobs will re-fetch products from DB (avoids serialization memory issues)
+        // Create export processes and jobs for each chunk
         $exportProcesses = [];
         $jobs = [];
-        $globalChunkIndex = 0;
-        $totalLabels = 0;
 
-        foreach ($productsByArea as $areaName => $areaProductIds) {
-            // Expand product IDs based on quantities for this area
-            $expandedAreaProductIds = [];
-            foreach ($areaProductIds as $productId) {
-                $quantity = $quantities[$productId] ?? 1;
-                for ($i = 0; $i < $quantity; $i++) {
-                    $expandedAreaProductIds[] = $productId;
-                }
+        foreach ($preparedData['chunks'] as $index => $chunk) {
+            // Build description
+            $description = "Etiquetas nutricionales: {$chunk['area_name']} - Lote {$chunk['chunk_number']}/{$chunk['total_chunks_in_area']} ({$chunk['label_count']} etiqueta(s), productos #{$chunk['first_product_id']} a #{$chunk['last_product_id']})";
+            if ($productionOrderCode) {
+                $description .= " - Orden de Producción: {$productionOrderCode}";
             }
 
-            $areaLabelCount = count($expandedAreaProductIds);
-            $totalLabels += $areaLabelCount;
+            // Create export process with incremental timestamp for ordering
+            $createdAt = now()->addSeconds($index * 5);
 
-            // Chunk this area's products
-            $areaChunks = array_chunk($expandedAreaProductIds, self::LABELS_PER_CHUNK);
-            $areaChunksCount = count($areaChunks);
+            $exportProcess = ExportProcess::create([
+                'type' => ExportProcess::TYPE_NUTRITIONAL_INFORMATION,
+                'description' => $description,
+                'status' => ExportProcess::STATUS_QUEUED,
+                'file_url' => '-',
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt
+            ]);
 
-            foreach ($areaChunks as $areaChunkIndex => $chunkProductIds) {
-                $areaChunkNumber = $areaChunkIndex + 1;
-                $chunkLabelCount = count($chunkProductIds);
+            // Create job for this chunk
+            $jobs[] = new GenerateNutritionalLabelsJob(
+                $chunk['product_ids'],
+                $elaborationDate,
+                $exportProcess->id,
+                $chunk['quantities'],
+                $chunk['area_name'],
+                $productionOrderCode,
+                $chunk['start_index']
+            );
 
-                // Get unique product IDs in this chunk for description
-                $uniqueChunkProductIds = collect($chunkProductIds)->unique()->sort()->values();
-                $firstProduct = $uniqueChunkProductIds->first();
-                $lastProduct = $uniqueChunkProductIds->last();
-
-                // Build description with production area and optional production order code
-                $description = "Etiquetas nutricionales: {$areaName} - Lote {$areaChunkNumber}/{$areaChunksCount} ({$chunkLabelCount} etiqueta(s), productos #{$firstProduct} a #{$lastProduct})";
-                if ($productionOrderCode) {
-                    $description .= " - Orden de Producción: {$productionOrderCode}";
-                }
-
-                // Create export process for this chunk with incremental timestamp
-                // Add 5 seconds per chunk to created_at to ensure proper ordering in the UI
-                // (5 seconds ensures visible ordering even with DESC sort)
-                $createdAt = now()->addSeconds($globalChunkIndex * 5);
-
-                $exportProcess = ExportProcess::create([
-                    'type' => ExportProcess::TYPE_NUTRITIONAL_INFORMATION,
-                    'description' => $description,
-                    'status' => ExportProcess::STATUS_QUEUED,
-                    'file_url' => '-',
-                    'created_at' => $createdAt,
-                    'updated_at' => $createdAt
-                ]);
-
-                // Build quantities array for this chunk
-                $chunkQuantities = [];
-                foreach ($chunkProductIds as $productId) {
-                    $chunkQuantities[$productId] = ($chunkQuantities[$productId] ?? 0) + 1;
-                }
-
-                // Create job instance passing IDs, quantities, and metadata
-                // Job will fetch products from DB using repository
-                $jobs[] = new GenerateNutritionalLabelsJob(
-                    array_keys($chunkQuantities),
-                    $elaborationDate,
-                    $exportProcess->id,
-                    $chunkQuantities,
-                    $areaName,
-                    $productionOrderCode
-                );
-
-                $exportProcesses[] = $exportProcess;
-
-                $globalChunkIndex++;
-            }
+            $exportProcesses[] = $exportProcess;
         }
 
-        // Step 4: Dispatch all jobs as a sequential chain
-        // Each job will only start after the previous one completes successfully
+        // Dispatch all jobs as a sequential chain
         Bus::chain($jobs)->dispatch();
 
-        // Return the first export process (for backward compatibility)
-        // Frontend will receive the first process, others will be processed in background
         return $exportProcesses[0];
+
+        // =====================================================================
+        // OLD CODE - Kept for reference during refactoring validation
+        // =====================================================================
+        //
+        // // Step 1: Validate products before creating chunks
+        // // Fetch UNIQUE products to ensure they exist and have nutritional information
+        // // Do NOT expand by quantities yet - we need unique products for grouping
+        // $validationProducts = $this->repository->getProductsForLabelGeneration($productIds, []);
+        //
+        // if ($validationProducts->isEmpty()) {
+        //     throw new \Exception('No se encontraron productos con información nutricional y etiqueta habilitada');
+        // }
+        //
+        // // Step 2: Get valid product IDs from validated products
+        // // Only create chunks for products that actually have nutritional information
+        // $validProductIds = $validationProducts->pluck('id')->unique()->toArray();
+        //
+        // // Step 3: Group UNIQUE products by production area
+        // // Each product should belong to one production area (or "SIN CUARTO PRODUCTIVO")
+        // $productsByArea = [];
+        // foreach ($validationProducts as $product) {
+        //     $areaName = $product->productionAreas->first()?->name ?? 'SIN CUARTO PRODUCTIVO';
+        //
+        //     if (!isset($productsByArea[$areaName])) {
+        //         $productsByArea[$areaName] = [];
+        //     }
+        //
+        //     // Store unique product IDs only (no duplicates)
+        //     if (!in_array($product->id, $productsByArea[$areaName])) {
+        //         $productsByArea[$areaName][] = $product->id;
+        //     }
+        // }
+        //
+        // // Sort areas alphabetically for consistent ordering
+        // ksort($productsByArea);
+        //
+        // // Step 4: Expand product IDs by quantities within each area and create chunks
+        // // Jobs will re-fetch products from DB (avoids serialization memory issues)
+        // $exportProcesses = [];
+        // $jobs = [];
+        // $globalChunkIndex = 0;
+        // $totalLabels = 0;
+        //
+        // foreach ($productsByArea as $areaName => $areaProductIds) {
+        //     // Expand product IDs based on quantities for this area
+        //     $expandedAreaProductIds = [];
+        //     foreach ($areaProductIds as $productId) {
+        //         $quantity = $quantities[$productId] ?? 1;
+        //         for ($i = 0; $i < $quantity; $i++) {
+        //             $expandedAreaProductIds[] = $productId;
+        //         }
+        //     }
+        //
+        //     $areaLabelCount = count($expandedAreaProductIds);
+        //     $totalLabels += $areaLabelCount;
+        //
+        //     // Chunk this area's products
+        //     $areaChunks = array_chunk($expandedAreaProductIds, self::LABELS_PER_CHUNK);
+        //     $areaChunksCount = count($areaChunks);
+        //
+        //     foreach ($areaChunks as $areaChunkIndex => $chunkProductIds) {
+        //         $areaChunkNumber = $areaChunkIndex + 1;
+        //         $chunkLabelCount = count($chunkProductIds);
+        //
+        //         // Get unique product IDs in this chunk for description
+        //         $uniqueChunkProductIds = collect($chunkProductIds)->unique()->sort()->values();
+        //         $firstProduct = $uniqueChunkProductIds->first();
+        //         $lastProduct = $uniqueChunkProductIds->last();
+        //
+        //         // Build description with production area and optional production order code
+        //         $description = "Etiquetas nutricionales: {$areaName} - Lote {$areaChunkNumber}/{$areaChunksCount} ({$chunkLabelCount} etiqueta(s), productos #{$firstProduct} a #{$lastProduct})";
+        //         if ($productionOrderCode) {
+        //             $description .= " - Orden de Producción: {$productionOrderCode}";
+        //         }
+        //
+        //         // Create export process for this chunk with incremental timestamp
+        //         // Add 5 seconds per chunk to created_at to ensure proper ordering in the UI
+        //         // (5 seconds ensures visible ordering even with DESC sort)
+        //         $createdAt = now()->addSeconds($globalChunkIndex * 5);
+        //
+        //         $exportProcess = ExportProcess::create([
+        //             'type' => ExportProcess::TYPE_NUTRITIONAL_INFORMATION,
+        //             'description' => $description,
+        //             'status' => ExportProcess::STATUS_QUEUED,
+        //             'file_url' => '-',
+        //             'created_at' => $createdAt,
+        //             'updated_at' => $createdAt
+        //         ]);
+        //
+        //         // Build quantities array for this chunk
+        //         $chunkQuantities = [];
+        //         foreach ($chunkProductIds as $productId) {
+        //             $chunkQuantities[$productId] = ($chunkQuantities[$productId] ?? 0) + 1;
+        //         }
+        //
+        //         // Create job instance passing IDs, quantities, and metadata
+        //         // Job will fetch products from DB using repository
+        //         $jobs[] = new GenerateNutritionalLabelsJob(
+        //             array_keys($chunkQuantities),
+        //             $elaborationDate,
+        //             $exportProcess->id,
+        //             $chunkQuantities,
+        //             $areaName,
+        //             $productionOrderCode
+        //         );
+        //
+        //         $exportProcesses[] = $exportProcess;
+        //
+        //         $globalChunkIndex++;
+        //     }
+        // }
+        //
+        // // Step 4: Dispatch all jobs as a sequential chain
+        // // Each job will only start after the previous one completes successfully
+        // Bus::chain($jobs)->dispatch();
+        //
+        // // Return the first export process (for backward compatibility)
+        // // Frontend will receive the first process, others will be processed in background
+        // return $exportProcesses[0];
+        // =====================================================================
     }
 
     /**

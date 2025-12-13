@@ -185,7 +185,11 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
             }
         }
 
+        // Label counter (comes from NutritionalLabelDataPreparer via label_index attribute)
+        $labelIndex = $product->label_index ?? '';
+
         $html .= "
+                            <span class='label-counter'>{$labelIndex}</span>
                         </div>
                     </td>
                 </tr>
@@ -442,10 +446,11 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
             .icons-section {
                 margin-top: 1mm;
-                text-align: center;
-                background-color: #ffffff;
+                text-align: right;
                 white-space: nowrap;
                 padding-right: 1.5mm;
+                line-height: 1.2;
+                min-height: 8mm;
             }
 
             .warning-icon {
@@ -454,7 +459,6 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 margin: 0 0.3mm;
                 display: inline-block;
                 vertical-align: top;
-                background-color: #ffffff;
             }
 
             .portion-number {
@@ -463,7 +467,14 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 display: inline-block;
                 vertical-align: top;
                 margin-left: 1mm;
-                background-color: #ffffff;
+            }
+
+            .label-counter {
+                font-size: 10px;
+                font-weight: bold;
+                display: inline-block;
+                vertical-align: top;
+                margin-left: 2mm;
             }
         ";
     }

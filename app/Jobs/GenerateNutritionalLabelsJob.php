@@ -4,10 +4,9 @@ namespace App\Jobs;
 
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Contracts\Labels\LabelGeneratorInterface;
-use App\Contracts\NutritionalInformationRepositoryInterface;
+use App\Contracts\NutritionalLabelDataPreparerInterface;
 use App\Facades\ImageSigner;
 use App\Models\ExportProcess;
-use App\Models\Product;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -50,6 +49,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
     private array $quantities;
     private ?string $productionArea;
     private ?string $productionOrderCode;
+    private int $startIndex;
 
     public function __construct(
         array $productIds,
@@ -57,7 +57,8 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         int $exportProcessId,
         array $quantities = [],
         ?string $productionArea = null,
-        ?string $productionOrderCode = null
+        ?string $productionOrderCode = null,
+        int $startIndex = 1
     ) {
         $this->productIds = $productIds;
         $this->elaborationDate = $elaborationDate;
@@ -65,17 +66,17 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         $this->quantities = $quantities;
         $this->productionArea = $productionArea;
         $this->productionOrderCode = $productionOrderCode;
+        $this->startIndex = $startIndex;
     }
 
-    public function handle(LabelGeneratorInterface $labelGenerator, NutritionalInformationRepositoryInterface $repository)
+    public function handle(LabelGeneratorInterface $labelGenerator, NutritionalLabelDataPreparerInterface $dataPreparer)
     {
 
         $exportProcess = ExportProcess::findOrFail($this->exportProcessId);
         $exportProcess->update(['status' => ExportProcess::STATUS_PROCESSING]);
 
-        // Fetch products with nutritional information using repository
-        // Repository will handle quantities and repeat products as needed
-        $products = $repository->getProductsForLabelGeneration($this->productIds, $this->quantities);
+        // Fetch products with nutritional information and label_index using preparer
+        $products = $dataPreparer->getExpandedProducts($this->productIds, $this->quantities, $this->startIndex);
 
         // Set elaboration date and generate PDF
         $labelGenerator->setElaborationDate($this->elaborationDate);
