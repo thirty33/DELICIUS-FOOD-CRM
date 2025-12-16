@@ -37,5 +37,6 @@ tests/**/*.csv
 **/*_test_manifest.csv
 
 # Documentation files - Internal use only
-CREAR_NUEVA_BASE_DE_DATOS.md
-RESOLVER_PROBLEMA_DNS_MCP_CHROME.md
+*.md
+!README.md
+!CLAUDE.md

@@ -339,6 +339,17 @@ class ProductsRelationManager extends RelationManager
                         ->icon('heroicon-o-document-text')
                         ->color('success')
                         ->form([
+                            Forms\Components\Select::make('quantity_source')
+                                ->label(__('Cantidad a usar'))
+                                ->options([
+                                    'new_orders' => __('Pedidos Nuevos'),
+                                    'total_to_produce' => __('Total a Elaborar'),
+                                    'ordered_quantity' => __('Total Pedidos'),
+                                    'quantity' => __('Adelantar'),
+                                ])
+                                ->default('total_to_produce')
+                                ->required()
+                                ->helperText(__('Seleccione qué cantidad usar para generar las etiquetas')),
                             Forms\Components\DatePicker::make('elaboration_date')
                                 ->label(__('Fecha de Elaboración'))
                                 ->default(now())
@@ -357,13 +368,25 @@ class ProductsRelationManager extends RelationManager
                                     return;
                                 }
 
-                                // Build quantities array from total_to_produce field
+                                // Build quantities array based on user selection
                                 $quantities = [];
                                 $productIds = [];
+                                $quantitySource = $data['quantity_source'];
+
+                                // Map quantity source to field and display name
+                                $fieldMapping = [
+                                    'new_orders' => ['field' => 'ordered_quantity_new', 'name' => __('pedidos nuevos')],
+                                    'total_to_produce' => ['field' => 'total_to_produce', 'name' => __('total a elaborar')],
+                                    'ordered_quantity' => ['field' => 'ordered_quantity', 'name' => __('total pedidos')],
+                                    'quantity' => ['field' => 'quantity', 'name' => __('adelantar')],
+                                ];
+
+                                $fieldInfo = $fieldMapping[$quantitySource] ?? $fieldMapping['total_to_produce'];
+                                $fieldName = $fieldInfo['field'];
 
                                 foreach ($records as $record) {
                                     $productId = $record->product_id;
-                                    $quantity = $record->total_to_produce ?? 0;
+                                    $quantity = $record->{$fieldName} ?? 0;
 
                                     if ($quantity > 0) {
                                         $productIds[] = $productId;
@@ -373,8 +396,8 @@ class ProductsRelationManager extends RelationManager
 
                                 if (empty($productIds)) {
                                     Notification::make()
-                                        ->title(__('Sin productos a elaborar'))
-                                        ->body(__('Los productos seleccionados no tienen cantidad a elaborar'))
+                                        ->title(__('Sin productos'))
+                                        ->body(__('Los productos seleccionados no tienen :field', ['field' => $fieldInfo['name']]))
                                         ->warning()
                                         ->send();
                                     return;

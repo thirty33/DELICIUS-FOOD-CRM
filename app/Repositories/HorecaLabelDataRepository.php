@@ -59,9 +59,15 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
                 $branchId = $branch->id;
                 $branchFantasyName = $branch->fantasy_name ?? $branch->company->name ?? 'SIN SUCURSAL';
 
+                // Get product info for sorting by product
+                $product = $orderLine->product;
+                $productId = $product->id;
+                $productName = $product->name;
+
                 // Process each ingredient in the plated dish
                 foreach ($platedDish->ingredients as $ingredient) {
-                    $key = "{$branchId}_{$ingredient->ingredient_name}";
+                    // Key includes product_id to discriminate by product (for correct sorting)
+                    $key = "{$productId}_{$branchId}_{$ingredient->ingredient_name}";
 
                     // Initialize if not exists
                     if (!isset($groupedData[$key])) {
@@ -70,6 +76,8 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
                             'ingredient_product_code' => $this->extractProductCode($ingredient->ingredient_name),
                             'branch_id' => $branchId,
                             'branch_fantasy_name' => $branchFantasyName,
+                            'product_id' => $productId,
+                            'product_name' => $productName,
                             'measure_unit' => $ingredient->measure_unit,
                             'max_quantity_horeca' => $ingredient->max_quantity_horeca ?? 1000, // Default 1000 if null
                             'shelf_life' => $ingredient->shelf_life, // Shelf life in days from plated_dish_ingredients
@@ -86,9 +94,14 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
         }
 
         // Calculate labels and weights for each group
+        // Sort by: product_name → ingredient_name (alphabetical) → branch_fantasy_name (alphabetical)
         $labelData = collect($groupedData)->map(function ($item) {
             return $this->calculateLabelsAndWeights($item);
-        })->sortBy('branch_id')->values();
+        })->sortBy([
+            ['product_name', 'asc'],
+            ['ingredient_name', 'asc'],
+            ['branch_fantasy_name', 'asc'],
+        ])->values();
 
         return $labelData;
     }
@@ -260,12 +273,13 @@ class HorecaLabelDataRepository implements HorecaLabelDataRepositoryInterface
         }
 
         // Calculate labels and weights for each group
-        // Sort by grouper_name first, then by ingredient_name within each grouper
+        // Sort by: product_name → ingredient_name (alphabetical) → branch_fantasy_name (alphabetical)
         $labelData = collect($groupedData)->map(function ($item) {
             return $this->calculateLabelsAndWeights($item);
         })->sortBy([
-            ['grouper_name', 'asc'],
+            ['product_name', 'asc'],
             ['ingredient_name', 'asc'],
+            ['branch_fantasy_name', 'asc'],
         ])->values();
 
         return $labelData;

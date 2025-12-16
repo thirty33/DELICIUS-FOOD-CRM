@@ -568,21 +568,28 @@ class HorecaLabelDataRepositoryTest extends TestCase
     }
 
     /**
-     * Test that labels are grouped by branch (all labels from one branch first, then all from another)
+     * Test that labels are grouped by product, then ingredient, then branch
      *
      * SETUP:
-     * - Branch A (Sucursal Centro): 2 ingredients (MZC, JUG)
-     * - Branch B (Sucursal Sur): 2 ingredients (MZC, ARR)
-     * - Branch C (Sucursal Norte): 1 ingredient (MZC)
+     * - 1 Product with 3 ingredients (ARR, JUG, MZC)
+     * - Branch A (Sucursal Centro): 2 dishes
+     * - Branch B (Sucursal Sur): 3 dishes
+     * - Branch C (Sucursal Norte): 1 dish
      *
-     * EXPECTED ORDER:
-     * 1. All Branch A labels (MZC, JUG)
-     * 2. All Branch B labels (MZC, ARR)
-     * 3. All Branch C labels (MZC)
+     * EXPECTED ORDER (product → ingredient alphabetical → branch alphabetical):
+     * 1. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Centro
+     * 2. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Norte
+     * 3. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Sur
+     * 4. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Centro
+     * 5. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Norte
+     * 6. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Sur
+     * 7. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Centro
+     * 8. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Norte
+     * 9. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Sur
      *
-     * This ensures warehouse/kitchen can process one branch at a time
+     * This ensures kitchen can prepare all of one ingredient at once
      */
-    public function test_labels_are_grouped_by_branch(): void
+    public function test_labels_are_grouped_by_product_then_ingredient_then_branch(): void
     {
         // ===== Create additional company and branches =====
         $companyB = Company::create([
@@ -723,51 +730,47 @@ class HorecaLabelDataRepositoryTest extends TestCase
         // ===== ASSERTIONS =====
 
         // Should have 9 label groups total:
-        // Branch A: MZC, JUG, ARR (3 labels)
-        // Branch B: MZC, JUG, ARR (3 labels)
-        // Branch C: MZC, JUG, ARR (3 labels)
-        $this->assertCount(9, $labelData, 'Should have 9 label groups (3 branches × 3 ingredients)');
+        // 1 product × 3 ingredients × 3 branches = 9 labels
+        $this->assertCount(9, $labelData, 'Should have 9 label groups (1 product × 3 ingredients × 3 branches)');
 
-        // Extract branch IDs in order
-        $branchIdsInOrder = $labelData->pluck('branch_id')->toArray();
+        // ===== VERIFY ORDER: product → ingredient (alphabetical) → branch (alphabetical) =====
 
-        // Group consecutive same branch IDs
-        $branchGroups = [];
-        $currentBranch = null;
-        $currentGroup = [];
+        // Expected order:
+        // 1. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Centro
+        // 2. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Norte
+        // 3. HORECA SHARED PRODUCT → ARR - ARROZ BLANCO → Sucursal Sur
+        // 4. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Centro
+        // 5. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Norte
+        // 6. HORECA SHARED PRODUCT → JUG - JUGO DE NARANJA → Sucursal Sur
+        // 7. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Centro
+        // 8. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Norte
+        // 9. HORECA SHARED PRODUCT → MZC - CONSOME DE POLLO GRANEL → Sucursal Sur
 
-        foreach ($branchIdsInOrder as $branchId) {
-            if ($branchId !== $currentBranch) {
-                if (!empty($currentGroup)) {
-                    $branchGroups[] = $currentGroup;
-                }
-                $currentBranch = $branchId;
-                $currentGroup = [$branchId];
-            } else {
-                $currentGroup[] = $branchId;
-            }
-        }
+        $labelsArray = $labelData->values()->toArray();
 
-        if (!empty($currentGroup)) {
-            $branchGroups[] = $currentGroup;
-        }
+        // Verify ingredient grouping (all same ingredient together)
+        $ingredientOrder = $labelData->pluck('ingredient_name')->toArray();
+        $expectedIngredientOrder = [
+            'ARR - ARROZ BLANCO',
+            'ARR - ARROZ BLANCO',
+            'ARR - ARROZ BLANCO',
+            'JUG - JUGO DE NARANJA',
+            'JUG - JUGO DE NARANJA',
+            'JUG - JUGO DE NARANJA',
+            'MZC - CONSOME DE POLLO GRANEL',
+            'MZC - CONSOME DE POLLO GRANEL',
+            'MZC - CONSOME DE POLLO GRANEL',
+        ];
+        $this->assertEquals($expectedIngredientOrder, $ingredientOrder, 'Ingredients should be grouped together alphabetically');
 
-        // Assert that we have exactly 3 groups (one per branch)
-        $this->assertCount(
-            3,
-            $branchGroups,
-            'Labels should be grouped by branch (3 groups: Branch A, Branch B, Branch C)'
-        );
-
-        // Verify each group contains only one unique branch ID
-        foreach ($branchGroups as $index => $group) {
-            $uniqueBranches = array_unique($group);
-            $this->assertCount(
-                1,
-                $uniqueBranches,
-                "Group {$index} should contain only one branch ID"
-            );
-        }
+        // Verify branch order within each ingredient (alphabetical)
+        $branchOrder = $labelData->pluck('branch_fantasy_name')->toArray();
+        $expectedBranchOrder = [
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // ARR
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // JUG
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // MZC
+        ];
+        $this->assertEquals($expectedBranchOrder, $branchOrder, 'Branches should be alphabetical within each ingredient');
 
         // Verify the content of each branch group
         $branchALabels = $labelData->where('branch_fantasy_name', 'Sucursal Centro');
@@ -1057,30 +1060,31 @@ class HorecaLabelDataRepositoryTest extends TestCase
         // 1. TOTAL COUNT: Should have 13 ingredient groups (branch-ingredient combinations)
         $this->assertCount(13, $labelData, 'Should have 13 total label groups (5+5+3 ingredient groups)');
 
-        // 2. BRANCH GROUPING: Verify consecutive branch grouping
-        $branchIdsInOrder = $labelData->pluck('branch_id')->toArray();
+        // 2. PRODUCT GROUPING: Verify consecutive product grouping
+        // With new ordering (product → ingredient → branch), products should be grouped together
+        $productNamesInOrder = $labelData->pluck('product_name')->toArray();
 
-        $branchGroups = [];
-        $currentBranch = null;
+        $productGroups = [];
+        $currentProduct = null;
         $currentGroup = [];
 
-        foreach ($branchIdsInOrder as $branchId) {
-            if ($branchId !== $currentBranch) {
+        foreach ($productNamesInOrder as $productName) {
+            if ($productName !== $currentProduct) {
                 if (!empty($currentGroup)) {
-                    $branchGroups[] = $currentGroup;
+                    $productGroups[] = $currentGroup;
                 }
-                $currentBranch = $branchId;
-                $currentGroup = [$branchId];
+                $currentProduct = $productName;
+                $currentGroup = [$productName];
             } else {
-                $currentGroup[] = $branchId;
+                $currentGroup[] = $productName;
             }
         }
 
         if (!empty($currentGroup)) {
-            $branchGroups[] = $currentGroup;
+            $productGroups[] = $currentGroup;
         }
 
-        $this->assertCount(3, $branchGroups, 'Should have 3 branch groups (A, B, C)');
+        $this->assertCount(2, $productGroups, 'Should have 2 product groups (BOWL, ENSALADA)');
 
         // 3. VERIFY COUNTS PER BRANCH (ingredient groups, NOT physical labels)
         $branchALabels = $labelData->where('branch_fantasy_name', 'Sucursal Centro');
@@ -1192,25 +1196,70 @@ class HorecaLabelDataRepositoryTest extends TestCase
         $this->assertEquals(1, $branchC_ARR['labels_count']);
         $this->assertEquals([450], $branchC_ARR['weights']);
 
-        // 8. VERIFY COLLECTION ORDER (grouped by branch)
-        // First 5 should be Branch A, next 5 Branch B, last 3 Branch C
-        $first5 = $labelData->take(5);
-        $next5 = $labelData->slice(5, 5);
-        $last3 = $labelData->slice(10, 3);
+        // 8. VERIFY COLLECTION ORDER (grouped by product → ingredient → branch)
+        // Expected order:
+        // Product 1 (HORECA BOWL COMPLETO) - 9 labels (3 ingredients × 3 branches):
+        //   1. ARR - Sucursal Centro
+        //   2. ARR - Sucursal Norte
+        //   3. ARR - Sucursal Sur
+        //   4. JUG - Sucursal Centro
+        //   5. JUG - Sucursal Norte
+        //   6. JUG - Sucursal Sur
+        //   7. MZC - Sucursal Centro
+        //   8. MZC - Sucursal Norte
+        //   9. MZC - Sucursal Sur
+        // Product 2 (HORECA ENSALADA PREMIUM) - 4 labels (2 ingredients × 2 branches with orders):
+        //   10. ADE - Sucursal Centro
+        //   11. ADE - Sucursal Sur
+        //   12. ENS - Sucursal Centro
+        //   13. ENS - Sucursal Sur
+
+        // Verify product grouping: first 9 should be BOWL, last 4 should be ENSALADA
+        $first9 = $labelData->take(9);
+        $last4 = $labelData->slice(9, 4);
 
         $this->assertTrue(
-            $first5->every(fn($item) => $item['branch_fantasy_name'] === 'Sucursal Centro'),
-            'First 5 groups should all be from Sucursal Centro'
+            $first9->every(fn($item) => $item['product_name'] === 'HORECA BOWL COMPLETO'),
+            'First 9 groups should all be from HORECA BOWL COMPLETO'
         );
 
         $this->assertTrue(
-            $next5->every(fn($item) => $item['branch_fantasy_name'] === 'Sucursal Sur'),
-            'Next 5 groups should all be from Sucursal Sur'
+            $last4->every(fn($item) => $item['product_name'] === 'HORECA ENSALADA PREMIUM'),
+            'Last 4 groups should all be from HORECA ENSALADA PREMIUM'
         );
 
-        $this->assertTrue(
-            $last3->every(fn($item) => $item['branch_fantasy_name'] === 'Sucursal Norte'),
-            'Last 3 groups should all be from Sucursal Norte'
-        );
+        // Verify ingredient order within BOWL (alphabetical: ARR, JUG, MZC)
+        $bowlIngredients = $first9->pluck('ingredient_name')->toArray();
+        $expectedBowlIngredients = [
+            'ARR - ARROZ BLANCO', 'ARR - ARROZ BLANCO', 'ARR - ARROZ BLANCO',
+            'JUG - JUGO DE NARANJA', 'JUG - JUGO DE NARANJA', 'JUG - JUGO DE NARANJA',
+            'MZC - CONSOME DE POLLO GRANEL', 'MZC - CONSOME DE POLLO GRANEL', 'MZC - CONSOME DE POLLO GRANEL',
+        ];
+        $this->assertEquals($expectedBowlIngredients, $bowlIngredients, 'Bowl ingredients should be grouped alphabetically');
+
+        // Verify ingredient order within ENSALADA (alphabetical: ADE, ENS)
+        $saladIngredients = $last4->pluck('ingredient_name')->toArray();
+        $expectedSaladIngredients = [
+            'ADE - ADEREZO CASERO', 'ADE - ADEREZO CASERO',
+            'ENS - ENSALADA MIXTA', 'ENS - ENSALADA MIXTA',
+        ];
+        $this->assertEquals($expectedSaladIngredients, $saladIngredients, 'Salad ingredients should be grouped alphabetically');
+
+        // Verify branch order within each ingredient (alphabetical: Centro, Norte, Sur)
+        $bowlBranches = $first9->pluck('branch_fantasy_name')->toArray();
+        $expectedBowlBranches = [
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // ARR
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // JUG
+            'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur',  // MZC
+        ];
+        $this->assertEquals($expectedBowlBranches, $bowlBranches, 'Bowl branches should be alphabetical within each ingredient');
+
+        // Verify branch order within ENSALADA (only Centro and Sur have salad orders)
+        $saladBranches = $last4->pluck('branch_fantasy_name')->toArray();
+        $expectedSaladBranches = [
+            'Sucursal Centro', 'Sucursal Sur',  // ADE
+            'Sucursal Centro', 'Sucursal Sur',  // ENS
+        ];
+        $this->assertEquals($expectedSaladBranches, $saladBranches, 'Salad branches should be alphabetical within each ingredient');
     }
 }

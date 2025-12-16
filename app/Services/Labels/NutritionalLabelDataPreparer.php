@@ -138,16 +138,12 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
     {
         $products = $this->repository->getProductsForLabelGeneration($productIds, $quantities);
 
-        // Add label_index per product (resets to 1 for each new product)
-        $currentIndex = 1;
-        $lastProductId = null;
+        // Add label_index using startIndex for consecutive numbering across chunks
+        // When a product is split across multiple chunks (e.g., 200 copies = 2 chunks of 100),
+        // the counter should continue: Chunk 1 = 1-100, Chunk 2 = 101-200
+        $currentIndex = $startIndex;
 
         foreach ($products as $product) {
-            if ($product->id !== $lastProductId) {
-                // New product, reset index to 1
-                $currentIndex = 1;
-                $lastProductId = $product->id;
-            }
             $product->label_index = $currentIndex;
             $currentIndex++;
         }
