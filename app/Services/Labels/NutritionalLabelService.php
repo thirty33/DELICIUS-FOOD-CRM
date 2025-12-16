@@ -80,7 +80,7 @@ class NutritionalLabelService
                 $chunk['quantities'],
                 $chunk['area_name'],
                 $productionOrderCode,
-                $chunk['start_index']
+                $chunk['product_start_indexes']
             );
 
             $exportProcesses[] = $exportProcess;

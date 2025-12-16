@@ -64,7 +64,6 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
         // Step 5: Expand product IDs by quantities within each area and create chunks
         $chunks = [];
         $totalLabels = 0;
-        $globalLabelIndex = 1; // Start index for label counter (continues across chunks)
 
         foreach ($productsByArea as $areaName => $areaProductIds) {
             // Expand product IDs based on quantities for this area
@@ -83,6 +82,10 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
             $areaChunks = array_chunk($expandedAreaProductIds, $chunkSize);
             $areaChunksCount = count($areaChunks);
 
+            // Track per-product label counters across chunks within this area
+            // This ensures products split across chunks continue their sequence
+            $productLabelCounters = [];
+
             foreach ($areaChunks as $areaChunkIndex => $chunkProductIds) {
                 $areaChunkNumber = $areaChunkIndex + 1;
                 $chunkLabelCount = count($chunkProductIds);
@@ -98,6 +101,16 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
                     $chunkQuantities[$productId] = ($chunkQuantities[$productId] ?? 0) + 1;
                 }
 
+                // Calculate start_index for each product in this chunk
+                // Products that were in previous chunks continue from where they left off
+                // New products start at 1
+                $productStartIndexes = [];
+                foreach (array_keys($chunkQuantities) as $productId) {
+                    $productStartIndexes[$productId] = $productLabelCounters[$productId] ?? 1;
+                    // Update counter for next chunk
+                    $productLabelCounters[$productId] = ($productLabelCounters[$productId] ?? 1) + $chunkQuantities[$productId];
+                }
+
                 $chunks[] = [
                     'area_name' => $areaName,
                     'product_ids' => array_keys($chunkQuantities),
@@ -107,11 +120,9 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
                     'label_count' => $chunkLabelCount,
                     'first_product_id' => $firstProduct,
                     'last_product_id' => $lastProduct,
-                    'start_index' => $globalLabelIndex, // Starting label number for this chunk
+                    'start_index' => 1, // Deprecated: kept for backwards compatibility
+                    'product_start_indexes' => $productStartIndexes, // Per-product start indexes
                 ];
-
-                // Increment global index for next chunk
-                $globalLabelIndex += $chunkLabelCount;
             }
         }
 
@@ -133,19 +144,39 @@ class NutritionalLabelDataPreparer implements NutritionalLabelDataPreparerInterf
 
     /**
      * {@inheritdoc}
+     *
+     * @param array $productIds Product IDs to expand
+     * @param array $quantities Quantities per product [product_id => quantity]
+     * @param int|array $startIndex Either a single start index (deprecated) or array of per-product start indexes
+     * @return Collection
      */
-    public function getExpandedProducts(array $productIds, array $quantities, int $startIndex = 1): Collection
+    public function getExpandedProducts(array $productIds, array $quantities, int|array $startIndex = 1): Collection
     {
         $products = $this->repository->getProductsForLabelGeneration($productIds, $quantities);
 
-        // Add label_index using startIndex for consecutive numbering across chunks
-        // When a product is split across multiple chunks (e.g., 200 copies = 2 chunks of 100),
-        // the counter should continue: Chunk 1 = 1-100, Chunk 2 = 101-200
-        $currentIndex = $startIndex;
+        // Support both old (single int) and new (per-product array) start index formats
+        $productStartIndexes = is_array($startIndex) ? $startIndex : [];
+        $usePerProductIndexes = !empty($productStartIndexes);
+
+        // Track per-product counters
+        $productCounters = [];
 
         foreach ($products as $product) {
-            $product->label_index = $currentIndex;
-            $currentIndex++;
+            $productId = $product->id;
+
+            // Initialize counter for this product if not set
+            if (!isset($productCounters[$productId])) {
+                if ($usePerProductIndexes && isset($productStartIndexes[$productId])) {
+                    // Use the pre-calculated start index for this product
+                    $productCounters[$productId] = $productStartIndexes[$productId];
+                } else {
+                    // New product starts at 1
+                    $productCounters[$productId] = 1;
+                }
+            }
+
+            $product->label_index = $productCounters[$productId];
+            $productCounters[$productId]++;
         }
 
         return $products;

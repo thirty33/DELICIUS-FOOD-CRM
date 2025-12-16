@@ -49,7 +49,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
     private array $quantities;
     private ?string $productionArea;
     private ?string $productionOrderCode;
-    private int $startIndex;
+    private array $startIndex;
 
     public function __construct(
         array $productIds,
@@ -58,7 +58,7 @@ class GenerateNutritionalLabelsJob implements ShouldQueue
         array $quantities = [],
         ?string $productionArea = null,
         ?string $productionOrderCode = null,
-        int $startIndex = 1
+        array $startIndex = []
     ) {
         $this->productIds = $productIds;
         $this->elaborationDate = $elaborationDate;
