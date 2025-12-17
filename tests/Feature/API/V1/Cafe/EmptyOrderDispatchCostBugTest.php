@@ -236,15 +236,15 @@ class EmptyOrderDispatchCostBugTest extends TestCase
         $emptyOrder = $orders[0];
 
         // BUG: These assertions will FAIL because dispatch_cost is $8.000
-        // Expected: Empty order (0 products) should have ALL costs at $0,00
+        // Expected: Empty order (0 products) should have ALL costs at $0
         // Actual: dispatch_cost = $8.000 because rule charges for total=$0
-        $this->assertEquals('$0,00', $emptyOrder['total'],
-            'Empty order total should be $0,00');
-        $this->assertEquals('$0,00', $emptyOrder['total_with_tax'],
-            'Empty order total_with_tax should be $0,00');
-        $this->assertEquals('$0,00', $emptyOrder['dispatch_cost'],
-            'Empty order (0 products) MUST have dispatch_cost = $0,00');
-        $this->assertEquals('$0,00', $emptyOrder['tax_amount'],
-            'Empty order tax_amount should be $0,00');
+        $this->assertEquals('$0', $emptyOrder['total'],
+            'Empty order total should be $0');
+        $this->assertEquals('$0', $emptyOrder['total_with_tax'],
+            'Empty order total_with_tax should be $0');
+        $this->assertEquals('$0', $emptyOrder['dispatch_cost'],
+            'Empty order (0 products) MUST have dispatch_cost = $0');
+        $this->assertEquals('$0', $emptyOrder['tax_amount'],
+            'Empty order tax_amount should be $0');
     }
 }

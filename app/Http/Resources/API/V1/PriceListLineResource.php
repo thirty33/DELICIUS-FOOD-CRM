@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\API\V1;
 
+use App\Classes\PriceFormatter;
 use App\Models\Parameter;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -23,10 +24,10 @@ class PriceListLineResource extends JsonResource
 
         return [
             'id' => $this->id,
-            'unit_price' => '$'.number_format($this->unit_price / 100, 2, ',', '.'),
-            'unit_price_with_tax' => '$'.number_format($unitPriceWithTax / 100, 2, ',', '.'),
-            'unit_price_raw' => $this->unit_price / 100,
-            'unit_price_with_tax_raw' => $unitPriceWithTax / 100,    
+            'unit_price' => PriceFormatter::formatRounded($this->unit_price),
+            'unit_price_with_tax' => PriceFormatter::formatRounded($unitPriceWithTax),
+            'unit_price_raw' => round($this->unit_price / 100),
+            'unit_price_with_tax_raw' => round($unitPriceWithTax / 100),
         ];
     }
 }

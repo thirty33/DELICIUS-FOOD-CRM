@@ -3133,44 +3133,48 @@ class ConsolidadoEmplatadoReportTest extends TestCase
             ];
         })->values()->toArray();
 
-        // EXPECTED ORDER:
-        // 1. AAA GROUPER + AAA - INGREDIENTE A
-        // 2. AAA GROUPER + MMM - INGREDIENTE M
-        // 3. AAA GROUPER + ZZZ - INGREDIENTE Z
-        // 4. ZZZ GROUPER + AAA - INGREDIENTE A
-        // 5. ZZZ GROUPER + MMM - INGREDIENTE M
-        // 6. ZZZ GROUPER + ZZZ - INGREDIENTE Z
+        // EXPECTED ORDER (sorted by product_name → ingredient_name → grouper_name):
+        // Product 1 (TEST SORTING PRODUCT 1) has ingredients AAA and ZZZ
+        // Product 2 (TEST SORTING PRODUCT 2) has ingredient MMM
+        // 1. Product 1 + AAA INGREDIENTE + AAA GROUPER
+        // 2. Product 1 + AAA INGREDIENTE + ZZZ GROUPER
+        // 3. Product 1 + ZZZ INGREDIENTE + AAA GROUPER
+        // 4. Product 1 + ZZZ INGREDIENTE + ZZZ GROUPER
+        // 5. Product 2 + MMM INGREDIENTE + AAA GROUPER
+        // 6. Product 2 + MMM INGREDIENTE + ZZZ GROUPER
         $expectedOrder = [
             ['grouper' => 'AAA GROUPER TEST', 'ingredient' => 'AAA - INGREDIENTE A TEST'],
-            ['grouper' => 'AAA GROUPER TEST', 'ingredient' => 'MMM - INGREDIENTE M TEST'],
-            ['grouper' => 'AAA GROUPER TEST', 'ingredient' => 'ZZZ - INGREDIENTE Z TEST'],
             ['grouper' => 'ZZZ GROUPER TEST', 'ingredient' => 'AAA - INGREDIENTE A TEST'],
-            ['grouper' => 'ZZZ GROUPER TEST', 'ingredient' => 'MMM - INGREDIENTE M TEST'],
+            ['grouper' => 'AAA GROUPER TEST', 'ingredient' => 'ZZZ - INGREDIENTE Z TEST'],
             ['grouper' => 'ZZZ GROUPER TEST', 'ingredient' => 'ZZZ - INGREDIENTE Z TEST'],
+            ['grouper' => 'AAA GROUPER TEST', 'ingredient' => 'MMM - INGREDIENTE M TEST'],
+            ['grouper' => 'ZZZ GROUPER TEST', 'ingredient' => 'MMM - INGREDIENTE M TEST'],
         ];
 
         $this->assertEquals(
             $expectedOrder,
             $actualOrder,
-            "Labels should be sorted by grouper, then by ingredient name.\n" .
+            "Labels should be sorted by product_name, then ingredient_name, then grouper_name.\n" .
             "Expected: " . json_encode($expectedOrder, JSON_PRETTY_PRINT) . "\n" .
             "Actual: " . json_encode($actualOrder, JSON_PRETTY_PRINT)
         );
 
-        // ADDITIONAL: Verify that within each grouper, ingredients are alphabetically sorted
+        // ADDITIONAL: Verify that within each grouper, ingredients are sorted by product then ingredient
+        // Product 1 has ingredients AAA and ZZZ, Product 2 has ingredient MMM
+        // So order is: AAA, ZZZ (from Product 1), then MMM (from Product 2)
         $grouperAAALabels = $labelData->filter(fn($item) => $item['grouper_name'] === 'AAA GROUPER TEST');
         $grouperZZZLabels = $labelData->filter(fn($item) => $item['grouper_name'] === 'ZZZ GROUPER TEST');
 
         $this->assertEquals(
-            ['AAA - INGREDIENTE A TEST', 'MMM - INGREDIENTE M TEST', 'ZZZ - INGREDIENTE Z TEST'],
+            ['AAA - INGREDIENTE A TEST', 'ZZZ - INGREDIENTE Z TEST', 'MMM - INGREDIENTE M TEST'],
             $grouperAAALabels->pluck('ingredient_name')->values()->toArray(),
-            'Within AAA GROUPER, ingredients should be sorted alphabetically'
+            'Within AAA GROUPER, ingredients should be sorted by product_name then ingredient_name'
         );
 
         $this->assertEquals(
-            ['AAA - INGREDIENTE A TEST', 'MMM - INGREDIENTE M TEST', 'ZZZ - INGREDIENTE Z TEST'],
+            ['AAA - INGREDIENTE A TEST', 'ZZZ - INGREDIENTE Z TEST', 'MMM - INGREDIENTE M TEST'],
             $grouperZZZLabels->pluck('ingredient_name')->values()->toArray(),
-            'Within ZZZ GROUPER, ingredients should be sorted alphabetically'
+            'Within ZZZ GROUPER, ingredients should be sorted by product_name then ingredient_name'
         );
 
         // Cleanup

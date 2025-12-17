@@ -18,12 +18,12 @@ class OrderLineResource extends JsonResource
         return [
             'id' => $this->id,
             'quantity' => $this->quantity,
-            'unit_price' => PriceFormatter::format($this->unit_price),
-            'unit_price_with_tax' => PriceFormatter::format($this->unit_price_with_tax),
+            'unit_price' => PriceFormatter::formatRounded($this->unit_price),
+            'unit_price_with_tax' => PriceFormatter::formatRounded($this->unit_price_with_tax),
             'order_id' => $this->order_id,
             'product_id' => $this->product_id,
-            'total_price' => PriceFormatter::format($this->total_price),
-            'total_price_with_tax' => PriceFormatter::format($this->quantity * $this->unit_price_with_tax),
+            'total_price' => PriceFormatter::formatRounded($this->total_price),
+            'total_price_with_tax' => PriceFormatter::formatRounded($this->quantity * $this->unit_price_with_tax),
             'product' => new ProductResource($this->whenLoaded('product')),
             'partially_scheduled' => $this->partially_scheduled ? true : false,
         ];

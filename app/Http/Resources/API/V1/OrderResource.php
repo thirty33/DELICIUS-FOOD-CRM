@@ -30,10 +30,10 @@ class OrderResource extends JsonResource
 
         $data = [
             'id' => $this->id,
-            'total' => PriceFormatter::format($this->total),
-            'total_with_tax' => PriceFormatter::format($this->grand_total),
-            'dispatch_cost' => PriceFormatter::format($this->dispatch_cost),
-            'tax_amount' => PriceFormatter::format($this->tax_amount),
+            'total' => PriceFormatter::formatRounded($this->total),
+            'total_with_tax' => PriceFormatter::formatRounded($this->grand_total),
+            'dispatch_cost' => PriceFormatter::formatRounded($this->dispatch_cost),
+            'tax_amount' => PriceFormatter::formatRounded($this->tax_amount),
             'status' => $this->status,
             'user_id' => $this->user_id,
             'price_list_min' => $this->price_list_min,
@@ -80,11 +80,11 @@ class OrderResource extends JsonResource
 
         return [
             'has_better_rate' => true,
-            'next_threshold_amount' => PriceFormatter::format($thresholdInfo['next_threshold_amount']),
-            'next_threshold_cost' => PriceFormatter::format($thresholdInfo['next_threshold_cost']),
-            'amount_to_reach' => PriceFormatter::format($thresholdInfo['amount_to_reach']),
-            'current_cost' => PriceFormatter::format($thresholdInfo['current_cost']),
-            'savings' => PriceFormatter::format($thresholdInfo['savings']),
+            'next_threshold_amount' => PriceFormatter::formatRounded($thresholdInfo['next_threshold_amount']),
+            'next_threshold_cost' => PriceFormatter::formatRounded($thresholdInfo['next_threshold_cost']),
+            'amount_to_reach' => PriceFormatter::formatRounded($thresholdInfo['amount_to_reach']),
+            'current_cost' => PriceFormatter::formatRounded($thresholdInfo['current_cost']),
+            'savings' => PriceFormatter::formatRounded($thresholdInfo['savings']),
         ];
     }
 }
