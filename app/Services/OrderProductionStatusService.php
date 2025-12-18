@@ -68,6 +68,9 @@ class OrderProductionStatusService
                     'production_status_needs_update' => false,
                 ]);
 
+                // Update production_status for each order_line
+                $this->updateOrderLinesProductionStatus($order);
+
                 $updatedCount++;
 
                 // Verify update was saved
@@ -167,5 +170,45 @@ class OrderProductionStatusService
 
         // No products produced
         return OrderProductionStatus::NOT_PRODUCED;
+    }
+
+    /**
+     * Update production_status for each order_line of an order.
+     *
+     * Each order_line gets its own production_status:
+     * - FULLY_PRODUCED: Product quantity is fully covered by EXECUTED OPs
+     * - PARTIALLY_PRODUCED: Product quantity is partially covered by EXECUTED OPs
+     * - NOT_PRODUCED: Product has no coverage from EXECUTED OPs
+     *
+     * @param Order $order
+     * @return void
+     */
+    protected function updateOrderLinesProductionStatus(Order $order): void
+    {
+        $order->load('orderLines');
+
+        foreach ($order->orderLines as $line) {
+            $producedQuantity = $this->orderRepository->getTotalProducedForProduct(
+                $order->id,
+                $line->product_id
+            );
+
+            $lineStatus = match (true) {
+                $producedQuantity == 0 => OrderProductionStatus::NOT_PRODUCED,
+                $producedQuantity >= $line->quantity => OrderProductionStatus::FULLY_PRODUCED,
+                default => OrderProductionStatus::PARTIALLY_PRODUCED,
+            };
+
+            $line->update(['production_status' => $lineStatus->value]);
+
+            Log::info('OrderProductionStatusService: Updated order_line production_status', [
+                'order_id' => $order->id,
+                'order_line_id' => $line->id,
+                'product_id' => $line->product_id,
+                'required_quantity' => $line->quantity,
+                'produced_quantity' => $producedQuantity,
+                'production_status' => $lineStatus->value,
+            ]);
+        }
     }
 }

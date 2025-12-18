@@ -5,6 +5,7 @@ namespace App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Parameter;
 use App\Models\Product;
 use App\Models\PriceListLine;
+use App\Enums\OrderProductionStatus;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -181,6 +182,17 @@ class OrderLinesRelationManager extends RelationManager
                     }),
                 Tables\Columns\ToggleColumn::make('partially_scheduled')
                     ->label('Parcialmente agendado')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('production_status')
+                    ->label(__('Estado producción'))
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => $state ? OrderProductionStatus::from($state)->label() : '')
+                    ->color(fn (?string $state): string => match ($state) {
+                        OrderProductionStatus::FULLY_PRODUCED->value => 'success',
+                        OrderProductionStatus::PARTIALLY_PRODUCED->value => 'warning',
+                        OrderProductionStatus::NOT_PRODUCED->value => 'danger',
+                        default => 'gray',
+                    })
                     ->sortable(),
             ])
             ->filters([

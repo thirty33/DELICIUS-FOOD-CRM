@@ -24,6 +24,7 @@ class OrderLine extends Model
         'product_id',
         'partially_scheduled',
         'unit_price_with_tax',
+        'production_status',
     ];
 
     public function order(): BelongsTo

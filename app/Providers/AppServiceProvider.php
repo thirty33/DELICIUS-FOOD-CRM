@@ -44,9 +44,11 @@ use App\Events\AdvanceOrderCreated;
 use App\Events\AdvanceOrderDatesUpdated;
 use App\Events\AdvanceOrderProductChanged;
 use App\Events\AdvanceOrderProductsBulkLoaded;
+use App\Events\OrderLineQuantityReducedBelowProduced;
 use App\Listeners\CreateWarehouseTransactionForAdvanceOrder;
 use App\Listeners\CancelWarehouseTransactionForAdvanceOrder;
 use App\Listeners\SyncAdvanceOrderPivotsListener;
+use App\Listeners\CreateSurplusWarehouseTransaction;
 use Maatwebsite\Excel\QueuedWriter;
 use App\Excel\ChunkAwareQueuedWriter;
 
@@ -166,6 +168,12 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(
             AdvanceOrderCancelled::class,
             CancelWarehouseTransactionForAdvanceOrder::class,
+        );
+
+        // Register event listener for surplus when order line quantity is reduced
+        Event::listen(
+            OrderLineQuantityReducedBelowProduced::class,
+            CreateSurplusWarehouseTransaction::class,
         );
 
         // Register event listeners for pivot synchronization

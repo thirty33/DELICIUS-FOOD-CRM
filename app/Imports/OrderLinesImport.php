@@ -14,7 +14,9 @@ use App\Enums\OrderImportValidationMessage;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Classes\Orders\Validations\OrderStatusValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
+use App\Events\OrderLineQuantityReducedBelowProduced;
 use App\Repositories\ImportOrderLineTrackingRepository;
+use App\Repositories\OrderRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -896,6 +898,9 @@ class OrderLinesImport implements
             $updatedLines = [];
             $skippedProducts = [];
 
+            // Get OrderRepository for surplus calculation
+            $orderRepository = app(OrderRepository::class);
+
             foreach ($rows as $rowIndex => $row) {
                 // Obtener código de producto sin limpiar comillas
                 $productCode = $row['codigo_de_producto'];
@@ -929,6 +934,14 @@ class OrderLinesImport implements
                 // Convertir parcialmente programado a booleano
                 $partiallyScheduled = $this->convertToBoolean($row['parcialmente_programado'] ?? false);
 
+                // Check if order line exists and capture old quantity for surplus calculation
+                $existingOrderLine = OrderLine::where('order_id', $orderId)
+                    ->where('product_id', $product->id)
+                    ->first();
+
+                $oldQuantity = $existingOrderLine ? (int) $existingOrderLine->quantity : null;
+                $newQuantity = (int) $row['cantidad'];
+
                 // Update or create order line
                 $orderLine = OrderLine::updateOrCreate(
                     [
@@ -936,11 +949,21 @@ class OrderLinesImport implements
                         'product_id' => $product->id,
                     ],
                     [
-                        'quantity' => $row['cantidad'],
+                        'quantity' => $newQuantity,
                         'partially_scheduled' => $partiallyScheduled,
                         'unit_price' => $unitPrice,
                     ]
                 );
+
+                // Check for surplus when quantity is reduced (only for existing lines)
+                if ($oldQuantity !== null && $newQuantity < $oldQuantity) {
+                    $this->checkAndDispatchSurplusEvent(
+                        $orderLine,
+                        $oldQuantity,
+                        $newQuantity,
+                        $orderRepository
+                    );
+                }
 
                 // Track this order line for cleanup
                 $this->trackingRepository->track(
@@ -957,6 +980,8 @@ class OrderLinesImport implements
                     'quantity_saved_db' => $orderLine->quantity,
                     'unit_price' => $unitPrice,
                     'order_line_id' => $orderLine->id,
+                    'old_quantity' => $oldQuantity,
+                    'surplus_check' => $oldQuantity !== null && $newQuantity < $oldQuantity,
                 ];
 
                 $createdLines[] = $lineData;
@@ -1295,6 +1320,61 @@ class OrderLinesImport implements
                 'import_process_id' => $this->importProcessId,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Check if a surplus event should be dispatched when quantity is reduced during import.
+     *
+     * This method replicates the logic from OrderLineProductionStatusObserver but
+     * is called directly during import since the observer is disabled (importMode=true).
+     *
+     * Surplus = max(0, producedQuantity - newQuantity)
+     *
+     * @param OrderLine $orderLine The updated order line
+     * @param int $oldQuantity Previous quantity before update
+     * @param int $newQuantity New quantity from import
+     * @param OrderRepository $orderRepository Repository to get production data
+     */
+    private function checkAndDispatchSurplusEvent(
+        OrderLine $orderLine,
+        int $oldQuantity,
+        int $newQuantity,
+        OrderRepository $orderRepository
+    ): void {
+        // Get the amount actually produced for this product in this order
+        $producedQuantity = $orderRepository->getTotalProducedForProduct(
+            $orderLine->order_id,
+            $orderLine->product_id
+        );
+
+        // Calculate surplus: what was produced minus what is now needed
+        $surplus = max(0, $producedQuantity - $newQuantity);
+
+        Log::info('OrderLinesImport: Checking surplus during import', [
+            'order_line_id' => $orderLine->id,
+            'order_id' => $orderLine->order_id,
+            'product_id' => $orderLine->product_id,
+            'old_quantity' => $oldQuantity,
+            'new_quantity' => $newQuantity,
+            'produced_quantity' => $producedQuantity,
+            'surplus' => $surplus,
+        ]);
+
+        if ($surplus > 0) {
+            Log::info('OrderLinesImport: Dispatching surplus event', [
+                'order_line_id' => $orderLine->id,
+                'surplus' => $surplus,
+            ]);
+
+            event(new OrderLineQuantityReducedBelowProduced(
+                $orderLine,
+                $oldQuantity,
+                $newQuantity,
+                (int) $producedQuantity,
+                $surplus,
+                auth()->id()
+            ));
         }
     }
 
