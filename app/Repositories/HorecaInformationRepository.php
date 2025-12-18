@@ -271,6 +271,15 @@ class HorecaInformationRepository implements HorecaInformationRepositoryInterfac
     {
         $shelfLifeDays = $product['shelf_life'] ?? null;
 
+        // DEBUG: Log what we receive to trace the shelf_life flow
+        \Log::info('HorecaInformationRepository::getExpirationDate DEBUG', [
+            'ingredient_name' => $product['ingredient_name'] ?? 'unknown',
+            'shelf_life_received' => $shelfLifeDays,
+            'shelf_life_type' => gettype($shelfLifeDays),
+            'elaboration_date' => $elaborationDate,
+            'product_keys' => array_keys($product),
+        ]);
+
         if (!$shelfLifeDays) {
             return $elaborationDate;
         }
@@ -282,7 +291,16 @@ class HorecaInformationRepository implements HorecaInformationRepositoryInterfac
             }
 
             $elaborationDateTime->modify("+{$shelfLifeDays} days");
-            return $elaborationDateTime->format('d/m/Y');
+            $expirationDate = $elaborationDateTime->format('d/m/Y');
+
+            // DEBUG: Log calculated expiration date
+            \Log::info('HorecaInformationRepository::getExpirationDate RESULT', [
+                'elaboration_date' => $elaborationDate,
+                'shelf_life_days' => $shelfLifeDays,
+                'expiration_date' => $expirationDate,
+            ]);
+
+            return $expirationDate;
         } catch (\Exception $e) {
             \Log::error("Error calculating expiration date for HORECA label", [
                 'elaboration_date' => $elaborationDate,

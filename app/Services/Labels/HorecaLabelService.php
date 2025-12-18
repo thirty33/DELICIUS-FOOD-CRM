@@ -128,6 +128,13 @@ class HorecaLabelService
     {
         $expanded = collect();
 
+        // DEBUG: Log input data
+        \Log::info('HorecaLabelService::expandLabelsWithWeights DEBUG - INPUT', [
+            'count' => $labelData->count(),
+            'first_item_keys' => $labelData->first() ? array_keys($labelData->first()) : [],
+            'first_item_shelf_life' => $labelData->first()['shelf_life'] ?? 'NOT_SET',
+        ]);
+
         foreach ($labelData as $item) {
             // Each weight in the weights array becomes a separate label
             foreach ($item['weights'] as $weight) {
@@ -140,10 +147,18 @@ class HorecaLabelService
                     'product_id' => $item['product_id'] ?? null,
                     'product_name' => $item['product_name'] ?? null,
                     'measure_unit' => $item['measure_unit'],
+                    'shelf_life' => $item['shelf_life'] ?? null,
                     'net_weight' => $weight,
                 ]);
             }
         }
+
+        // DEBUG: Log output data
+        \Log::info('HorecaLabelService::expandLabelsWithWeights DEBUG - OUTPUT', [
+            'count' => $expanded->count(),
+            'first_item_keys' => $expanded->first() ? array_keys($expanded->first()) : [],
+            'first_item_shelf_life' => $expanded->first()['shelf_life'] ?? 'NOT_SET',
+        ]);
 
         return $expanded;
     }
