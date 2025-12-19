@@ -2,6 +2,7 @@
 
 namespace App\Services\Labels\Generators;
 
+use App\Enums\IngredientsFontSize;
 use App\Repositories\NutritionalInformationRepository;
 use App\Services\Labels\Core\AbstractLabelGenerator;
 use Picqer\Barcode\Types\TypeEan13;
@@ -75,6 +76,12 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
         $netWeight = $product->nutritionalInformation->net_weight ?? 0;
         $nutritionalTableVisibility = ($netWeight == 0) ? "style='visibility: hidden;'" : "";
 
+        // Get ingredients and calculate dynamic font size
+        $ingredients = $this->repository->getIngredients($product);
+        $allergens = $this->repository->getAllergens($product);
+        $totalTextLength = strlen($ingredients) + strlen($allergens);
+        $ingredientsFontSize = IngredientsFontSize::fromLength($totalTextLength);
+
         $html = "
         <div class='label-container'>
             <table class='main-layout' cellpadding='0' cellspacing='0'>
@@ -85,10 +92,10 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
 
                         <div class='product-title'>{$product->name}</div>
 
-                        <div class='ingredients-block'>
-                            <p><strong>Ingredientes:</strong> {$this->repository->getIngredients($product)}</p>
+                        <div class='ingredients-block' style='font-size: {$ingredientsFontSize->pixels()};'>
+                            <p><strong>Ingredientes:</strong> {$ingredients}</p>
 
-                            <p><strong>Alérgenos:</strong> {$this->repository->getAllergens($product)}</p>
+                            <p><strong>Alérgenos:</strong> {$allergens}</p>
 
                             <p>Mantener refrigerado entre 2°C y 5°C.<br>Listo para el consumo.</p>
                         </div>
@@ -283,6 +290,9 @@ class NutritionalLabelGenerator extends AbstractLabelGenerator
                 font-size: 5.5px;
                 line-height: 0.8;
                 background-color: #ffffff;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                max-width: 31mm;
             }
 
             .ingredients-block p {
