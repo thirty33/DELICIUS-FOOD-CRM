@@ -56,6 +56,7 @@ class OrderLineImportSurplusTransactionTest extends TestCase
 
     private Carbon $dispatchDate;
     private User $user;
+    private User $importUser;
     private Company $company;
     private Branch $branch;
     private Category $category;
@@ -139,6 +140,13 @@ class OrderLineImportSurplusTransactionTest extends TestCase
             WarehouseTransactionStatus::EXECUTED->value,
             $surplusTransaction->status->value,
             'Surplus transaction should have EXECUTED status'
+        );
+
+        // Verify transaction was created by the import user (not the order owner)
+        $this->assertEquals(
+            $this->importUser->id,
+            $surplusTransaction->user_id,
+            'Surplus transaction should be created by the import user'
         );
 
         // Verify transaction line has correct surplus (2)
@@ -254,6 +262,13 @@ class OrderLineImportSurplusTransactionTest extends TestCase
         $surplusTransaction = WarehouseTransaction::latest('id')->first();
         $this->assertStringContains('Sobrante', $surplusTransaction->reason);
 
+        // Verify transaction was created by the import user
+        $this->assertEquals(
+            $this->importUser->id,
+            $surplusTransaction->user_id,
+            'Surplus transaction should be created by the import user'
+        );
+
         // Verify transaction line has correct surplus (1)
         $transactionLine = $surplusTransaction->lines()->where('product_id', $this->product->id)->first();
         $this->assertNotNull($transactionLine);
@@ -360,6 +375,13 @@ class OrderLineImportSurplusTransactionTest extends TestCase
             'Surplus transaction should have EXECUTED status'
         );
 
+        // Verify transaction was created by the import user
+        $this->assertEquals(
+            $this->importUser->id,
+            $surplusTransaction->user_id,
+            'Surplus transaction should be created by the import user'
+        );
+
         // Verify transaction line has correct surplus (3)
         $transactionLine = $surplusTransaction->lines()->where('product_id', $this->product->id)->first();
         $this->assertNotNull($transactionLine);
@@ -428,6 +450,16 @@ class OrderLineImportSurplusTransactionTest extends TestCase
             'name' => 'Test User',
             'nickname' => 'TEST.USER',
             'email' => 'test.user@test.com',
+            'password' => bcrypt('password'),
+            'company_id' => $this->company->id,
+            'branch_id' => $this->branch->id,
+        ]);
+
+        // User who performs imports (admin/operator)
+        $this->importUser = User::create([
+            'name' => 'Import Admin',
+            'nickname' => 'IMPORT.ADMIN',
+            'email' => 'import.admin@test.com',
             'password' => bcrypt('password'),
             'company_id' => $this->company->id,
             'branch_id' => $this->branch->id,
@@ -544,8 +576,9 @@ class OrderLineImportSurplusTransactionTest extends TestCase
 
     private function importOrderWithQuantity(int $newQuantity): void
     {
-        // Create import process
+        // Create import process with the user who initiated it
         $importProcess = ImportProcess::create([
+            'user_id' => $this->importUser->id,
             'type' => ImportProcess::TYPE_ORDERS,
             'status' => ImportProcess::STATUS_QUEUED,
             'file_url' => '-',

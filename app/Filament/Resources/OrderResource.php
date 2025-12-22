@@ -822,6 +822,7 @@ class OrderResource extends Resource
                         ->action(function (array $data) {
                             try {
                                 $importProcess = ImportProcess::create([
+                                    'user_id' => auth()->id(),
                                     'type' => ImportProcess::TYPE_ORDERS,
                                     'status' => ImportProcess::STATUS_QUEUED,
                                     'file_url' => $data['file'],

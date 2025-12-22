@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ImportProcess extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'type',
         'status',
         'error_log',
@@ -77,5 +79,13 @@ class ImportProcess extends Model
             self::STATUS_PROCESSED,
             self::STATUS_PROCESSED_WITH_ERRORS
         ];
+    }
+
+    /**
+     * Get the user who initiated the import process.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

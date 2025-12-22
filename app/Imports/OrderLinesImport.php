@@ -1362,9 +1362,14 @@ class OrderLinesImport implements
         ]);
 
         if ($surplus > 0) {
+            // Get user_id from ImportProcess (the user who initiated the import)
+            $importProcess = ImportProcess::find($this->importProcessId);
+            $userId = $importProcess?->user_id;
+
             Log::info('OrderLinesImport: Dispatching surplus event', [
                 'order_line_id' => $orderLine->id,
                 'surplus' => $surplus,
+                'user_id' => $userId,
             ]);
 
             event(new OrderLineQuantityReducedBelowProduced(
@@ -1373,7 +1378,7 @@ class OrderLinesImport implements
                 $newQuantity,
                 (int) $producedQuantity,
                 $surplus,
-                auth()->id()
+                $userId
             ));
         }
     }
