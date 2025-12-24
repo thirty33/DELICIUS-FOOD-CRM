@@ -688,4 +688,76 @@ class AdvanceOrderRepository
             ->pluck('order_id')
             ->toArray();
     }
+
+    /**
+     * Recalculate ordered_quantity_new for all OPs affected by the given order IDs.
+     *
+     * This method is called after import to update the ordered_quantity_new values
+     * for all AdvanceOrderProducts that cover the modified/deleted orders.
+     *
+     * The recalculation happens AFTER all surplus checks are complete, ensuring
+     * surplus transactions are created with the correct produced quantities.
+     *
+     * @param array $orderIds Array of order IDs that were modified during import
+     * @return void
+     */
+    public function recalculateOrderedQuantityNewForOrders(array $orderIds): void
+    {
+        if (empty($orderIds)) {
+            return;
+        }
+
+        \Illuminate\Support\Facades\Log::info('AdvanceOrderRepository: Starting recalculation for imported orders', [
+            'order_ids' => $orderIds,
+        ]);
+
+        // Find all AdvanceOrders that cover these orders via pivot table
+        $affectedOpIds = DB::table('advance_order_orders')
+            ->whereIn('order_id', $orderIds)
+            ->distinct()
+            ->pluck('advance_order_id')
+            ->toArray();
+
+        if (empty($affectedOpIds)) {
+            \Illuminate\Support\Facades\Log::info('AdvanceOrderRepository: No OPs found for orders', [
+                'order_ids' => $orderIds,
+            ]);
+            return;
+        }
+
+        // Get all product_ids affected for these OPs
+        $affectedProducts = DB::table('advance_order_order_lines')
+            ->whereIn('advance_order_id', $affectedOpIds)
+            ->whereIn('order_id', $orderIds)
+            ->select('advance_order_id', 'product_id')
+            ->distinct()
+            ->get();
+
+        \Illuminate\Support\Facades\Log::info('AdvanceOrderRepository: Found affected OPs and products', [
+            'affected_op_ids' => $affectedOpIds,
+            'affected_products_count' => $affectedProducts->count(),
+        ]);
+
+        // Group by product to process each product across all its OPs
+        $productGroups = $affectedProducts->groupBy('product_id');
+
+        foreach ($productGroups as $productId => $entries) {
+            $opIds = $entries->pluck('advance_order_id')->unique()->toArray();
+
+            // Dispatch recalculation job for this product across affected OPs
+            // We use a dummy orderLineId (0) since we're recalculating for all lines
+            \App\Jobs\RecalculateAdvanceOrderProductsJob::dispatch(
+                0, // orderLineId - not applicable for bulk recalculation
+                $productId,
+                0, // orderId - not applicable for bulk recalculation
+                0, // newQuantity - indicates recalculation needed (not deletion)
+                $opIds
+            );
+
+            \Illuminate\Support\Facades\Log::info('AdvanceOrderRepository: Dispatched recalculation job', [
+                'product_id' => $productId,
+                'advance_order_ids' => $opIds,
+            ]);
+        }
+    }
 }

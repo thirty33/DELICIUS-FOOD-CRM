@@ -160,6 +160,91 @@ class OrderLineProductionStatusObserver
     }
 
     /**
+     * Handle the OrderLine "deleting" event (BEFORE delete).
+     * When an order line is deleted, all produced quantity becomes surplus.
+     *
+     * We use "deleting" instead of "deleted" because:
+     * 1. We still have access to the model data before it's removed
+     * 2. The Job needs to find the OrderLine to get order/product info
+     *
+     * NOTE: The Job will execute AFTER the delete completes, but it stores
+     * the order_line_id. Since OrderLine doesn't use SoftDeletes, the Job
+     * will not find the line. We need to dispatch the job synchronously
+     * or pass all required data directly.
+     */
+    public function deleting(OrderLine $orderLine): void
+    {
+        Log::info('OrderLineProductionStatusObserver::deleting', [
+            'order_line_id' => $orderLine->id,
+            'order_id' => $orderLine->order_id,
+            'product_id' => $orderLine->product_id,
+            'quantity' => $orderLine->quantity,
+            'import_mode' => OrderLine::$importMode,
+        ]);
+
+        // ALWAYS handle surplus for deleted lines (even during import)
+        // This ensures warehouse stock is updated when produced items are removed
+        $this->handleSurplusForDeletedLine($orderLine);
+
+        // Skip markOrderForUpdate during bulk imports (import handles this separately)
+        if (OrderLine::$importMode) {
+            Log::info('OrderLineProductionStatusObserver::deleting: import mode, skipping markOrderForUpdate', [
+                'order_line_id' => $orderLine->id,
+            ]);
+            return;
+        }
+
+        // Mark the order for production status update
+        $this->markOrderForUpdate($orderLine->order_id);
+    }
+
+    /**
+     * Handle surplus creation when a line is deleted.
+     * This ALWAYS runs, even during import, to ensure warehouse stock is correct.
+     */
+    private function handleSurplusForDeletedLine(OrderLine $orderLine): void
+    {
+        // Get the amount actually produced for this product in this order
+        $producedQuantity = $this->orderRepository->getTotalProducedForProduct(
+            $orderLine->order_id,
+            $orderLine->product_id
+        );
+
+        // If nothing was produced, no surplus to create
+        if ($producedQuantity <= 0) {
+            Log::info('OrderLineProductionStatusObserver::deleting: No production, skipping surplus', [
+                'order_line_id' => $orderLine->id,
+                'produced_quantity' => $producedQuantity,
+            ]);
+            return;
+        }
+
+        // All produced quantity becomes surplus (newQuantity = 0)
+        $oldQuantity = (int) $orderLine->quantity;
+        $surplus = (int) $producedQuantity;
+
+        Log::info('OrderLineProductionStatusObserver::deleting: Creating surplus for deleted line', [
+            'order_line_id' => $orderLine->id,
+            'order_id' => $orderLine->order_id,
+            'product_id' => $orderLine->product_id,
+            'old_quantity' => $oldQuantity,
+            'produced_quantity' => $producedQuantity,
+            'surplus' => $surplus,
+        ]);
+
+        // Dispatch event - the listener will create the warehouse transaction
+        // We pass the orderLine while it still exists
+        event(new OrderLineQuantityReducedBelowProduced(
+            $orderLine,
+            $oldQuantity,
+            0,  // newQuantity = 0 (line is being deleted)
+            $surplus,
+            $surplus,
+            auth()->id()
+        ));
+    }
+
+    /**
      * Dispatch job to mark the order as needing production status update.
      */
     protected function markOrderForUpdate(int $orderId): void

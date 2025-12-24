@@ -31,13 +31,16 @@ use App\Services\Reports\GrouperColumnDataProvider;
 use App\Models\Product;
 use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
+use App\Models\Order;
 use App\Models\OrderLine;
 use App\Observers\ProductObserver;
+use App\Observers\OrderDeletionObserver;
 use App\Observers\AdvanceOrderObserver;
 use App\Observers\AdvanceOrderProductObserver;
 use App\Observers\AdvanceOrderProductionStatusObserver;
 use App\Observers\AdvanceOrderProductProductionStatusObserver;
 use App\Observers\OrderLineProductionStatusObserver;
+use App\Observers\OrderLineAdvanceOrderRecalculationObserver;
 use App\Events\AdvanceOrderExecuted;
 use App\Events\AdvanceOrderCancelled;
 use App\Events\AdvanceOrderCreated;
@@ -158,6 +161,8 @@ class AppServiceProvider extends ServiceProvider
         AdvanceOrder::observe(AdvanceOrderProductionStatusObserver::class);
         AdvanceOrderProduct::observe(AdvanceOrderProductProductionStatusObserver::class);
         OrderLine::observe(OrderLineProductionStatusObserver::class);
+        OrderLine::observe(OrderLineAdvanceOrderRecalculationObserver::class);
+        Order::observe(OrderDeletionObserver::class);
 
         // Register event listeners for warehouse transactions
         Event::listen(

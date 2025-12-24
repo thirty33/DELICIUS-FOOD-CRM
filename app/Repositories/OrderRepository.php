@@ -386,4 +386,43 @@ class OrderRepository
             'products' => $products,
         ];
     }
+
+    /**
+     * Delete order lines that were not included in an import.
+     *
+     * Uses individual deletion (not bulk) to ensure observers are triggered,
+     * which handles surplus creation for produced items.
+     *
+     * @param array $orderIds Order IDs to check
+     * @param array $trackedOrderLineIds Order line IDs that should NOT be deleted
+     * @return int Total number of lines deleted
+     */
+    public function deleteUnimportedOrderLines(array $orderIds, array $trackedOrderLineIds): int
+    {
+        $totalDeleted = 0;
+
+        foreach ($orderIds as $orderId) {
+            $linesToDelete = OrderLine::where('order_id', $orderId)
+                ->whereNotIn('id', $trackedOrderLineIds)
+                ->get();
+
+            if ($linesToDelete->isEmpty()) {
+                continue;
+            }
+
+            // Delete individually to trigger observers (for surplus handling)
+            foreach ($linesToDelete as $orderLine) {
+                $orderLine->delete();
+            }
+
+            \Illuminate\Support\Facades\Log::info('OrderRepository: Deleted unimported order lines', [
+                'order_id' => $orderId,
+                'deleted_count' => $linesToDelete->count(),
+            ]);
+
+            $totalDeleted += $linesToDelete->count();
+        }
+
+        return $totalDeleted;
+    }
 }

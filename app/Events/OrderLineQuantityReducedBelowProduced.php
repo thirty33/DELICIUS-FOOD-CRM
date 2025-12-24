@@ -30,6 +30,14 @@ class OrderLineQuantityReducedBelowProduced
     public int $surplus;
     public ?int $userId;
 
+    // Data captured from relationships BEFORE OrderLine might be deleted
+    // This is needed because the Job runs asynchronously and the OrderLine
+    // may no longer exist when the Job executes
+    public int $orderId;
+    public int $productId;
+    public string $productName;
+    public string $measureUnit;
+
     /**
      * Create a new event instance.
      */
@@ -47,5 +55,11 @@ class OrderLineQuantityReducedBelowProduced
         $this->producedQuantity = $producedQuantity;
         $this->surplus = $surplus;
         $this->userId = $userId;
+
+        // Capture data NOW while OrderLine still exists
+        $this->orderId = $orderLine->order_id;
+        $this->productId = $orderLine->product_id;
+        $this->productName = $orderLine->product->name ?? 'Producto ID ' . $orderLine->product_id;
+        $this->measureUnit = $orderLine->product->measure_unit ?? 'UND';
     }
 }

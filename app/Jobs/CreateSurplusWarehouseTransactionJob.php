@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Enums\WarehouseTransactionStatus;
-use App\Models\OrderLine;
 use App\Models\User;
 use App\Models\WarehouseTransaction;
 use App\Models\WarehouseTransactionLine;
@@ -21,12 +20,20 @@ use Illuminate\Support\Facades\Log;
  * quantity is reduced below what was already produced.
  *
  * This job is dispatched by CreateSurplusWarehouseTransaction listener.
+ *
+ * IMPORTANT: This job receives all necessary data directly (orderId, productId,
+ * productName, measureUnit) because the OrderLine may be deleted before this
+ * job executes when running asynchronously via queue.
  */
 class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $orderLineId;
+    public int $orderId;
+    public int $productId;
+    public string $productName;
+    public string $measureUnit;
     public int $oldQuantity;
     public int $newQuantity;
     public int $producedQuantity;
@@ -38,6 +45,10 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
      */
     public function __construct(
         int $orderLineId,
+        int $orderId,
+        int $productId,
+        string $productName,
+        string $measureUnit,
         int $oldQuantity,
         int $newQuantity,
         int $producedQuantity,
@@ -45,6 +56,10 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
         ?int $userId = null
     ) {
         $this->orderLineId = $orderLineId;
+        $this->orderId = $orderId;
+        $this->productId = $productId;
+        $this->productName = $productName;
+        $this->measureUnit = $measureUnit;
         $this->oldQuantity = $oldQuantity;
         $this->newQuantity = $newQuantity;
         $this->producedQuantity = $producedQuantity;
@@ -57,14 +72,8 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
      */
     public function handle(WarehouseRepository $warehouseRepository): void
     {
-        $orderLine = OrderLine::find($this->orderLineId);
-
-        if (!$orderLine) {
-            Log::warning('CreateSurplusWarehouseTransactionJob: OrderLine not found', [
-                'order_line_id' => $this->orderLineId,
-            ]);
-            return;
-        }
+        // NOTE: We no longer look up the OrderLine because it may have been deleted
+        // before this job executes. All necessary data is passed directly.
 
         if ($this->surplus <= 0) {
             Log::info('CreateSurplusWarehouseTransactionJob: No surplus to process', [
@@ -85,9 +94,6 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            $order = $orderLine->order;
-            $product = $orderLine->product;
-
             // Get user who made the change
             $userName = 'Sistema';
             if ($this->userId) {
@@ -95,11 +101,11 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
                 $userName = $user ? $user->name : 'Usuario ID ' . $this->userId;
             }
 
-            // Build descriptive reason
+            // Build descriptive reason using passed data (not from OrderLine lookup)
             $reason = sprintf(
                 'Sobrante por modificación de pedido #%d - Producto: %s - Cantidad reducida de %d a %d (producido: %d, sobrante: %d) - Usuario: %s',
-                $order->id,
-                $product->name,
+                $this->orderId,
+                $this->productName,
                 $this->oldQuantity,
                 $this->newQuantity,
                 $this->producedQuantity,
@@ -109,7 +115,7 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 
             // Get current stock
             $stockBefore = $warehouseRepository->getProductStockInWarehouse(
-                $product->id,
+                $this->productId,
                 $defaultWarehouse->id
             );
 
@@ -129,32 +135,32 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
             Log::info('CreateSurplusWarehouseTransactionJob: Transaction created', [
                 'transaction_id' => $transaction->id,
                 'transaction_code' => $transaction->transaction_code,
-                'order_id' => $order->id,
-                'order_line_id' => $orderLine->id,
-                'product_id' => $product->id,
-                'product_name' => $product->name,
+                'order_id' => $this->orderId,
+                'order_line_id' => $this->orderLineId,
+                'product_id' => $this->productId,
+                'product_name' => $this->productName,
                 'surplus' => $this->surplus,
             ]);
 
             // Create transaction line
             WarehouseTransactionLine::create([
                 'warehouse_transaction_id' => $transaction->id,
-                'product_id' => $product->id,
+                'product_id' => $this->productId,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'difference' => $this->surplus,
-                'unit_of_measure' => $product->measure_unit ?? 'UND',
+                'unit_of_measure' => $this->measureUnit,
             ]);
 
             // Update warehouse stock
             $warehouseRepository->updateProductStockInWarehouse(
-                $product->id,
+                $this->productId,
                 $defaultWarehouse->id,
                 $stockAfter
             );
 
             Log::info('CreateSurplusWarehouseTransactionJob: Stock updated', [
-                'product_id' => $product->id,
+                'product_id' => $this->productId,
                 'warehouse_id' => $defaultWarehouse->id,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
@@ -165,7 +171,7 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 
             Log::info('CreateSurplusWarehouseTransactionJob: Completed successfully', [
                 'transaction_id' => $transaction->id,
-                'order_id' => $order->id,
+                'order_id' => $this->orderId,
                 'surplus' => $this->surplus,
             ]);
         } catch (\Exception $e) {
@@ -173,6 +179,8 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 
             Log::error('CreateSurplusWarehouseTransactionJob: Error processing surplus', [
                 'order_line_id' => $this->orderLineId,
+                'order_id' => $this->orderId,
+                'product_id' => $this->productId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

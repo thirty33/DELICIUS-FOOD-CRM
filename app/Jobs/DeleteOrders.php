@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
@@ -23,6 +24,13 @@ class DeleteOrders implements ShouldQueue
     protected $orderIds;
 
     /**
+     * El ID del usuario que ejecuta la eliminación.
+     *
+     * @var int|null
+     */
+    protected $userId;
+
+    /**
      * El tamaño del chunk para procesar órdenes.
      *
      * @var int
@@ -33,10 +41,12 @@ class DeleteOrders implements ShouldQueue
      * Create a new job instance.
      *
      * @param array $orderIds Los IDs de las órdenes a eliminar
+     * @param int|null $userId El ID del usuario que ejecuta la eliminación
      */
-    public function __construct(array $orderIds)
+    public function __construct(array $orderIds, ?int $userId = null)
     {
         $this->orderIds = $orderIds;
+        $this->userId = $userId;
     }
 
     /**
@@ -44,9 +54,16 @@ class DeleteOrders implements ShouldQueue
      */
     public function handle(): void
     {
+        // Authenticate the user so auth()->id() works in Observers
+        // This is needed for creating warehouse transactions with user_id
+        if ($this->userId) {
+            Auth::loginUsingId($this->userId);
+        }
+
         Log::info('Iniciando job de eliminación masiva de órdenes', [
             'total_orders' => count($this->orderIds),
-            'chunk_size' => $this->chunkSize
+            'chunk_size' => $this->chunkSize,
+            'user_id' => $this->userId,
         ]);
 
         try {
@@ -79,18 +96,16 @@ class DeleteOrders implements ShouldQueue
                         Log::info('Procesando eliminación de orden', [
                             'order_id' => $order->id,
                             'client' => $order->user->name ?? 'N/A',
-                            'chunk_index' => $chunkIndex + 1
+                            'chunk_index' => $chunkIndex + 1,
+                            'production_status' => $order->production_status,
+                            'order_lines_count' => $order->orderLines()->count(),
                         ]);
-                        
-                        // 1. Eliminar las líneas de orden
-                        $orderLinesCount = $order->orderLines()->count();
-                        $order->orderLines()->delete();
-                        Log::info('Líneas de orden eliminadas', [
-                            'order_id' => $order->id,
-                            'order_lines_count' => $orderLinesCount
-                        ]);
-                        
-                        // 2. Finalmente eliminar la orden
+
+                        // Delete the order - OrderDeletionObserver will handle:
+                        // 1. Deleting order_lines individually (triggering their observers)
+                        // 2. Creating surplus warehouse transactions for produced items
+                        // 3. Recalculating ordered_quantity_new in advance_order_products
+                        // NOTE: Do NOT delete order_lines manually here, as it bypasses observers
                         $order->delete();
                         
                         DB::commit();

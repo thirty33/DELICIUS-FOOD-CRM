@@ -393,7 +393,8 @@ class OrderResource extends Resource
                                 $orderIdToDelete = [$record->id];
 
                                 // Dispatch el job para eliminar la orden en segundo plano
-                                DeleteOrders::dispatch($orderIdToDelete);
+                                // Pasamos auth()->id() para crear transacciones de bodega con el user_id correcto
+                                DeleteOrders::dispatch($orderIdToDelete, auth()->id());
 
                                 self::makeNotification(
                                     'Eliminación en proceso',
@@ -591,8 +592,9 @@ class OrderResource extends Resource
                                 $orderIdsToDelete = $records->pluck('id')->toArray();
 
                                 // Dispatch el job para eliminar las órdenes en segundo plano
+                                // Pasamos auth()->id() para crear transacciones de bodega con el user_id correcto
                                 if (!empty($orderIdsToDelete)) {
-                                    DeleteOrders::dispatch($orderIdsToDelete);
+                                    DeleteOrders::dispatch($orderIdsToDelete, auth()->id());
 
                                     self::makeNotification(
                                         'Eliminación en proceso',

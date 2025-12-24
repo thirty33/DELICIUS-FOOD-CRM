@@ -112,8 +112,16 @@ class OrderLinesImport implements
             },
 
             AfterImport::class => function (AfterImport $event) {
+                // Get affected order IDs BEFORE cleanup (cleanup deletes tracking data)
+                $affectedOrderIds = $this->trackingRepository->getAffectedOrderIds($this->importProcessId);
+
                 // Clean up order lines that were not in the import file
+                // This triggers surplus events for deleted lines via OrderRepository
                 $this->cleanupOldOrderLines();
+
+                // Recalculate ordered_quantity_new for all affected OPs
+                // This MUST happen AFTER surplus checks are complete
+                $this->recalculateAffectedAdvanceOrders($affectedOrderIds);
 
                 $importProcess = ImportProcess::find($this->importProcessId);
 
@@ -1291,21 +1299,10 @@ class OrderLinesImport implements
                 'affected_orders_count' => count($orderIds),
             ]);
 
-            // For each order, delete lines that are NOT in the tracking table
-            $totalDeleted = 0;
-            foreach ($orderIds as $orderId) {
-                $deleted = OrderLine::where('order_id', $orderId)
-                    ->whereNotIn('id', $trackedOrderLineIds)
-                    ->delete();
-
-                if ($deleted > 0) {
-                    Log::info('Deleted old order lines', [
-                        'order_id' => $orderId,
-                        'deleted_count' => $deleted,
-                    ]);
-                    $totalDeleted += $deleted;
-                }
-            }
+            // Delete lines that are NOT in the tracking table using repository
+            // This uses individual deletion to trigger observers (for surplus handling)
+            $orderRepository = app(OrderRepository::class);
+            $totalDeleted = $orderRepository->deleteUnimportedOrderLines($orderIds, $trackedOrderLineIds);
 
             Log::info('Cleanup completed', [
                 'import_process_id' => $this->importProcessId,
@@ -1317,6 +1314,45 @@ class OrderLinesImport implements
 
         } catch (\Exception $e) {
             Log::error('Error during cleanup of old order lines', [
+                'import_process_id' => $this->importProcessId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Recalculate ordered_quantity_new for all AdvanceOrders affected by this import.
+     *
+     * This method is called AFTER cleanup to ensure all surplus checks are complete.
+     * It dispatches recalculation jobs for each affected product in each affected OP.
+     *
+     * @param array $orderIds Array of order IDs that were affected by the import
+     */
+    private function recalculateAffectedAdvanceOrders(array $orderIds): void
+    {
+        try {
+            if (empty($orderIds)) {
+                Log::info('No affected orders for recalculation', [
+                    'import_process_id' => $this->importProcessId,
+                ]);
+                return;
+            }
+
+            Log::info('Starting recalculation of affected AdvanceOrders', [
+                'import_process_id' => $this->importProcessId,
+                'affected_order_ids' => $orderIds,
+            ]);
+
+            // Use repository to recalculate
+            $advanceOrderRepository = app(\App\Repositories\AdvanceOrderRepository::class);
+            $advanceOrderRepository->recalculateOrderedQuantityNewForOrders($orderIds);
+
+            Log::info('Completed recalculation of affected AdvanceOrders', [
+                'import_process_id' => $this->importProcessId,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error during recalculation of AdvanceOrders', [
                 'import_process_id' => $this->importProcessId,
                 'error' => $e->getMessage(),
             ]);

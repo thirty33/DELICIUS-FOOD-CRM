@@ -27,6 +27,9 @@ class CreateSurplusWarehouseTransaction
     {
         Log::info('CreateSurplusWarehouseTransaction: Dispatching job', [
             'order_line_id' => $event->orderLine->id,
+            'order_id' => $event->orderId,
+            'product_id' => $event->productId,
+            'product_name' => $event->productName,
             'old_quantity' => $event->oldQuantity,
             'new_quantity' => $event->newQuantity,
             'produced_quantity' => $event->producedQuantity,
@@ -36,6 +39,10 @@ class CreateSurplusWarehouseTransaction
 
         CreateSurplusWarehouseTransactionJob::dispatch(
             $event->orderLine->id,
+            $event->orderId,
+            $event->productId,
+            $event->productName,
+            $event->measureUnit,
             $event->oldQuantity,
             $event->newQuantity,
             $event->producedQuantity,
