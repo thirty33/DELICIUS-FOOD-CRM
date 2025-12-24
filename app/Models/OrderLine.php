@@ -17,6 +17,14 @@ class OrderLine extends Model
      */
     public static bool $importMode = false;
 
+    /**
+     * User ID of the user who initiated the import.
+     * Used to set user_id on warehouse transactions when lines are deleted during import.
+     *
+     * @var int|null
+     */
+    public static ?int $importUserId = null;
+
     protected $fillable = [
         'quantity',
         'unit_price',

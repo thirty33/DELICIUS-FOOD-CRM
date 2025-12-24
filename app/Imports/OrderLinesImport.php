@@ -131,7 +131,13 @@ class OrderLinesImport implements
                     ]);
                 }
 
-                Log::info('Finalizada importación de líneas de pedido', ['process_id' => $this->importProcessId]);
+                // Reset importUserId NOW after all cleanup and surplus events are complete
+                OrderLine::$importUserId = null;
+
+                Log::info('Finalizada importación de líneas de pedido', [
+                    'process_id' => $this->importProcessId,
+                    'import_user_id_reset' => true,
+                ]);
             },
         ];
     }
@@ -367,9 +373,14 @@ class OrderLinesImport implements
             // Enable import mode to disable OrderLineProductionStatusObserver
             OrderLine::$importMode = true;
 
+            // Set the import user ID for surplus transactions during deletion
+            $importProcess = ImportProcess::find($this->importProcessId);
+            OrderLine::$importUserId = $importProcess?->user_id;
+
             Log::info('OrderLinesImport procesando colección', [
                 'count' => $rows->count(),
                 'import_mode_enabled' => OrderLine::$importMode,
+                'import_user_id' => OrderLine::$importUserId,
             ]);
 
             if ($rows->count() > 0) {
@@ -459,10 +470,12 @@ class OrderLinesImport implements
                 ]
             );
         } finally {
-            // ALWAYS disable import mode, even if an exception occurred
+            // Disable import mode but keep importUserId until AfterImport completes
+            // (cleanup in AfterImport needs importUserId for surplus transactions)
             OrderLine::$importMode = false;
-            Log::info('OrderLinesImport: import mode disabled', [
+            Log::info('OrderLinesImport: import mode disabled (importUserId kept for AfterImport)', [
                 'import_mode_enabled' => OrderLine::$importMode,
+                'import_user_id' => OrderLine::$importUserId,
             ]);
         }
     }

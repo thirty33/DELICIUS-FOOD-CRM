@@ -234,13 +234,23 @@ class OrderLineProductionStatusObserver
 
         // Dispatch event - the listener will create the warehouse transaction
         // We pass the orderLine while it still exists
+        // Use auth()->id() if available, otherwise fall back to importUserId (for bulk imports)
+        $userId = auth()->id() ?? OrderLine::$importUserId;
+
+        Log::info('OrderLineProductionStatusObserver::deleting: Dispatching surplus event', [
+            'order_line_id' => $orderLine->id,
+            'user_id' => $userId,
+            'auth_id' => auth()->id(),
+            'import_user_id' => OrderLine::$importUserId,
+        ]);
+
         event(new OrderLineQuantityReducedBelowProduced(
             $orderLine,
             $oldQuantity,
             0,  // newQuantity = 0 (line is being deleted)
             $surplus,
             $surplus,
-            auth()->id()
+            $userId
         ));
     }
 

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\WarehouseTransactionStatus;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\WarehouseTransaction;
 use App\Models\WarehouseTransactionLine;
@@ -94,11 +95,17 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            // Get user who made the change
+            // Get user who made the change - fallback to first admin if no userId
+            $userId = $this->userId;
+            if (!$userId) {
+                $adminUser = User::whereHas('roles', fn($q) => $q->where('roles.id', Role::ADMIN))->first();
+                $userId = $adminUser?->id;
+            }
+
             $userName = 'Sistema';
-            if ($this->userId) {
-                $user = User::find($this->userId);
-                $userName = $user ? $user->name : 'Usuario ID ' . $this->userId;
+            if ($userId) {
+                $user = User::find($userId);
+                $userName = $user ? $user->name : 'Usuario ID ' . $userId;
             }
 
             // Build descriptive reason using passed data (not from OrderLine lookup)
@@ -124,12 +131,12 @@ class CreateSurplusWarehouseTransactionJob implements ShouldQueue
             // Create transaction
             $transaction = WarehouseTransaction::create([
                 'warehouse_id' => $defaultWarehouse->id,
-                'user_id' => $this->userId,
+                'user_id' => $userId,
                 'transaction_code' => WarehouseTransaction::generateTransactionCode(),
                 'status' => WarehouseTransactionStatus::EXECUTED,
                 'reason' => $reason,
                 'executed_at' => now(),
-                'executed_by' => $this->userId,
+                'executed_by' => $userId,
             ]);
 
             Log::info('CreateSurplusWarehouseTransactionJob: Transaction created', [
