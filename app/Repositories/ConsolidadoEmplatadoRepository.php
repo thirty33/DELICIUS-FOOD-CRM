@@ -81,6 +81,11 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                 }
                 $processedOrderLineIds[$orderLineId] = true;
 
+                // Skip if orderLine was deleted (no longer exists in database)
+                if (!$aoOrderLine->orderLine) {
+                    continue;
+                }
+
                 $product = $aoOrderLine->orderLine->product;
                 $platedDish = $product->platedDish;
 
@@ -96,7 +101,9 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                 }
 
                 $productId = $product->id;
-                $quantity = $aoOrderLine->quantity_covered;
+                // Use current orderLine quantity (not frozen quantity_covered)
+                // This ensures the report reflects modifications made after OP creation
+                $quantity = $aoOrderLine->orderLine->quantity;
 
                 // Initialize product group if not exists
                 if (!isset($productGroups[$productId])) {
