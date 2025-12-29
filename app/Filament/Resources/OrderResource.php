@@ -274,6 +274,7 @@ class OrderResource extends Resource
                     ->columnSpan(1),
                 Tables\Filters\SelectFilter::make('company_id')
                     ->label(__('Empresa'))
+                    ->multiple()
                     ->relationship('user.company', 'fantasy_name')
                     ->getOptionLabelFromRecordUsing(fn ($record) =>
                         ($record->company_code ?? 'N/A') . ' - ' . $record->fantasy_name
@@ -282,14 +283,15 @@ class OrderResource extends Resource
                     ->preload()
                     ->columnSpan(1)
                     ->query(function (Builder $query, array $data) {
-                        if (!empty($data['value'])) {
+                        if (!empty($data['values'])) {
                             $query->whereHas('user.company', function (Builder $q) use ($data) {
-                                $q->where('companies.id', $data['value']);
+                                $q->whereIn('companies.id', $data['values']);
                             });
                         }
                     }),
                 Tables\Filters\SelectFilter::make('branch_id')
                     ->label(__('Sucursal'))
+                    ->multiple()
                     ->relationship('user.branch', 'fantasy_name')
                     ->getOptionLabelFromRecordUsing(fn ($record) =>
                         ($record->branch_code ?? 'N/A') . ' - ' . $record->fantasy_name
@@ -298,9 +300,9 @@ class OrderResource extends Resource
                     ->preload()
                     ->columnSpan(1)
                     ->query(function (Builder $query, array $data) {
-                        if (!empty($data['value'])) {
+                        if (!empty($data['values'])) {
                             $query->whereHas('user.branch', function (Builder $q) use ($data) {
-                                $q->where('branches.id', $data['value']);
+                                $q->whereIn('branches.id', $data['values']);
                             });
                         }
                     }),

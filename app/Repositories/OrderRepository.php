@@ -260,7 +260,9 @@ class OrderRepository
      * but we need to calculate the actual produced quantity based on ordered_quantity_new
      * (which accounts for what was already covered by previous OPs).
      *
-     * Formula: actual_produced = (ordered_quantity_new / ordered_quantity) * quantity_covered
+     * FIX: The previous proportional formula was incorrect when multiple orders share
+     * the same OP and overlap occurs. The new approach sums ordered_quantity_new from
+     * all executed OPs covering this order+product, capped by the order line quantity.
      *
      * @param int $orderId
      * @param int $productId
@@ -288,12 +290,26 @@ class OrderRepository
         $totalProduced = 0;
 
         foreach ($ops as $op) {
-            if ($op->ordered_quantity > 0) {
-                // Calculate proportional quantity based on ordered_quantity_new
+            // Hybrid formula to handle two scenarios correctly:
+            //
+            // 1. When oq_new > qc (order quantity increased, oq_new recalculated):
+            //    Use proportional formula: qc * (oq_new / oq)
+            //    This gives credit for the increased production.
+            //
+            // 2. When oq_new <= qc (overlap from OTHER orders reduced oq_new):
+            //    Use min(qc, oq_new) to cap this order's contribution.
+            //    This fixes the bug where orders not causing overlap were penalized.
+            //
+            if ($op->ordered_quantity_new > $op->quantity_covered && $op->ordered_quantity > 0) {
+                // Case 1: oq_new increased beyond qc (recalculation scenario)
                 $proportion = $op->ordered_quantity_new / $op->ordered_quantity;
-                $actualProduced = $op->quantity_covered * $proportion;
-                $totalProduced += $actualProduced;
+                $contribution = $op->quantity_covered * $proportion;
+            } else {
+                // Case 2: oq_new <= qc (overlap from other orders)
+                $contribution = min($op->quantity_covered, $op->ordered_quantity_new);
             }
+
+            $totalProduced += $contribution;
         }
 
         return (int) round($totalProduced);
