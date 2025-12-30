@@ -44,6 +44,10 @@ class ImportProcessResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable()
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i:s')
@@ -102,6 +106,28 @@ class ImportProcessResource extends Resource
                     })
             ])
             ->actions([
+                Tables\Actions\Action::make('download_file')
+                    ->label('Descargar Archivo')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('success')
+                    ->visible(fn($record) => !empty($record->file_url))
+                    ->action(function ($record) {
+                        // Get file path from URL
+                        $filePath = parse_url($record->file_url, PHP_URL_PATH);
+                        $filePath = ltrim($filePath, '/');
+
+                        // Decode the path to handle special characters correctly
+                        // CloudFront signed URLs contain URL-encoded paths, but S3 stores files with actual characters
+                        $filePath = urldecode($filePath);
+
+                        // Generate custom filename based on type
+                        $originalFileName = basename($filePath);
+                        $extension = pathinfo($originalFileName, PATHINFO_EXTENSION);
+
+                        $downloadName = $record->type . '_' . $record->created_at->format('Ymd_His') . '.' . $extension;
+
+                        return Storage::disk('s3')->download($filePath, $downloadName);
+                    }),
                 Tables\Actions\Action::make('download_log')
                     ->label('Descargar Log')
                     ->icon('heroicon-o-document-arrow-down')
@@ -110,7 +136,7 @@ class ImportProcessResource extends Resource
                     ->action(function ($record) {
 
                         $fullRecord = ImportProcess::find($record->id);
-        
+
                         if (empty($fullRecord->error_log)) {
                             return;
                         }
