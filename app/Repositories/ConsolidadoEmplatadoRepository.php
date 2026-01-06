@@ -47,20 +47,37 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
             return $advanceOrder->associatedOrderLines->pluck('orderLine.product.platedDish.related_product_id');
         })->filter()->unique()->toArray();
 
-        // NEW: Query INDIVIDUAL product sales (from ALL orders, not just advance orders)
+        // NEW: Calculate INDIVIDUAL product counts from associatedOrderLines ONLY
+        // CRITICAL: Only count individual products that are explicitly assigned to the Advance Order
+        // Do NOT query all order_lines from the order_ids, as that includes products not in the OP
         $individualCounts = [];
         if (!empty($individualProductIds)) {
-            $orderIds = $advanceOrders->flatMap(function ($advanceOrder) {
-                return $advanceOrder->associatedOrderLines->pluck('orderLine.order_id');
-            })->unique()->toArray();
+            $processedOrderLineIdsForIndividuals = [];
 
-            $individualCounts = \App\Models\OrderLine::whereIn('order_id', $orderIds)
-                ->whereIn('product_id', $individualProductIds)
-                ->selectRaw('product_id, SUM(quantity) as total_quantity')
-                ->groupBy('product_id')
-                ->get()
-                ->pluck('total_quantity', 'product_id')
-                ->toArray();
+            foreach ($advanceOrders as $advanceOrder) {
+                foreach ($advanceOrder->associatedOrderLines as $aoOrderLine) {
+                    // Deduplicate: Skip if this order_line_id was already processed
+                    if (isset($processedOrderLineIdsForIndividuals[$aoOrderLine->order_line_id])) {
+                        continue;
+                    }
+                    $processedOrderLineIdsForIndividuals[$aoOrderLine->order_line_id] = true;
+
+                    // Skip if orderLine was deleted
+                    if (!$aoOrderLine->orderLine) {
+                        continue;
+                    }
+
+                    $productId = $aoOrderLine->orderLine->product_id;
+
+                    // Only count if this is an individual product (related to a HORECA product)
+                    if (in_array($productId, $individualProductIds)) {
+                        if (!isset($individualCounts[$productId])) {
+                            $individualCounts[$productId] = 0;
+                        }
+                        $individualCounts[$productId] += $aoOrderLine->orderLine->quantity;
+                    }
+                }
+            }
         }
 
         // Group data by product
