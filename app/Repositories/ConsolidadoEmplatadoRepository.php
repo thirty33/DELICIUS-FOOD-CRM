@@ -74,7 +74,10 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                         if (!isset($individualCounts[$productId])) {
                             $individualCounts[$productId] = 0;
                         }
-                        $individualCounts[$productId] += $aoOrderLine->orderLine->quantity;
+                        // Use MIN(quantity_covered, orderLine->quantity) to handle both scenarios:
+                        // - Reduction (10→9): MIN(10, 9) = 9 (show what's actually needed)
+                        // - Increase (4→6): MIN(4, 6) = 4 (show only what this OP covers, extras go to another OP)
+                        $individualCounts[$productId] += min($aoOrderLine->quantity_covered, $aoOrderLine->orderLine->quantity);
                     }
                 }
             }
@@ -118,9 +121,10 @@ class ConsolidadoEmplatadoRepository implements ConsolidadoEmplatadoRepositoryIn
                 }
 
                 $productId = $product->id;
-                // Use current orderLine quantity (not frozen quantity_covered)
-                // This ensures the report reflects modifications made after OP creation
-                $quantity = $aoOrderLine->orderLine->quantity;
+                // Use MIN(quantity_covered, orderLine->quantity) to handle both scenarios:
+                // - Reduction (10→9): MIN(10, 9) = 9 (show what's actually needed)
+                // - Increase (4→6): MIN(4, 6) = 4 (show only what this OP covers, extras go to another OP)
+                $quantity = min($aoOrderLine->quantity_covered, $aoOrderLine->orderLine->quantity);
 
                 // Initialize product group if not exists
                 if (!isset($productGroups[$productId])) {
