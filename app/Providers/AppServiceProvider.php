@@ -33,7 +33,9 @@ use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
 use App\Models\Order;
 use App\Models\OrderLine;
+use App\Models\WebRegistrationRequest;
 use App\Observers\ProductObserver;
+use App\Observers\WebRegistrationRequestObserver;
 use App\Observers\OrderDeletionObserver;
 use App\Observers\AdvanceOrderObserver;
 use App\Observers\AdvanceOrderProductObserver;
@@ -156,6 +158,7 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(ProductObserver::class);
         AdvanceOrder::observe(AdvanceOrderObserver::class);
         AdvanceOrderProduct::observe(AdvanceOrderProductObserver::class);
+        WebRegistrationRequest::observe(WebRegistrationRequestObserver::class);
 
         // Register Observers for production status updates
         AdvanceOrder::observe(AdvanceOrderProductionStatusObserver::class);

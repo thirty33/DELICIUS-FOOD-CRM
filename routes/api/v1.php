@@ -17,8 +17,11 @@ use App\Http\Controllers\API\V1\{
     MenuController,
     CategoryController,
     OrderController,
-    UsersController
+    UsersController,
+    WebRegistrationController
 };
+
+use App\Http\Middleware\VerifyPublicApiKey;
 
 Route::prefix('auth')->group(function () {
 
@@ -67,7 +70,10 @@ Route::prefix('users')->middleware(['auth:sanctum', ThrottleRequests::with(60, 1
         ->name('users.subordinates');
 });
 
-Route::prefix('signed-urls')->middleware(['auth:sanctum', ThrottleRequests::with(30, 1)])->group(function () {
+Route::prefix('signed-urls')->middleware([
+    'auth:sanctum',
+    //  ThrottleRequests::with(30, 1)
+])->group(function () {
 
     Route::post('generate', function (Request $request) {
         if (!$request->user()->hasRole(RoleName::ADMIN->value)) {
@@ -109,5 +115,14 @@ Route::prefix('signed-urls')->middleware(['auth:sanctum', ThrottleRequests::with
         }
     })->name('signed-urls.generate');
 
+});
+
+// Web Registration - Public endpoint (API key required, no user auth)
+Route::prefix('web-registration')->middleware([
+    VerifyPublicApiKey::class,
+    ThrottleRequests::with(1, 1)
+])->group(function () {
+    Route::post('/', [WebRegistrationController::class, 'store'])
+        ->name('web-registration.store');
 });
 

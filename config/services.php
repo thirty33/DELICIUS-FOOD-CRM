@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'public_api' => [
+        'key' => env('PUBLIC_API_KEY'),
+    ],
+
 ];
