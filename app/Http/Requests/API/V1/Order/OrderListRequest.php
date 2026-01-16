@@ -5,6 +5,8 @@ namespace App\Http\Requests\API\V1\Order;
 use Illuminate\Foundation\Http\FormRequest;
 use App\Enums\OrderStatus;
 use App\Enums\TimePeriod;
+use App\Enums\RoleName;
+use App\Enums\PermissionName;
 
 class OrderListRequest extends FormRequest
 {
@@ -28,6 +30,10 @@ class OrderListRequest extends FormRequest
             'order_status' => 'nullable|in:' . implode(',', OrderStatus::getValues()),
             'time_period' => 'nullable|in:' . implode(',', TimePeriod::getValues()),
             
+            // Filtros de rol y permiso
+            'user_role' => 'nullable|in:' . implode(',', RoleName::getValues()),
+            'user_permission' => 'nullable|in:' . implode(',', PermissionName::getValues()),
+
             // Búsqueda
             'user_search' => 'nullable|string|max:255',
             'branch_search' => 'nullable|string|max:255',
@@ -52,7 +58,11 @@ class OrderListRequest extends FormRequest
             // Mensajes para filtros existentes
             'order_status.in' => 'El estado de la orden debe ser uno de los siguientes valores: ' . implode(', ', OrderStatus::getValues()),
             'time_period.in' => 'El período de tiempo debe ser uno de los siguientes valores: this_week, this_month, last_3_months, last_6_months, this_year.',
-            
+
+            // Mensajes para filtros de rol y permiso
+            'user_role.in' => 'El rol debe ser uno de los siguientes valores: ' . implode(', ', RoleName::getValues()),
+            'user_permission.in' => 'El permiso debe ser uno de los siguientes valores: ' . implode(', ', PermissionName::getValues()),
+
             // Mensajes para búsqueda
             'user_search.string' => 'El término de búsqueda de usuario debe ser un texto.',
             'user_search.max' => 'El término de búsqueda de usuario no puede exceder los 255 caracteres.',

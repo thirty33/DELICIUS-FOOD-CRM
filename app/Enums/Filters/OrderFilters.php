@@ -11,6 +11,8 @@ use App\Filters\Order\UserFilter;
 use App\Filters\Order\SortFilter;
 use App\Filters\Order\UserSearchFilter;
 use App\Filters\Order\BranchSearchFilter;
+use App\Filters\Order\UserRoleFilter;
+use App\Filters\Order\UserPermissionFilter;
 
 enum OrderFilters: string
 {
@@ -28,6 +30,10 @@ enum OrderFilters: string
     
     case BranchSearch = 'branch_search';
 
+    case UserRole = 'user_role';
+
+    case UserPermission = 'user_permission';
+
     public function create(FilterValue $filter): Filter
     {
         return match ($this)
@@ -39,6 +45,8 @@ enum OrderFilters: string
             self::Sort => new SortFilter(filter: $filter),
             self::UserSearch => new UserSearchFilter(filter: $filter),
             self::BranchSearch => new BranchSearchFilter(filter: $filter),
+            self::UserRole => new UserRoleFilter(filter: $filter),
+            self::UserPermission => new UserPermissionFilter(filter: $filter),
         };
     }
 }

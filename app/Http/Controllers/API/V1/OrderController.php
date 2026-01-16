@@ -72,6 +72,8 @@ class OrderController extends Controller
             OrderFilters::OrderStatus->create(new FilterValue($request->input('order_status'))),
             OrderFilters::UserSearch->create(new FilterValue($request->input('user_search'))),
             OrderFilters::BranchSearch->create(new FilterValue($request->input('branch_search'))),
+            OrderFilters::UserRole->create(new FilterValue($request->input('user_role'))),
+            OrderFilters::UserPermission->create(new FilterValue($request->input('user_permission'))),
             OrderFilters::Sort->create(new FilterValue([
                 'column' => $request->input('sort_column', 'dispatch_date'),
                 'direction' => $request->input('sort_direction', 'desc')
