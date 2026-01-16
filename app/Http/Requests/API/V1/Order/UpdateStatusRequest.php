@@ -3,7 +3,6 @@
 namespace App\Http\Requests\API\V1\Order;
 
 use App\Http\Requests\API\V1\Menu\DelegateUserRequest;
-use App\Classes\Menus\MenuHelper;
 
 class UpdateStatusRequest extends DelegateUserRequest
 {
@@ -36,32 +35,8 @@ class UpdateStatusRequest extends DelegateUserRequest
         // Execute parent authorization (delegate user validation)
         // This will throw HttpResponseException if validation fails
         parent::authorize();
-        
-        // Obtener la fecha del request
-        $date = $this->input('date');
 
-        // Obtener el usuario autenticado
-        $user = $this->user();
-
-        // Obtener el primer rol del usuario
-        $firstRole = $user->roles->first();
-        $roleId = $firstRole ? $firstRole->id : null;
-
-        // Obtener el primer permiso del usuario
-        $firstPermission = $user->permissions->first();
-        $permissionId = $firstPermission ? $firstPermission->id : null;
-
-        // Obtener el company_id del usuario
-        $companyId = $user->company_id;
-
-        // Verificar si existe un menú que cumpla con las condiciones
-        $menuExists = MenuHelper::menuExistsForStatusUpdate($date, $roleId, $permissionId, $companyId);
-
-        // Si no existe un menú válido, denegar la autorización
-        if (!$menuExists) {
-            return false;
-        }
-
-        return true;
+        // Check if there is a menu that meets the conditions for the effective user
+        return $this->authorizeMenuAccess('menuExistsForStatusUpdate');
     }
 }

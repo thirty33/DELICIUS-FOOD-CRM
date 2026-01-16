@@ -6,18 +6,20 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use App\Services\API\V1\ApiResponseService;
 use App\Http\Requests\API\V1\User\GetSubordinateUsersRequest;
-use App\Http\Resources\API\V1\SubordinateUserResource;
+use App\Http\Resources\API\V1\SubordinateUserResourceCollection;
 use App\Repositories\MenuRepository;
-use App\Models\User;
+use App\Repositories\UserRepository;
 use Exception;
 
 class UsersController extends Controller
 {
-    protected $menuRepository;
+    protected MenuRepository $menuRepository;
+    protected UserRepository $userRepository;
 
-    public function __construct(MenuRepository $menuRepository)
+    public function __construct(MenuRepository $menuRepository, UserRepository $userRepository)
     {
         $this->menuRepository = $menuRepository;
+        $this->userRepository = $userRepository;
     }
 
     /**
@@ -29,22 +31,23 @@ class UsersController extends Controller
     public function getSubordinateUsers(GetSubordinateUsersRequest $request): JsonResponse
     {
         try {
-
             $masterUser = $request->user();
+            $perPage = $request->input('per_page', 15);
+            $userSearchFilters = $request->getUserSearchFilters();
+            $menuSearchFilters = $request->getMenuSearchFilters();
 
-            // Get subordinate users from the same company (exclude master users)
-            $subordinateUsers = User::where('company_id', $masterUser->company_id)
-                ->where('master_user', false)
-                ->with(['branch'])
-                ->get();
+            $subordinateUsers = $this->userRepository->getSubordinateUsers($masterUser, $perPage, $userSearchFilters);
+
+            // Determine userForValidations: use master user if super_master_user, otherwise use subordinate
+            $userForValidations = $masterUser->super_master_user ? $masterUser : null;
 
             // For each subordinate user, get their available menus (limit to 15)
             foreach ($subordinateUsers as $user) {
-                $user->available_menus = $this->menuRepository->getAvailableMenusForUser($user, 15);
+                $user->available_menus = $this->menuRepository->getAvailableMenusForUser($user, 15, $userForValidations, $menuSearchFilters);
             }
 
             return ApiResponseService::success(
-                SubordinateUserResource::collection($subordinateUsers),
+                new SubordinateUserResourceCollection($subordinateUsers),
                 'Subordinate users retrieved successfully'
             );
 

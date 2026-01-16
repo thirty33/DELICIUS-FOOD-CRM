@@ -203,6 +203,10 @@ class UserResource extends Resource
                     ->label(__('Usuario Maestro'))
                     ->inline(false)
                     ->helperText(__('Permite al usuario acceder a funciones administrativas especiales')),
+                Toggle::make('super_master_user')
+                    ->label(__('Usuario Maestro Superior'))
+                    ->inline(false)
+                    ->helperText(__('Puede acceder a todas las sucursales del sistema desde el frontis')),
             ]);
     }
 

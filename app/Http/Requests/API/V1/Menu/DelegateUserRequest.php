@@ -6,6 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use App\Services\API\V1\ApiResponseService;
 use App\Models\User;
+use App\Repositories\UserDelegationRepository;
+use App\Classes\Menus\MenuHelper;
 
 class DelegateUserRequest extends FormRequest
 {
@@ -46,11 +48,12 @@ class DelegateUserRequest extends FormRequest
         if ($this->has('delegate_user')) {
             $delegateNickname = $this->input('delegate_user');
             $delegateUser = User::where('nickname', $delegateNickname)->first();
-            
+
             if ($delegateUser) {
-                // Assuming users have a company_id or similar field
-                // Adjust this based on your actual database structure
-                if ($authenticatedUser->company_id !== $delegateUser->company_id) {
+                // Super master users can delegate to any company
+                // Regular master users can only delegate within their company
+                if (!$authenticatedUser->super_master_user &&
+                    $authenticatedUser->company_id !== $delegateUser->company_id) {
                     throw new HttpResponseException(
                         ApiResponseService::unprocessableEntity('error', [
                             'delegate_user' => ['You can only delegate to users within your company']
@@ -119,5 +122,31 @@ class DelegateUserRequest extends FormRequest
         throw new HttpResponseException(
             ApiResponseService::unprocessableEntity('error', $validator->errors()->toArray())
         );
+    }
+
+    /**
+     * Authorize menu access for the effective user using the specified MenuHelper method.
+     *
+     * @param string $menuHelperMethod The MenuHelper method name to call
+     * @return bool
+     */
+    protected function authorizeMenuAccess(string $menuHelperMethod): bool
+    {
+        $date = $this->input('date');
+
+        $userDelegationRepository = app(UserDelegationRepository::class);
+        $effectiveUser = $userDelegationRepository->getEffectiveUser($this);
+
+        $firstRole = $effectiveUser->roles->first();
+        $roleId = $firstRole ? $firstRole->id : null;
+
+        $firstPermission = $effectiveUser->permissions->first();
+        $permissionId = $firstPermission ? $firstPermission->id : null;
+
+        $companyId = $effectiveUser->company_id;
+
+        $menuExists = MenuHelper::$menuHelperMethod($date, $roleId, $permissionId, $companyId);
+
+        return $menuExists;
     }
 }

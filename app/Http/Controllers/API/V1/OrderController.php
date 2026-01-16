@@ -15,6 +15,9 @@ use App\Classes\Orders\Validations\MandatoryCategoryValidation;
 use App\Classes\Orders\Validations\OneProductPerCategorySimple;
 use App\Classes\Orders\Validations\OneProductPerSubcategory;
 use App\Classes\Orders\Validations\ExactProductCountPerSubcategory;
+use App\Classes\Orders\Validations\OrderNotProcessedValidation;
+use App\Classes\Orders\Validations\OrderNotCanceledValidation;
+use App\Classes\Orders\Validations\OrderNotPartiallyScheduledValidation;
 use App\Classes\UserPermissions;
 use App\Enums\OrderStatus;
 use Carbon\Carbon;
@@ -59,9 +62,12 @@ class OrderController extends Controller
             OrderFilters::Company->create(new FilterValue([
                 'user' => $user,
                 'master_user' => $user->master_user,
+                'super_master_user' => $user->super_master_user,
                 'company_id' => $user->company_id
             ])),
-            OrderFilters::User->create(new FilterValue($user->master_user ? null : $user->id)),
+            OrderFilters::User->create(new FilterValue(
+                ($user->master_user || $user->super_master_user) ? null : $user->id
+            )),
             OrderFilters::TimePeriod->create(new FilterValue($request->input('time_period'))),
             OrderFilters::OrderStatus->create(new FilterValue($request->input('order_status'))),
             OrderFilters::UserSearch->create(new FilterValue($request->input('user_search'))),
@@ -161,6 +167,7 @@ class OrderController extends Controller
 
                 $carbonDate = Carbon::parse($date);
                 $user = $this->userDelegationRepository->getEffectiveUser($request);
+                $userForValidations = $this->userDelegationRepository->getUserForValidations($request);
                 $orderIsPartiallyScheduled = false;
 
                 foreach ($request->order_lines as $orderLineData) {
@@ -176,12 +183,14 @@ class OrderController extends Controller
 
                 $order = $this->getOrder($user->id, $carbonDate);
 
-                if ($order && $order->status === OrderStatus::PROCESSED->value) {
-                    throw new Exception('La orden ya ha sido procesada');
-                }
-
-                if ($order && $order->status === OrderStatus::CANCELED->value) {
-                    throw new Exception('No se puede modificar una orden cancelada');
+                if ($order) {
+                    $statusValidation = new OrderNotProcessedValidation();
+                    $statusValidation
+                        ->linkWith(new OrderNotCanceledValidation())
+                        ->setUserForValidations($userForValidations);
+                    $statusValidation
+                        ->setUserForValidations($userForValidations)
+                        ->validate($order, $user, $carbonDate);
                 }
 
                 if (!$order) {
@@ -194,6 +203,7 @@ class OrderController extends Controller
                 $validationChain = new MenuExistsValidation();
 
                 $validationChain
+                    ->setUserForValidations($userForValidations)
                     ->validate($order, $user, $carbonDate);
 
                 $companyPriceListId = $user->company->price_list_id;
@@ -210,7 +220,7 @@ class OrderController extends Controller
                     if ($partiallyScheduled || ($existingOrderLine && $existingOrderLine->partially_scheduled)) {
                         $product = Product::find($productId);
                         if ($product) {
-                            OrderHelper::validateCategoryLineRulesForProduct($product, $carbonDate, $user);
+                            OrderHelper::validateCategoryLineRulesForProduct($product, $carbonDate, $userForValidations);
                         }
                     }
 
@@ -232,11 +242,14 @@ class OrderController extends Controller
                     );
                 }
 
-                $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
-                $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
+                // Super users can modify orders without changing the status
+                if (!$userForValidations->super_master_user) {
+                    $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
+                    $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
 
-                if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
-                    $order->status = OrderStatus::PENDING->value;
+                    if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
+                        $order->status = OrderStatus::PENDING->value;
+                    }
                 }
 
                 $order->save();
@@ -253,6 +266,7 @@ class OrderController extends Controller
                     ->linkWith(new PolymorphicExclusion()); // NEW: Validates polymorphic exclusions for Consolidated agreements
 
                 $validationChain2
+                    ->setUserForValidations($userForValidations)
                     ->validate($order, $user, $carbonDate);
 
                 return ApiResponseService::success(
@@ -276,6 +290,7 @@ class OrderController extends Controller
             $carbonDate = Carbon::parse($date);
 
             $user = $this->userDelegationRepository->getEffectiveUser($request);
+            $userForValidations = $this->userDelegationRepository->getUserForValidations($request);
 
             $order = $this->getOrder($user->id, $carbonDate);
 
@@ -283,17 +298,18 @@ class OrderController extends Controller
                 return ApiResponseService::notFound('Order not found');
             }
 
-            if ($order->status == OrderStatus::PROCESSED->value) {
-                throw new Exception("La orden ya ha sido procesada");
-            }
-
-            if ($order->status == OrderStatus::CANCELED->value) {
-                throw new Exception("No se puede modificar una orden cancelada");
-            }
+            $statusValidation = new OrderNotProcessedValidation();
+            $statusValidation
+                ->linkWith(new OrderNotCanceledValidation())
+                ->setUserForValidations($userForValidations);
+            $statusValidation
+                ->setUserForValidations($userForValidations)
+                ->validate($order, $user, $carbonDate);
 
             $validationChain = new MenuExistsValidation();
 
             $validationChain
+                ->setUserForValidations($userForValidations)
                 ->validate($order, $user, $carbonDate);
 
             foreach ($request->order_lines as $orderLineData) {
@@ -304,7 +320,7 @@ class OrderController extends Controller
                 if ($existingOrderLine) {
 
                     if ($existingOrderLine->partially_scheduled) {
-                        OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $user);
+                        OrderHelper::validateCategoryLineRulesForProduct($existingOrderLine->product, $carbonDate, $userForValidations);
                     }
 
                     $existingOrderLine->delete();
@@ -337,6 +353,7 @@ class OrderController extends Controller
             $carbonDate = Carbon::parse($date);
 
             $user = $this->userDelegationRepository->getEffectiveUser($request);
+            $userForValidations = $this->userDelegationRepository->getUserForValidations($request);
 
             $order = $this->getOrder($user->id, $carbonDate);
 
@@ -348,14 +365,13 @@ class OrderController extends Controller
                 throw new Exception("estado no válido");
             }
 
-            if ($order->status == OrderStatus::PROCESSED->value) {
-                throw new Exception("La orden ya ha sido procesada");
-            }
-
-            if ($order->status == OrderStatus::CANCELED->value) {
-                throw new Exception("No se puede procesar una orden cancelada");
-            }
-
+            $statusValidation = new OrderNotProcessedValidation();
+            $statusValidation
+                ->linkWith(new OrderNotCanceledValidation('No se puede procesar una orden cancelada'))
+                ->setUserForValidations($userForValidations);
+            $statusValidation
+                ->setUserForValidations($userForValidations)
+                ->validate($order, $user, $carbonDate);
 
             $validationChain = new MenuExistsValidation();
             $validationChain
@@ -368,11 +384,8 @@ class OrderController extends Controller
                 ->linkWith(new ExactProductCountPerSubcategory());
 
             $validationChain
+                ->setUserForValidations($userForValidations)
                 ->validate($order, $user, $carbonDate);
-
-            if (!$order) {
-                return ApiResponseService::notFound('Order not found');
-            }
 
             $order->status = $request->status;
             $order->save();
@@ -396,7 +409,8 @@ class OrderController extends Controller
 
             $carbonDate = Carbon::parse($date);
 
-            $user = $request->user();
+            $user = $this->userDelegationRepository->getEffectiveUser($request);
+            $userForValidations = $this->userDelegationRepository->getUserForValidations($request);
 
             $order = $this->getOrder($user->id, $carbonDate);
 
@@ -408,10 +422,10 @@ class OrderController extends Controller
                 throw new Exception("estado no válido");
             }
 
-            if ($order->status == OrderStatus::PARTIALLY_SCHEDULED->value) {
-                throw new Exception("La orden ya ha sido procesada");
-            }
-
+            $statusValidation = new OrderNotPartiallyScheduledValidation();
+            $statusValidation
+                ->setUserForValidations($userForValidations)
+                ->validate($order, $user, $carbonDate);
 
             $validationChain = new MenuExistsValidation();
             $validationChain
@@ -419,6 +433,7 @@ class OrderController extends Controller
                 ->linkWith(new MandatoryCategoryValidation());
 
             $validationChain
+                ->setUserForValidations($userForValidations)
                 ->validate($order, $user, $carbonDate);
 
             if (!$order) {

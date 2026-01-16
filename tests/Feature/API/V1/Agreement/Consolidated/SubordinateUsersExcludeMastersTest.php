@@ -156,23 +156,29 @@ class SubordinateUsersExcludeMastersTest extends TestCase
         // 8. CALL THE API
         $response = $this->getJson('/api/v1/users/subordinates');
 
-        // 9. ASSERT RESPONSE STRUCTURE
+        // 9. ASSERT RESPONSE STRUCTURE (paginated response)
         $response->assertStatus(200);
         $response->assertJsonStructure([
             'status',
             'message',
             'data' => [
-                '*' => [
-                    'nickname',
-                    'email',
-                    'branch_name',
-                    'branch_address',
-                    'available_menus',
+                'current_page',
+                'data' => [
+                    '*' => [
+                        'nickname',
+                        'email',
+                        'branch_name',
+                        'branch_address',
+                        'available_menus',
+                    ],
                 ],
+                'last_page',
+                'per_page',
+                'total',
             ],
         ]);
 
-        $users = $response->json('data');
+        $users = $response->json('data.data');
 
         // 10. ASSERT EXPECTED BEHAVIOR
         // BUG: This assertion will FAIL

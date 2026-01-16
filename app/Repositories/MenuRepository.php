@@ -16,12 +16,20 @@ class MenuRepository
     /**
      * Get available menus for a specific user with all business logic filters applied.
      *
-     * @param User $user
+     * @param User $user The effective user (delegate user if delegating)
      * @param int|null $limit
+     * @param User|null $userForValidations The user for validations (super_master_user if delegating)
+     * @param array $searchFilters Additional search filters:
+     *   - 'start_date': Start date for date range filter
+     *   - 'end_date': End date for date range filter
+     *   - 'order_status': Filter menus where user has orders with this status
      * @return Collection
      */
-    public function getAvailableMenusForUser(User $user, ?int $limit = null): Collection
+    public function getAvailableMenusForUser(User $user, ?int $limit = null, ?User $userForValidations = null, array $searchFilters = []): Collection
     {
+        // Use userForValidations if provided, otherwise use user
+        $validationUser = $userForValidations ?? $user;
+
         $baseQuery = Menu::query();
 
         $filters = [
@@ -29,8 +37,16 @@ class MenuRepository
             MenuFilters::PublicationDate->create(new FilterValue(['date' => Carbon::now()->startOfDay()])),
             MenuFilters::RolePermission->create(new FilterValue(['user' => $user])),
             MenuFilters::CompanyAccess->create(new FilterValue(['user' => $user])),
-            MenuFilters::LateOrders->create(new FilterValue(['user' => $user])),
-            MenuFilters::WeekendDispatch->create(new FilterValue(['allow_weekends' => $user->allow_weekend_orders])),
+            MenuFilters::LateOrders->create(new FilterValue(['user' => $validationUser])),
+            MenuFilters::WeekendDispatch->create(new FilterValue(['allow_weekends' => $validationUser->allow_weekend_orders])),
+            MenuFilters::DateRange->create(new FilterValue([
+                'start_date' => $searchFilters['start_date'] ?? null,
+                'end_date' => $searchFilters['end_date'] ?? null,
+            ])),
+            MenuFilters::OrderStatus->create(new FilterValue([
+                'user' => $user,
+                'status' => $searchFilters['order_status'] ?? null,
+            ])),
             MenuFilters::Sort->create(new FilterValue(['field' => 'publication_date', 'direction' => 'asc'])),
         ];
 

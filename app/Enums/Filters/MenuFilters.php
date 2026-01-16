@@ -11,6 +11,8 @@ use App\Filters\Menu\LateOrdersFilter;
 use App\Filters\Menu\SortFilter;
 use App\Filters\Menu\WeekendDispatchFilter;
 use App\Filters\Menu\CompanyAccessFilter;
+use App\Filters\Menu\DateRangeFilter;
+use App\Filters\Menu\OrderStatusFilter;
 
 enum MenuFilters: string
 {
@@ -21,6 +23,8 @@ enum MenuFilters: string
     case Sort = 'sort';
     case WeekendDispatch = 'weekend_dispatch';
     case CompanyAccess = 'company_access';
+    case DateRange = 'date_range';
+    case OrderStatus = 'order_status';
 
     public function create(FilterValue $filter): Filter
     {
@@ -32,6 +36,8 @@ enum MenuFilters: string
             self::Sort => new SortFilter(filter: $filter),
             self::WeekendDispatch => new WeekendDispatchFilter(filter: $filter),
             self::CompanyAccess => new CompanyAccessFilter(filter: $filter),
+            self::DateRange => new DateRangeFilter(filter: $filter),
+            self::OrderStatus => new OrderStatusFilter(filter: $filter),
         };
     }
 }

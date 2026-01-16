@@ -45,7 +45,8 @@ class User extends Authenticatable implements FilamentUser
         'validate_subcategory_rules',
         'nickname',
         'plain_password',
-        'master_user'
+        'master_user',
+        'super_master_user',
     ];
 
     /**
@@ -69,6 +70,7 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'master_user' => 'boolean',
+            'super_master_user' => 'boolean',
         ];
     }
 

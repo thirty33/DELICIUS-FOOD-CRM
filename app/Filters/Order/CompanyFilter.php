@@ -11,6 +11,11 @@ final class CompanyFilter extends Filter
     {
         $filterData = $this->filter->getValue();
 
+        // Skip filter for super_master_user (can see all companies)
+        if (isset($filterData['super_master_user']) && $filterData['super_master_user']) {
+            return $next($items);
+        }
+
         // Only apply company filter if user is master
         if (!$filterData || !is_array($filterData) || !isset($filterData['master_user']) || !$filterData['master_user']) {
             return $next($items);

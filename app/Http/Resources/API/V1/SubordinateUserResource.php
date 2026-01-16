@@ -17,6 +17,8 @@ class SubordinateUserResource extends JsonResource
         return [
             'nickname' => $this->nickname,
             'email' => $this->email,
+            'role' => $this->roles->first()?->name,
+            'company_name' => $this->company ? $this->company->fantasy_name : null,
             'branch_name' => $this->branch ? $this->branch->fantasy_name : null,
             'branch_address' => $this->branch ? $this->branch->address : null,
             'available_menus' => MenuResource::collection($this->available_menus ?? []),

@@ -59,8 +59,33 @@ class UserDelegationRepository
         if (!$this->isDelegationActive($request)) {
             return null;
         }
-        
+
         $delegateNickname = $request->input('delegate_user');
         return User::where('nickname', $delegateNickname)->first();
+    }
+
+    /**
+     * Get the user for validations (filters, permissions checks, etc).
+     *
+     * If the authenticated user is a super_master_user, return the authenticated user.
+     * Otherwise, return the effective user (which could be a delegate user).
+     *
+     * This is used for validations like allow_late_orders, where we want to use
+     * the super_master_user's permissions even when delegating.
+     *
+     * @param Request $request
+     * @return User
+     */
+    public function getUserForValidations(Request $request): User
+    {
+        $authenticatedUser = $request->user();
+
+        // If authenticated user is super_master_user, use their permissions
+        if ($authenticatedUser->super_master_user) {
+            return $authenticatedUser;
+        }
+
+        // Otherwise, use the effective user (delegate or authenticated)
+        return $this->getEffectiveUser($request);
     }
 }
