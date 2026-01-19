@@ -7,6 +7,7 @@ use App\Models\Menu;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ImportProcess;
+use App\Repositories\CategoryMenuRepository;
 use App\Classes\ErrorManagment\ExportErrorHandler;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
@@ -41,6 +42,7 @@ class CategoryMenuImport implements
 
     private $importProcessId;
     private $errors = [];
+    private CategoryMenuRepository $categoryMenuRepository;
 
     private $headingMap = [
         'titulo_del_menu' => 'menu_id',
@@ -55,6 +57,7 @@ class CategoryMenuImport implements
     public function __construct(int $importProcessId)
     {
         $this->importProcessId = $importProcessId;
+        $this->categoryMenuRepository = app(CategoryMenuRepository::class);
     }
 
     public function chunkSize(): int
@@ -299,8 +302,15 @@ class CategoryMenuImport implements
                         $categoryMenuData
                     );
 
-                    // Si no mostrar todos los productos y hay productos especificados, sincronizarlos
-                    if (isset($categoryMenuData['products']) && !empty($categoryMenuData['products']) && !$categoryMenuData['show_all_products']) {
+                    // Sync products based on show_all_products flag
+                    if ($categoryMenuData['show_all_products']) {
+                        // When show_all_products = true, sync ALL active products from the category
+                        $allProductIds = $this->categoryMenuRepository->getActiveProductIdsForCategory(
+                            $categoryMenuData['category_id']
+                        );
+                        $categoryMenu->products()->sync($allProductIds);
+                    } elseif (isset($categoryMenuData['products']) && !empty($categoryMenuData['products'])) {
+                        // When show_all_products = false and products specified, sync those specific products
                         $categoryMenu->products()->sync($categoryMenuData['products']);
                     }
 

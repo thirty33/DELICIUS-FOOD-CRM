@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\CategoryMenu;
 use App\Models\Menu;
+use App\Models\Product;
 use App\Models\User;
 use App\Enums\Weekday;
 use Carbon\Carbon;
@@ -176,5 +177,23 @@ class CategoryMenuRepository
             })
             ->orderedByDisplayOrder()
             ->get();
+    }
+
+    /**
+     * Get all active product IDs for a category.
+     *
+     * This method is used during CategoryMenu import when show_all_products = true.
+     * It returns the IDs of all active products that belong to the specified category,
+     * which should be attached to the category_menu_product pivot table.
+     *
+     * @param int $categoryId The category ID to get products for
+     * @return array Array of product IDs
+     */
+    public function getActiveProductIdsForCategory(int $categoryId): array
+    {
+        return Product::where('category_id', $categoryId)
+            ->where('active', true)
+            ->pluck('id')
+            ->toArray();
     }
 }

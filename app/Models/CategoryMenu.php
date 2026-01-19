@@ -57,7 +57,8 @@ class CategoryMenu extends Pivot
 
     public function products(): BelongsToMany
     {
-        return $this->belongsToMany(Product::class, 'category_menu_product', 'category_menu_id', 'product_id');
+        return $this->belongsToMany(Product::class, 'category_menu_product', 'category_menu_id', 'product_id')
+            ->withPivot('display_order');
     }
 
     public function scopeOrderedByDisplayOrder(Builder $query): Builder

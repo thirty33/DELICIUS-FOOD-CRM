@@ -199,7 +199,7 @@ class OrderResource extends Resource
                     ->sortable()
                     ->formatStateUsing(fn(string $state) => 'Fecha de despacho: ' . \Carbon\Carbon::parse($state)->format('d/m/Y'))
                     ->searchable()
-                    ->description(fn(Order $order) => 'Fecha de pedido: ' . $order->created_at->format('d/m/Y')),
+                    ->description(fn(Order $order) => 'Fecha de pedido: ' . $order->created_at->format('d/m/Y H:i')),
                 Tables\Columns\TextColumn::make('id')
                     ->label(__('ID / Número'))
                     ->sortable()
@@ -268,6 +268,50 @@ class OrderResource extends Resource
             ->filters([
                 DateRangeFilter::make('created_at')
                     ->label(__('Fecha de pedido'))
+                    ->columnSpan(1),
+                Tables\Filters\Filter::make('order_time')
+                    ->label(__('Hora de pedido'))
+                    ->form([
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\Select::make('time_from')
+                                    ->label(__('Desde'))
+                                    ->options(self::getTimeOptions())
+                                    ->searchable(),
+                                Forms\Components\Select::make('time_to')
+                                    ->label(__('Hasta'))
+                                    ->options(self::getTimeOptions())
+                                    ->searchable(),
+                            ]),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        if ($data['time_from'] && $data['time_to']) {
+                            $query->whereRaw(
+                                'TIME(created_at) BETWEEN ? AND ?',
+                                [$data['time_from'], $data['time_to']]
+                            );
+                        } elseif ($data['time_from'] && !$data['time_to']) {
+                            $query->whereRaw(
+                                'TIME(created_at) >= ?',
+                                [$data['time_from']]
+                            );
+                        } elseif (!$data['time_from'] && $data['time_to']) {
+                            $query->whereRaw(
+                                'TIME(created_at) <= ?',
+                                [$data['time_to']]
+                            );
+                        }
+
+                        return $query;
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        if (!$data['time_from'] && !$data['time_to']) {
+                            return null;
+                        }
+                        $from = $data['time_from'] ?: '00:00';
+                        $to = $data['time_to'] ?: '23:59';
+                        return __('Hora de pedido') . ": {$from} - {$to}";
+                    })
                     ->columnSpan(1),
                 DateRangeFilter::make('dispatch_date')
                     ->label(__('Fecha de despacho'))
@@ -914,5 +958,20 @@ class OrderResource extends Resource
             ->color($color)
             ->title($title)
             ->body($body);
+    }
+
+    /**
+     * Generate time options for the time filter (every 30 minutes)
+     */
+    private static function getTimeOptions(): array
+    {
+        $options = [];
+        for ($hour = 0; $hour < 24; $hour++) {
+            foreach ([0, 30] as $minute) {
+                $time = sprintf('%02d:%02d', $hour, $minute);
+                $options[$time] = $time;
+            }
+        }
+        return $options;
     }
 }
