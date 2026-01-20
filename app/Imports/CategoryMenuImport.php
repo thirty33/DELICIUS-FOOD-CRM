@@ -95,11 +95,11 @@ class CategoryMenuImport implements
     /**
      * Parse product string to extract code and display_order
      * Supports both formats:
-     * - Old format: "PROD001" (returns display_order = 9999)
+     * - Legacy format: "PROD001" (returns display_order = null, caller assigns position)
      * - New format: "PROD001:10" (returns display_order = 10)
      *
      * @param string $productString
-     * @return array{code: string, display_order: int}
+     * @return array{code: string, display_order: int|null}
      */
     private function parseProductWithDisplayOrder(string $productString): array
     {
@@ -109,13 +109,14 @@ class CategoryMenuImport implements
             $parts = explode(':', $productString);
             return [
                 'code' => trim($parts[0]),
-                'display_order' => isset($parts[1]) && is_numeric($parts[1]) ? (int)$parts[1] : 9999,
+                'display_order' => isset($parts[1]) && is_numeric($parts[1]) ? (int)$parts[1] : null,
             ];
         }
 
+        // Legacy format: return null so caller can assign position-based order
         return [
             'code' => $productString,
-            'display_order' => 9999,
+            'display_order' => null,
         ];
     }
 
@@ -430,13 +431,14 @@ class CategoryMenuImport implements
                 : true
         ];
 
-        // Procesar productos - supports both formats: "PROD001,PROD002" and "PROD001:10,PROD002:20"
-        // Parse products column if present (for custom display_order values)
+        // Procesar productos - supports both formats:
+        // - Legacy format: "PROD001,PROD002" (display_order assigned by position: 1, 2, 3...)
+        // - New format: "PROD001:10,PROD002:20" (display_order from explicit value)
         $customProductOrders = [];
         if (isset($row['productos']) && !empty($row['productos'])) {
             $productStrings = array_map('trim', explode(',', $row['productos']));
 
-            foreach ($productStrings as $productString) {
+            foreach ($productStrings as $position => $productString) {
                 $parsed = $this->parseProductWithDisplayOrder($productString);
 
                 // Find the product
@@ -445,8 +447,12 @@ class CategoryMenuImport implements
                     ->first();
 
                 if ($product) {
+                    // If display_order is null (legacy format), use position-based order (1-indexed)
+                    // Otherwise use the explicit display_order from the new format
+                    $displayOrder = $parsed['display_order'] ?? ($position + 1);
+
                     // Format for sync() with pivot data: [product_id => ['display_order' => X]]
-                    $customProductOrders[$product->id] = ['display_order' => $parsed['display_order']];
+                    $customProductOrders[$product->id] = ['display_order' => $displayOrder];
                 }
             }
         }

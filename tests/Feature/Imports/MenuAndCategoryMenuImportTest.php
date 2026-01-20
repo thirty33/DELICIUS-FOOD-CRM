@@ -253,14 +253,15 @@ class MenuAndCategoryMenuImportTest extends TestCase
         // Verify category menu 3 has 2 products associated
         $this->assertEquals(2, $categoryMenu3->products->count(), 'Category Menu 3 should have 2 products');
 
-        // ===== TDD RED PHASE: Verify pivot display_order = 9999 for category menu 3 products =====
-        // This will FAIL until the display_order column is added to category_menu_product pivot table
-        foreach ($categoryMenu3->products as $product) {
+        // Verify pivot display_order is assigned by position (legacy format)
+        // Products in Excel: "TESTPROD001,TESTPROD002" -> display_order = 1, 2
+        $productsSorted = $categoryMenu3->products->sortBy('pivot.display_order');
+        $expectedOrders = [1, 2];
+        foreach ($productsSorted->values() as $index => $product) {
             $this->assertEquals(
-                9999,
+                $expectedOrders[$index],
                 $product->pivot->display_order,
-                "Product {$product->code} in CategoryMenu 3 should have pivot display_order = 9999. " .
-                "TDD RED PHASE: This fails until display_order column is added to category_menu_product table."
+                "Product {$product->code} in CategoryMenu 3 should have pivot display_order = {$expectedOrders[$index]} (position-based)."
             );
         }
 
@@ -273,13 +274,13 @@ class MenuAndCategoryMenuImportTest extends TestCase
         $this->assertFalse($categoryMenu4->show_all_products, 'Category 4 should NOT show all products');
         $this->assertEquals(1, $categoryMenu4->products->count(), 'Category Menu 4 should have 1 product');
 
-        // ===== TDD RED PHASE: Verify pivot display_order = 9999 for category menu 4 product =====
+        // Verify pivot display_order is assigned by position (legacy format)
+        // Single product -> display_order = 1
         foreach ($categoryMenu4->products as $product) {
             $this->assertEquals(
-                9999,
+                1,
                 $product->pivot->display_order,
-                "Product {$product->code} in CategoryMenu 4 should have pivot display_order = 9999. " .
-                "TDD RED PHASE: This fails until display_order column is added to category_menu_product table."
+                "Product {$product->code} in CategoryMenu 4 should have pivot display_order = 1 (position-based, single product)."
             );
         }
     }
