@@ -64,10 +64,8 @@ class CategoryMenuDataExport implements
     public function map($categoryMenu): array
     {
         try {
-            // Prepare products list if not showing all products
-            $productList = $categoryMenu->show_all_products 
-                ? '' 
-                : $categoryMenu->products->pluck('code')->implode(',');
+            // Prepare products list with display_order in format "CODE:ORDER"
+            $productList = $this->buildProductListWithDisplayOrder($categoryMenu);
 
             return [
                 'titulo_del_menu' => $categoryMenu->menu->title,
@@ -87,6 +85,40 @@ class CategoryMenuDataExport implements
 
             throw $e;
         }
+    }
+
+    /**
+     * Build products list with display_order in format "CODE:ORDER"
+     *
+     * - When show_all_products = false: Include all products with their display_order
+     * - When show_all_products = true: Include only products with custom display_order (not 9999)
+     *
+     * @param CategoryMenu $categoryMenu
+     * @return string
+     */
+    private function buildProductListWithDisplayOrder(CategoryMenu $categoryMenu): string
+    {
+        if ($categoryMenu->show_all_products) {
+            // When show_all_products = true, only export products with custom display_order (not 9999)
+            $productsWithCustomOrder = $categoryMenu->products
+                ->filter(function ($product) {
+                    return $product->pivot->display_order !== 9999;
+                })
+                ->sortBy('pivot.display_order')
+                ->map(function ($product) {
+                    return $product->code . ':' . $product->pivot->display_order;
+                });
+
+            return $productsWithCustomOrder->implode(',');
+        }
+
+        // When show_all_products = false, export all products with their display_order
+        return $categoryMenu->products
+            ->sortBy('pivot.display_order')
+            ->map(function ($product) {
+                return $product->code . ':' . $product->pivot->display_order;
+            })
+            ->implode(',');
     }
 
     public function headings(): array

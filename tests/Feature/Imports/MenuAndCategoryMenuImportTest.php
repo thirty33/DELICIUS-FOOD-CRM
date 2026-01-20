@@ -447,4 +447,245 @@ class MenuAndCategoryMenuImportTest extends TestCase
             );
         }
     }
+
+    /**
+     * TDD RED PHASE TEST
+     *
+     * Test: Import CategoryMenu with product display_order values from Excel
+     *
+     * NEW FORMAT:
+     * The "Productos" column now supports a new format: "CODE:ORDER,CODE:ORDER"
+     * Example: "PIVPROD001:10,PIVPROD002:20,PIVPROD003:5"
+     *
+     * This allows specifying the display_order for each product in the pivot table
+     * (category_menu_product.display_order)
+     *
+     * CURRENT BEHAVIOR:
+     * - Import only parses product codes: "PROD001,PROD002"
+     * - All pivot records get default display_order = 9999
+     *
+     * EXPECTED BEHAVIOR:
+     * - Import should parse the new format: "PROD001:10,PROD002:20"
+     * - Pivot records should have the specified display_order values
+     * - If no order specified (old format), use default 9999
+     *
+     * SCENARIO 2 (TDD RED PHASE):
+     * When show_all_products = true AND products with display_order are specified:
+     * - ALL products from the category should be attached
+     * - The specified products should have their custom display_order
+     * - The rest of the products should have default display_order (9999)
+     */
+    public function test_imports_product_display_order_from_new_format(): void
+    {
+        // ===== 1. CREATE CATEGORY 1: show_all_products = false =====
+        $category1 = Category::create([
+            'name' => 'PIVOT ORDER CATEGORY',
+            'code' => 'POC',
+            'description' => 'Category for testing pivot display_order import',
+            'active' => true,
+        ]);
+
+        // ===== 2. CREATE 3 PRODUCTS FOR CATEGORY 1 =====
+        $product1 = Product::create([
+            'name' => 'Pivot Order Product 1',
+            'description' => 'Product 1 for pivot order test',
+            'code' => 'PIVPROD001',
+            'category_id' => $category1->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product2 = Product::create([
+            'name' => 'Pivot Order Product 2',
+            'description' => 'Product 2 for pivot order test',
+            'code' => 'PIVPROD002',
+            'category_id' => $category1->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product3 = Product::create([
+            'name' => 'Pivot Order Product 3',
+            'description' => 'Product 3 for pivot order test',
+            'code' => 'PIVPROD003',
+            'category_id' => $category1->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // ===== 3. CREATE CATEGORY 2: show_all_products = true with custom orders =====
+        $category2 = Category::create([
+            'name' => 'SHOW ALL WITH ORDER CATEGORY',
+            'code' => 'SAOC',
+            'description' => 'Category for testing show_all_products with custom display_order',
+            'active' => true,
+        ]);
+
+        // ===== 4. CREATE 5 PRODUCTS FOR CATEGORY 2 (3 with custom order + 2 default) =====
+        $saoProduct1 = Product::create([
+            'name' => 'SAO Product 1',
+            'description' => 'Product 1 with custom order',
+            'code' => 'SAOPROD001',
+            'category_id' => $category2->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $saoProduct2 = Product::create([
+            'name' => 'SAO Product 2',
+            'description' => 'Product 2 with custom order',
+            'code' => 'SAOPROD002',
+            'category_id' => $category2->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $saoProduct3 = Product::create([
+            'name' => 'SAO Product 3',
+            'description' => 'Product 3 with custom order',
+            'code' => 'SAOPROD003',
+            'category_id' => $category2->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // These 2 products are NOT in Excel, should get default display_order = 9999
+        $saoProduct4 = Product::create([
+            'name' => 'SAO Product 4',
+            'description' => 'Product 4 without custom order',
+            'code' => 'SAOPROD004',
+            'category_id' => $category2->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $saoProduct5 = Product::create([
+            'name' => 'SAO Product 5',
+            'description' => 'Product 5 without custom order',
+            'code' => 'SAOPROD005',
+            'category_id' => $category2->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // ===== 5. CREATE MENU =====
+        $menu = Menu::create([
+            'title' => 'PIVOT ORDER TEST MENU',
+            'description' => 'Menu for testing pivot display_order import',
+            'publication_date' => '2026-03-01',
+            'role_id' => $this->role->id,
+            'permissions_id' => $this->permission->id,
+            'max_order_date' => '2026-02-28 18:00:00',
+            'active' => true,
+        ]);
+
+        // ===== 6. IMPORT CATEGORY MENUS =====
+        $testFile = base_path('tests/Fixtures/test_category_menu_pivot_display_order.xlsx');
+        $importProcess = $this->runCategoryMenuImport($testFile);
+
+        $importService = app(ImportService::class);
+        $this->assertTrue(
+            $importService->wasSuccessful($importProcess),
+            'CategoryMenu import should complete successfully. Status: ' . $importProcess->status .
+            ' Errors: ' . json_encode($importProcess->error_log)
+        );
+
+        // ===== 7. VERIFY CATEGORY MENU 1 (show_all_products = false) =====
+        $categoryMenu1 = CategoryMenu::where('menu_id', $menu->id)
+            ->where('category_id', $category1->id)
+            ->first();
+
+        $this->assertNotNull($categoryMenu1, 'CategoryMenu 1 should be created');
+        $this->assertFalse($categoryMenu1->show_all_products, 'show_all_products should be false');
+        $this->assertEquals(3, $categoryMenu1->products()->count(), 'Should have 3 products attached');
+
+        // Verify display_order for category 1 products
+        $pivotProduct1 = $categoryMenu1->products()->where('product_id', $product1->id)->first();
+        $this->assertEquals(10, $pivotProduct1->pivot->display_order, 'PIVPROD001 should have display_order = 10');
+
+        $pivotProduct2 = $categoryMenu1->products()->where('product_id', $product2->id)->first();
+        $this->assertEquals(20, $pivotProduct2->pivot->display_order, 'PIVPROD002 should have display_order = 20');
+
+        $pivotProduct3 = $categoryMenu1->products()->where('product_id', $product3->id)->first();
+        $this->assertEquals(5, $pivotProduct3->pivot->display_order, 'PIVPROD003 should have display_order = 5');
+
+        // ===== 8. VERIFY CATEGORY MENU 2 (show_all_products = true with custom orders) =====
+        // TDD RED PHASE: This section will FAIL because current implementation
+        // ignores the "Productos" column when show_all_products = true
+
+        $categoryMenu2 = CategoryMenu::where('menu_id', $menu->id)
+            ->where('category_id', $category2->id)
+            ->first();
+
+        $this->assertNotNull($categoryMenu2, 'CategoryMenu 2 should be created');
+        $this->assertTrue($categoryMenu2->show_all_products, 'show_all_products should be true');
+
+        // ALL 5 products should be attached (because show_all_products = true)
+        $this->assertEquals(
+            5,
+            $categoryMenu2->products()->count(),
+            'Should have ALL 5 products attached when show_all_products = true'
+        );
+
+        // Products specified in Excel should have custom display_order
+        $saoPivot1 = $categoryMenu2->products()->where('product_id', $saoProduct1->id)->first();
+        $this->assertNotNull($saoPivot1, 'SAOPROD001 should be attached');
+        $this->assertEquals(
+            1,
+            $saoPivot1->pivot->display_order,
+            "SAOPROD001 should have display_order = 1 (from Excel). " .
+            "TDD RED: Fails because show_all_products=true ignores Productos column."
+        );
+
+        $saoPivot2 = $categoryMenu2->products()->where('product_id', $saoProduct2->id)->first();
+        $this->assertNotNull($saoPivot2, 'SAOPROD002 should be attached');
+        $this->assertEquals(
+            2,
+            $saoPivot2->pivot->display_order,
+            "SAOPROD002 should have display_order = 2 (from Excel). " .
+            "TDD RED: Fails because show_all_products=true ignores Productos column."
+        );
+
+        $saoPivot3 = $categoryMenu2->products()->where('product_id', $saoProduct3->id)->first();
+        $this->assertNotNull($saoPivot3, 'SAOPROD003 should be attached');
+        $this->assertEquals(
+            3,
+            $saoPivot3->pivot->display_order,
+            "SAOPROD003 should have display_order = 3 (from Excel). " .
+            "TDD RED: Fails because show_all_products=true ignores Productos column."
+        );
+
+        // Products NOT in Excel should have default display_order = 9999
+        $saoPivot4 = $categoryMenu2->products()->where('product_id', $saoProduct4->id)->first();
+        $this->assertNotNull($saoPivot4, 'SAOPROD004 should be attached');
+        $this->assertEquals(
+            9999,
+            $saoPivot4->pivot->display_order,
+            'SAOPROD004 should have default display_order = 9999'
+        );
+
+        $saoPivot5 = $categoryMenu2->products()->where('product_id', $saoProduct5->id)->first();
+        $this->assertNotNull($saoPivot5, 'SAOPROD005 should be attached');
+        $this->assertEquals(
+            9999,
+            $saoPivot5->pivot->display_order,
+            'SAOPROD005 should have default display_order = 9999'
+        );
+    }
 }

@@ -506,11 +506,11 @@ class MenuAndCategoryMenuExportTest extends TestCase
             "Row {$row}: Mandatory should be 1"
         );
 
-        // Column G: Productos should contain EXPPROD001,EXPPROD002
+        // Column G: Productos should contain EXPPROD001:ORDER,EXPPROD002:ORDER (new format with display_order)
         $productList = $sheet->getCell("G{$row}")->getValue();
         $this->assertNotEmpty($productList, "Row {$row}: Products should not be empty");
-        $this->assertStringContainsString('EXPPROD001', $productList, "Row {$row}: Should contain EXPPROD001");
-        $this->assertStringContainsString('EXPPROD002', $productList, "Row {$row}: Should contain EXPPROD002");
+        $this->assertStringContainsString('EXPPROD001:', $productList, "Row {$row}: Should contain EXPPROD001 with display_order");
+        $this->assertStringContainsString('EXPPROD002:', $productList, "Row {$row}: Should contain EXPPROD002 with display_order");
 
         // ===== VERIFY CATEGORY MENU 4 (Show Specific Products - 1 product) =====
         $row = 5;
@@ -522,10 +522,10 @@ class MenuAndCategoryMenuExportTest extends TestCase
             "Row {$row}: Show all products should be 0"
         );
 
-        // Column G: Productos should contain only EXPPROD003
+        // Column G: Productos should contain EXPPROD003:ORDER (new format with display_order)
         $productList = $sheet->getCell("G{$row}")->getValue();
         $this->assertNotEmpty($productList, "Row {$row}: Products should not be empty");
-        $this->assertEquals('EXPPROD003', $productList, "Row {$row}: Should contain only EXPPROD003");
+        $this->assertStringContainsString('EXPPROD003:', $productList, "Row {$row}: Should contain EXPPROD003 with display_order");
 
         // Clean up
         $this->cleanupTestFile($filePath);
@@ -595,6 +595,245 @@ class MenuAndCategoryMenuExportTest extends TestCase
                 "Row {$excelRow}: Active should be {$expectedActive}"
             );
         }
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * TDD RED PHASE TEST
+     *
+     * Test: CategoryMenu export includes display_order in products column
+     *
+     * NEW FORMAT:
+     * When show_all_products = false, the "Productos" column should include
+     * the display_order for each product: "CODE:ORDER,CODE:ORDER"
+     * Example: "EXPPROD001:10,EXPPROD002:20"
+     *
+     * CURRENT BEHAVIOR:
+     * - Export only includes product codes: "EXPPROD001,EXPPROD002"
+     *
+     * EXPECTED BEHAVIOR:
+     * - Export should include display_order: "EXPPROD001:10,EXPPROD002:20"
+     *
+     * THIS TEST WILL FAIL (RED PHASE) because the current export
+     * does not include display_order in the products column.
+     */
+    public function test_category_menu_export_includes_display_order_in_products_column(): void
+    {
+        // ===== 1. CREATE CATEGORY AND PRODUCTS =====
+        $category = Category::create([
+            'name' => 'EXPORT DISPLAY ORDER CATEGORY',
+            'code' => 'EDOC',
+            'description' => 'Category for testing export display_order',
+            'active' => true,
+        ]);
+
+        $product1 = Product::create([
+            'name' => 'Export Display Order Product 1',
+            'description' => 'Product 1 for export display_order test',
+            'code' => 'EDOPROD001',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product2 = Product::create([
+            'name' => 'Export Display Order Product 2',
+            'description' => 'Product 2 for export display_order test',
+            'code' => 'EDOPROD002',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product3 = Product::create([
+            'name' => 'Export Display Order Product 3',
+            'description' => 'Product 3 for export display_order test',
+            'code' => 'EDOPROD003',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // ===== 2. CREATE CATEGORY MENU WITH CUSTOM DISPLAY_ORDER =====
+        $categoryMenu = CategoryMenu::create([
+            'menu_id' => $this->menus[1]->id,
+            'category_id' => $category->id,
+            'show_all_products' => false,
+            'display_order' => 10,
+            'mandatory_category' => true,
+            'is_active' => true,
+        ]);
+
+        // Attach products with custom display_order values
+        $categoryMenu->products()->attach([
+            $product1->id => ['display_order' => 10],
+            $product2->id => ['display_order' => 20],
+            $product3->id => ['display_order' => 5],
+        ]);
+
+        // ===== 3. GENERATE EXPORT =====
+        $filePath = $this->generateCategoryMenuExport(collect([$categoryMenu->id]));
+
+        // ===== 4. LOAD AND VERIFY EXPORT =====
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Get products column value (Column G, Row 2)
+        $productList = $sheet->getCell('G2')->getValue();
+
+        // ===== 5. TDD RED PHASE ASSERTIONS =====
+        // The products column should include display_order in the format CODE:ORDER
+        // Current behavior: "EDOPROD001,EDOPROD002,EDOPROD003"
+        // Expected behavior: "EDOPROD003:5,EDOPROD001:10,EDOPROD002:20" (sorted by display_order)
+
+        $this->assertNotEmpty($productList, 'Products column should not be empty');
+
+        // Assert each product has display_order format
+        $this->assertStringContainsString(
+            'EDOPROD001:10',
+            $productList,
+            "Products column should contain 'EDOPROD001:10' with display_order. " .
+            "TDD RED: Fails because export doesn't include display_order. Actual: {$productList}"
+        );
+
+        $this->assertStringContainsString(
+            'EDOPROD002:20',
+            $productList,
+            "Products column should contain 'EDOPROD002:20' with display_order. " .
+            "TDD RED: Fails because export doesn't include display_order. Actual: {$productList}"
+        );
+
+        $this->assertStringContainsString(
+            'EDOPROD003:5',
+            $productList,
+            "Products column should contain 'EDOPROD003:5' with display_order. " .
+            "TDD RED: Fails because export doesn't include display_order. Actual: {$productList}"
+        );
+
+        // Clean up
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * TDD RED PHASE TEST
+     *
+     * Test: CategoryMenu export includes products with display_order when show_all_products = true
+     * but custom display_order values exist
+     *
+     * When show_all_products = true AND some products have custom display_order:
+     * - Export should include ALL products
+     * - Products with custom display_order should show "CODE:ORDER"
+     * - Products with default display_order (9999) can be shown as just "CODE" or "CODE:9999"
+     *
+     * CURRENT BEHAVIOR:
+     * - Export shows empty string when show_all_products = true
+     *
+     * EXPECTED BEHAVIOR:
+     * - Export should show products with their display_order values
+     */
+    public function test_category_menu_export_includes_products_with_order_when_show_all_true(): void
+    {
+        // ===== 1. CREATE CATEGORY AND PRODUCTS =====
+        $category = Category::create([
+            'name' => 'EXPORT SHOW ALL ORDER CATEGORY',
+            'code' => 'ESAOC',
+            'description' => 'Category for testing export show_all with display_order',
+            'active' => true,
+        ]);
+
+        $product1 = Product::create([
+            'name' => 'Show All Order Product 1',
+            'description' => 'Product 1 with custom order',
+            'code' => 'SAOPROD001',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product2 = Product::create([
+            'name' => 'Show All Order Product 2',
+            'description' => 'Product 2 with custom order',
+            'code' => 'SAOPROD002',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        $product3 = Product::create([
+            'name' => 'Show All Order Product 3',
+            'description' => 'Product 3 with default order',
+            'code' => 'SAOPROD003',
+            'category_id' => $category->id,
+            'active' => true,
+            'measure_unit' => 'UND',
+            'weight' => 0,
+            'allow_sales_without_stock' => true,
+        ]);
+
+        // ===== 2. CREATE CATEGORY MENU WITH show_all_products = true =====
+        $categoryMenu = CategoryMenu::create([
+            'menu_id' => $this->menus[1]->id,
+            'category_id' => $category->id,
+            'show_all_products' => true,
+            'display_order' => 15,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ]);
+
+        // Attach ALL products but with custom display_order for some
+        $categoryMenu->products()->attach([
+            $product1->id => ['display_order' => 1],
+            $product2->id => ['display_order' => 2],
+            $product3->id => ['display_order' => 9999], // default
+        ]);
+
+        // ===== 3. GENERATE EXPORT =====
+        $filePath = $this->generateCategoryMenuExport(collect([$categoryMenu->id]));
+
+        // ===== 4. LOAD AND VERIFY EXPORT =====
+        $spreadsheet = $this->loadExcelFile($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Get products column value (Column G, Row 2)
+        $productList = $sheet->getCell('G2')->getValue();
+
+        // ===== 5. TDD RED PHASE ASSERTIONS =====
+        // When show_all_products = true but products have custom display_order,
+        // the export should include only products with non-default display_order
+        // Current behavior: empty string
+        // Expected behavior: "SAOPROD001:1,SAOPROD002:2" (only custom orders, sorted)
+
+        $this->assertNotEmpty(
+            $productList,
+            "Products column should NOT be empty when show_all_products=true but custom orders exist. " .
+            "TDD RED: Fails because export returns empty for show_all_products=true."
+        );
+
+        $this->assertStringContainsString(
+            'SAOPROD001:1',
+            $productList,
+            "Products column should contain 'SAOPROD001:1'. " .
+            "TDD RED: Fails because export doesn't include products with custom display_order."
+        );
+
+        $this->assertStringContainsString(
+            'SAOPROD002:2',
+            $productList,
+            "Products column should contain 'SAOPROD002:2'. " .
+            "TDD RED: Fails because export doesn't include products with custom display_order."
+        );
 
         // Clean up
         $this->cleanupTestFile($filePath);

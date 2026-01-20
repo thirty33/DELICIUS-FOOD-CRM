@@ -45,11 +45,16 @@ class MenuCloneService
             ]);
             
             if ($categoryMenu->products->isNotEmpty()) {
-                $productIds = $categoryMenu->products->pluck('id')->toArray();
                 $newCategoryMenu = $newMenu->categoryMenus()
                     ->where('category_id', $categoryMenu->category_id)
                     ->first();
-                $newCategoryMenu->products()->attach($productIds);
+
+                // Preserve display_order from pivot table
+                $productsSyncData = $categoryMenu->products->mapWithKeys(function ($product) {
+                    return [$product->id => ['display_order' => $product->pivot->display_order]];
+                })->toArray();
+
+                $newCategoryMenu->products()->attach($productsSyncData);
             }
         }
 

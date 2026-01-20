@@ -33,7 +33,7 @@ class CategoryMenuRepository
 
         // Build base query with all eager loaded relationships
         $baseQuery = CategoryMenu::with([
-            'category' => function ($query) use ($user, $weekdayInEnglish) {
+            'category' => function ($query) use ($user, $weekdayInEnglish, $menu) {
                 // Filter categories that have products with price list lines
                 $query->whereHas('products', function ($priceListQuery) use ($user) {
                     $priceListQuery->where('active', true)
@@ -46,8 +46,9 @@ class CategoryMenuRepository
                 });
 
                 // Eager load products with price list lines
-                $query->with(['products' => function ($query) use ($user) {
-                    $query->where('active', true)
+                // Order by display_order from pivot table (if exists), fallback to 9999 for legacy data
+                $query->with(['products' => function ($productQuery) use ($user, $menu) {
+                    $productQuery->where('active', true)
                         ->whereHas('priceListLines', function ($subQuery) use ($user) {
                             $subQuery->where('active', true)
                                 ->whereHas('priceList', function ($priceListQuery) use ($user) {
@@ -59,7 +60,16 @@ class CategoryMenuRepository
                                     $priceListQuery->where('id', $user->company->price_list_id);
                                 });
                         }])
-                        ->with(['ingredients']);
+                        ->with(['ingredients'])
+                        ->orderByRaw('(
+                            SELECT COALESCE(cmp.display_order, 9999)
+                            FROM category_menu_product cmp
+                            INNER JOIN category_menu cm ON cmp.category_menu_id = cm.id
+                            WHERE cmp.product_id = products.id
+                            AND cm.menu_id = ?
+                            AND cm.category_id = products.category_id
+                            LIMIT 1
+                        ) ASC', [$menu->id]);
                 }]);
 
                 // Eager load category lines for the specific weekday
@@ -79,6 +89,7 @@ class CategoryMenuRepository
             },
             'menu',
             // Eager load products directly on CategoryMenu with price list lines
+            // Order by display_order from pivot table (for show_all_products = false)
             'products' => function ($query) use ($user) {
                 $query->where('active', true)
                     ->whereHas('priceListLines', function ($subQuery) use ($user) {
@@ -91,7 +102,8 @@ class CategoryMenuRepository
                             ->whereHas('priceList', function ($priceListQuery) use ($user) {
                                 $priceListQuery->where('id', $user->company->price_list_id);
                             });
-                    }])->with(['ingredients']);
+                    }])->with(['ingredients'])
+                    ->orderBy('category_menu_product.display_order', 'asc');
             }
         ]);
 

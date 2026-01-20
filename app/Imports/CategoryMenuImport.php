@@ -93,6 +93,33 @@ class CategoryMenuImport implements
     }
 
     /**
+     * Parse product string to extract code and display_order
+     * Supports both formats:
+     * - Old format: "PROD001" (returns display_order = 9999)
+     * - New format: "PROD001:10" (returns display_order = 10)
+     *
+     * @param string $productString
+     * @return array{code: string, display_order: int}
+     */
+    private function parseProductWithDisplayOrder(string $productString): array
+    {
+        $productString = trim($productString);
+
+        if (str_contains($productString, ':')) {
+            $parts = explode(':', $productString);
+            return [
+                'code' => trim($parts[0]),
+                'display_order' => isset($parts[1]) && is_numeric($parts[1]) ? (int)$parts[1] : 9999,
+            ];
+        }
+
+        return [
+            'code' => $productString,
+            'display_order' => 9999,
+        ];
+    }
+
+    /**
      * Convert Excel boolean text to PHP boolean
      */
     private function convertToBoolean($value): bool
@@ -206,12 +233,16 @@ class CategoryMenuImport implements
                     !$this->convertToBoolean($row['mostrar_todos_los_productos'])
                 ) {
 
-                    $productCodes = array_map('trim', explode(',', $row['productos']));
+                    $productStrings = array_map('trim', explode(',', $row['productos']));
                     $category = Category::where('name', $row['nombre_de_categoria'])->first();
 
                     if ($category) {
                         // Verificar que todos los productos existan y pertenezcan a la categoría
-                        foreach ($productCodes as $productCode) {
+                        // Supports both formats: "PROD001" and "PROD001:10"
+                        foreach ($productStrings as $productString) {
+                            $parsed = $this->parseProductWithDisplayOrder($productString);
+                            $productCode = $parsed['code'];
+
                             $product = Product::where('code', $productCode)->first();
 
                             if (!$product) {
@@ -308,7 +339,23 @@ class CategoryMenuImport implements
                         $allProductIds = $this->categoryMenuRepository->getActiveProductIdsForCategory(
                             $categoryMenuData['category_id']
                         );
-                        $categoryMenu->products()->sync($allProductIds);
+
+                        // Build sync array with custom display_order for specified products
+                        // and default display_order (9999) for the rest
+                        $customOrders = $categoryMenuData['custom_product_orders'] ?? [];
+                        $syncData = [];
+
+                        foreach ($allProductIds as $productId) {
+                            if (isset($customOrders[$productId])) {
+                                // Product has custom display_order from Excel
+                                $syncData[$productId] = $customOrders[$productId];
+                            } else {
+                                // Product uses default display_order
+                                $syncData[$productId] = ['display_order' => 9999];
+                            }
+                        }
+
+                        $categoryMenu->products()->sync($syncData);
                     } elseif (isset($categoryMenuData['products']) && !empty($categoryMenuData['products'])) {
                         // When show_all_products = false and products specified, sync those specific products
                         $categoryMenu->products()->sync($categoryMenuData['products']);
@@ -383,26 +430,33 @@ class CategoryMenuImport implements
                 : true
         ];
 
-        // Procesar productos si no mostrar todos los productos
-        if (!$data['show_all_products'] && isset($row['productos']) && !empty($row['productos'])) {
-            $productCodes = array_map('trim', explode(',', $row['productos']));
+        // Procesar productos - supports both formats: "PROD001,PROD002" and "PROD001:10,PROD002:20"
+        // Parse products column if present (for custom display_order values)
+        $customProductOrders = [];
+        if (isset($row['productos']) && !empty($row['productos'])) {
+            $productStrings = array_map('trim', explode(',', $row['productos']));
 
-            // Buscar productos que existan Y pertenezcan a la categoría especificada
-            $productIds = Product::whereIn('code', $productCodes)
-                ->where('category_id', $category->id)
-                ->pluck('id')
-                ->toArray();
+            foreach ($productStrings as $productString) {
+                $parsed = $this->parseProductWithDisplayOrder($productString);
 
-            // Verificar que todos los productos especificados existan y pertenezcan a la categoría
-            if (count($productIds) !== count($productCodes)) {
-                Log::warning('No se encontraron todos los productos especificados o algunos no pertenecen a la categoría', [
-                    'especificados' => count($productCodes),
-                    'encontrados' => count($productIds),
-                    'categoria' => $category->name
-                ]);
+                // Find the product
+                $product = Product::where('code', $parsed['code'])
+                    ->where('category_id', $category->id)
+                    ->first();
+
+                if ($product) {
+                    // Format for sync() with pivot data: [product_id => ['display_order' => X]]
+                    $customProductOrders[$product->id] = ['display_order' => $parsed['display_order']];
+                }
             }
+        }
 
-            $data['products'] = $productIds;
+        if (!$data['show_all_products']) {
+            // When show_all_products = false, only sync the specified products
+            $data['products'] = $customProductOrders;
+        } else {
+            // When show_all_products = true, store custom orders to merge with all products later
+            $data['custom_product_orders'] = $customProductOrders;
         }
 
         return $data;

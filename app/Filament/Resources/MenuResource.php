@@ -124,6 +124,7 @@ class MenuResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultSort('publication_date', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('title')
                     ->label(__('Título'))
