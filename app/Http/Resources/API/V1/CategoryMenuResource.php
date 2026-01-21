@@ -22,7 +22,7 @@ class CategoryMenuResource extends JsonResource
             'menu_id' => $this->menu_id,
             'category' => new CategoryResource($this->whenLoaded('category'), $this->show_all_products, $this->menu_id),
             'menu' => new MenuResource($this->whenLoaded('menu')),
-            'products' => $this->show_all_products ? [] : ProductResource::collection($this->whenLoaded('products'))
+            'products' => $this->show_all_products ? [] : (new ProductResourceCollection($this->whenLoaded('products')))->menuId($this->menu_id)
         ];
     }
 }

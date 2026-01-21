@@ -80,9 +80,16 @@ class CategoriesRelationManager extends RelationManager
                                         if (!$categoryId) {
                                             return [];
                                         }
-                                        return Product::where('category_id', $categoryId)
-                                            ->where('active', true)
-                                            ->get()
+
+                                        $category = Category::find($categoryId);
+                                        $query = Product::where('active', true);
+
+                                        // If the category is NOT dynamic, filter by category_id
+                                        if (!$category?->is_dynamic) {
+                                            $query->where('category_id', $categoryId);
+                                        }
+
+                                        return $query->get()
                                             ->mapWithKeys(fn($product) => [
                                                 $product->id => "{$product->code} - {$product->name}"
                                             ]);

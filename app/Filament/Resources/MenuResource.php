@@ -41,6 +41,7 @@ use App\Models\ExportProcess;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Services\MenuCloneService;
+use App\Services\BestSellingProductsCategoryMenuService;
 
 class MenuResource extends Resource
 {
@@ -311,6 +312,7 @@ class MenuResource extends Resource
             ])
             ->actions([
                 self::getCloneAction(),
+                self::getBestSellingProductsAction(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
                     ->action(function (Menu $record) {
@@ -482,7 +484,8 @@ class MenuResource extends Resource
                                 )->send();
                             }
                         })
-                        ->deselectRecordsAfterCompletion()
+                        ->deselectRecordsAfterCompletion(),
+                    self::getBestSellingProductsBulkAction(),
                 ])->dropdownWidth(MaxWidth::ExtraSmall),
             ])
         ;
@@ -575,5 +578,111 @@ class MenuResource extends Resource
             ->color($color)
             ->title($title)
             ->body($body);
+    }
+
+    /**
+     * Get the form schema for best-selling products action.
+     */
+    public static function getBestSellingProductsActionForm(): array
+    {
+        return [
+            DatePicker::make('start_date')
+                ->label(__('Fecha inicio'))
+                ->required()
+                ->native(false)
+                ->displayFormat('d/m/Y')
+                ->default(now()->subMonth()->startOfMonth()),
+            DatePicker::make('end_date')
+                ->label(__('Fecha fin'))
+                ->required()
+                ->native(false)
+                ->displayFormat('d/m/Y')
+                ->default(now()->subMonth()->endOfMonth()),
+            Forms\Components\TextInput::make('limit')
+                ->label(__('Cantidad de productos'))
+                ->numeric()
+                ->required()
+                ->default(10)
+                ->minValue(1)
+                ->maxValue(50),
+        ];
+    }
+
+    /**
+     * Execute the best-selling products action for a collection of menus.
+     */
+    public static function executeBestSellingProductsAction(array $data, Collection $menus): void
+    {
+        try {
+            $service = app(BestSellingProductsCategoryMenuService::class);
+
+            $menusWithRole = Menu::whereIn('id', $menus->pluck('id'))
+                ->with('rol')
+                ->get();
+
+            $dispatchedCount = $service->processMenus(
+                $menusWithRole,
+                $data['start_date'],
+                $data['end_date'],
+                (int) $data['limit']
+            );
+
+            if ($dispatchedCount > 0) {
+                self::makeNotification(
+                    'Proceso iniciado',
+                    "Se han programado {$dispatchedCount} menús para agregar productos más vendidos."
+                )->send();
+            } else {
+                self::makeNotification(
+                    'Sin menús para procesar',
+                    'No se encontraron menús con rol Café entre los seleccionados.',
+                    'warning'
+                )->send();
+            }
+        } catch (\Exception $e) {
+            Log::error('Error al ejecutar acción de productos más vendidos', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            self::makeNotification(
+                'Error',
+                'Ha ocurrido un error: ' . $e->getMessage(),
+                'danger'
+            )->send();
+        }
+    }
+
+    /**
+     * Get the row action for best-selling products.
+     */
+    public static function getBestSellingProductsAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('best_selling_products')
+            ->label(__('Agregar más vendidos'))
+            ->color('warning')
+            ->icon('heroicon-o-fire')
+            ->form(self::getBestSellingProductsActionForm())
+            ->action(fn (array $data, Menu $record) => self::executeBestSellingProductsAction(
+                $data,
+                collect([$record])
+            ));
+    }
+
+    /**
+     * Get the bulk action for best-selling products.
+     */
+    public static function getBestSellingProductsBulkAction(): Tables\Actions\BulkAction
+    {
+        return Tables\Actions\BulkAction::make('best_selling_products_bulk')
+            ->label(__('Agregar más vendidos'))
+            ->color('warning')
+            ->icon('heroicon-o-fire')
+            ->form(self::getBestSellingProductsActionForm())
+            ->action(fn (array $data, Collection $records) => self::executeBestSellingProductsAction(
+                $data,
+                $records
+            ))
+            ->deselectRecordsAfterCompletion();
     }
 }

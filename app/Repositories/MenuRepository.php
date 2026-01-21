@@ -14,6 +14,17 @@ use App\Enums\Filters\MenuFilters;
 class MenuRepository
 {
     /**
+     * Find a menu by ID with its role relationship.
+     *
+     * @param int $menuId
+     * @return Menu|null
+     */
+    public function findWithRole(int $menuId): ?Menu
+    {
+        return Menu::with('rol')->find($menuId);
+    }
+
+    /**
      * Get available menus for a specific user with all business logic filters applied.
      *
      * @param User $user The effective user (delegate user if delegating)

@@ -9,6 +9,20 @@ use Carbon\Carbon;
 
 class ProductResource extends JsonResource
 {
+    protected ?int $menuId = null;
+
+    /**
+     * Set the menu ID for category line formatting.
+     *
+     * @param int|null $menuId
+     * @return $this
+     */
+    public function menuId(?int $menuId): self
+    {
+        $this->menuId = $menuId;
+        return $this;
+    }
+
     /**
      * Transform the resource into an array.
      *
@@ -20,7 +34,7 @@ class ProductResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'description' => $this->description,
-            'price' => '$'.number_format($this->price / 100, 2, ',', '.'), 
+            'price' => '$'.number_format($this->price / 100, 2, ',', '.'),
             'image' => $this->getImageUrl(),
             'category_id' => $this->category_id,
             'code' => $this->code,
@@ -32,7 +46,7 @@ class ProductResource extends JsonResource
             'allow_sales_without_stock' => $this->allow_sales_without_stock,
             'price_list_lines' => PriceListLineResource::collection($this->whenLoaded('priceListLines')),
             'ingredients' => IngredientResource::collection($this->whenLoaded('ingredients')),
-            'category' => new CategoryResource($this->whenLoaded('category')),
+            'category' => new CategoryResource($this->whenLoaded('category'), false, $this->menuId),
         ];
     }
 

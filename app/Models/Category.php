@@ -18,6 +18,7 @@ class Category extends Model
         'preparation_hours',
         'preparation_minutes',
         'is_active',
+        'is_dynamic',
         'order_start_time',
         'order_end_time',
         'is_active_monday',
@@ -30,6 +31,10 @@ class Category extends Model
         'role_id',
         'permissions_id',
         'subcategory'
+    ];
+
+    protected $casts = [
+        'is_dynamic' => 'boolean',
     ];
 
     public function products(): HasMany

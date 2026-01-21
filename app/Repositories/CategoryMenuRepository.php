@@ -7,6 +7,7 @@ use App\Models\Menu;
 use App\Models\Product;
 use App\Models\User;
 use App\Enums\Weekday;
+use App\Classes\UserPermissions;
 use Carbon\Carbon;
 use Illuminate\Pipeline\Pipeline;
 use App\Filters\FilterValue;
@@ -35,19 +36,23 @@ class CategoryMenuRepository
         $baseQuery = CategoryMenu::with([
             'category' => function ($query) use ($user, $weekdayInEnglish, $menu) {
                 // Filter categories that have products with price list lines
-                $query->whereHas('products', function ($priceListQuery) use ($user) {
-                    $priceListQuery->where('active', true)
-                        ->whereHas('priceListLines', function ($subQuery) use ($user) {
-                            $subQuery->where('active', true)
-                                ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                    $priceListQuery->where('id', $user->company->price_list_id);
+                // OR are dynamic categories (which aggregate products from other categories)
+                $query->where(function ($q) use ($user) {
+                    $q->where('is_dynamic', true)
+                        ->orWhereHas('products', function ($priceListQuery) use ($user) {
+                            $priceListQuery->where('active', true)
+                                ->whereHas('priceListLines', function ($subQuery) use ($user) {
+                                    $subQuery->where('active', true)
+                                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                            $priceListQuery->where('id', $user->company->price_list_id);
+                                        });
                                 });
                         });
                 });
 
                 // Eager load products with price list lines
                 // Order by display_order from pivot table (if exists), fallback to 9999 for legacy data
-                $query->with(['products' => function ($productQuery) use ($user, $menu) {
+                $query->with(['products' => function ($productQuery) use ($user, $menu, $weekdayInEnglish) {
                     $productQuery->where('active', true)
                         ->whereHas('priceListLines', function ($subQuery) use ($user) {
                             $subQuery->where('active', true)
@@ -70,6 +75,14 @@ class CategoryMenuRepository
                             AND cm.category_id = products.category_id
                             LIMIT 1
                         ) ASC', [$menu->id]);
+
+                    // For Cafe users: eager load product's original category with its categoryLines
+                    // This is needed for dynamic categories to show availability text per product
+                    if (UserPermissions::IsCafe($user)) {
+                        $productQuery->with(['category.categoryLines' => function ($clQuery) use ($weekdayInEnglish) {
+                            $clQuery->where('weekday', $weekdayInEnglish->value)->where('active', 1);
+                        }]);
+                    }
                 }]);
 
                 // Eager load category lines for the specific weekday
@@ -90,7 +103,7 @@ class CategoryMenuRepository
             'menu',
             // Eager load products directly on CategoryMenu with price list lines
             // Order by display_order from pivot table (for show_all_products = false)
-            'products' => function ($query) use ($user) {
+            'products' => function ($query) use ($user, $weekdayInEnglish) {
                 $query->where('active', true)
                     ->whereHas('priceListLines', function ($subQuery) use ($user) {
                         $subQuery->where('active', true)
@@ -104,6 +117,14 @@ class CategoryMenuRepository
                             });
                     }])->with(['ingredients'])
                     ->orderBy('category_menu_product.display_order', 'asc');
+
+                // For Cafe users: eager load product's original category with its categoryLines
+                // This is needed for dynamic categories to show availability text per product
+                if (UserPermissions::IsCafe($user)) {
+                    $query->with(['category.categoryLines' => function ($clQuery) use ($weekdayInEnglish) {
+                        $clQuery->where('weekday', $weekdayInEnglish->value)->where('active', 1);
+                    }]);
+                }
             }
         ]);
 
@@ -207,5 +228,45 @@ class CategoryMenuRepository
             ->where('active', true)
             ->pluck('id')
             ->toArray();
+    }
+
+    /**
+     * Create or update a CategoryMenu and sync its products.
+     *
+     * @param int $menuId The menu ID
+     * @param int $categoryId The category ID
+     * @param array $productIds Array of product IDs to sync (ordered by display position)
+     * @param array $attributes Additional attributes for the CategoryMenu
+     * @return CategoryMenu
+     */
+    public function createOrUpdateWithProducts(
+        int $menuId,
+        int $categoryId,
+        array $productIds,
+        array $attributes = []
+    ): CategoryMenu {
+        $defaultAttributes = [
+            'show_all_products' => false,
+            'display_order' => 0,
+            'mandatory_category' => false,
+            'is_active' => true,
+        ];
+
+        $categoryMenu = CategoryMenu::updateOrCreate(
+            [
+                'menu_id' => $menuId,
+                'category_id' => $categoryId,
+            ],
+            array_merge($defaultAttributes, $attributes)
+        );
+
+        $syncData = [];
+        foreach ($productIds as $position => $productId) {
+            $syncData[$productId] = ['display_order' => $position + 1];
+        }
+
+        $categoryMenu->products()->sync($syncData);
+
+        return $categoryMenu;
     }
 }

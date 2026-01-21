@@ -18,6 +18,8 @@ use App\Contracts\HorecaInformationRepositoryInterface;
 use App\Repositories\HorecaInformationRepository;
 use App\Contracts\ImportServiceInterface;
 use App\Services\ImportService;
+use App\Contracts\BestSellingProductsRepositoryInterface;
+use App\Repositories\BestSellingProductsRepository;
 use App\Contracts\DeletionServiceInterface;
 use App\Services\NutritionalInformationDeletionService;
 use App\Jobs\DeleteNutritionalInformationJob;
@@ -104,6 +106,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             ImportServiceInterface::class,
             ImportService::class
+        );
+
+        // Bind best-selling products repository
+        $this->app->bind(
+            BestSellingProductsRepositoryInterface::class,
+            BestSellingProductsRepository::class
         );
 
         // Bind label generator

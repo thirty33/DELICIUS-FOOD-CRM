@@ -75,6 +75,11 @@ class CategoryResource extends Resource
                     ->label(__('Activo'))
                     ->default(true)
                     ->inline(false),
+                Toggle::make('is_dynamic')
+                    ->label(__('Categoría dinámica'))
+                    ->default(false)
+                    ->inline(false)
+                    ->helperText(__('Las categorías dinámicas muestran productos calculados automáticamente')),
                 Forms\Components\Select::make('subcategories')
                     ->relationship(
                         name: 'subcategories',
@@ -123,6 +128,10 @@ class CategoryResource extends Resource
                     ->description(fn(Category $category) => $category->description),
                 Tables\Columns\ToggleColumn::make('is_active')
                     ->label(__('Activo'))
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('is_dynamic')
+                    ->label(__('Dinámica'))
+                    ->boolean()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('subcategories.name')
                     ->label(__('Subcategorías'))
