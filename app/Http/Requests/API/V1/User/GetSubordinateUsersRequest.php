@@ -3,6 +3,8 @@
 namespace App\Http\Requests\API\V1\User;
 
 use App\Enums\OrderStatus;
+use App\Enums\RoleName;
+use App\Enums\PermissionName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
@@ -47,6 +49,8 @@ class GetSubordinateUsersRequest extends FormRequest
             'company_search' => ['nullable', 'string', 'max:255'],
             'branch_search' => ['nullable', 'string', 'max:255'],
             'user_search' => ['nullable', 'string', 'max:255'],
+            'user_role' => ['nullable', 'string', Rule::in(RoleName::getValues())],
+            'user_permission' => ['nullable', 'string', Rule::in(PermissionName::getValues())],
 
             // Menu repository filters
             'start_date' => ['nullable', 'date', 'date_format:Y-m-d'],
@@ -64,6 +68,8 @@ class GetSubordinateUsersRequest extends FormRequest
             'company_search' => $this->input('company_search'),
             'branch_search' => $this->input('branch_search'),
             'user_search' => $this->input('user_search'),
+            'user_role' => $this->input('user_role'),
+            'user_permission' => $this->input('user_permission'),
         ], fn($value) => !is_null($value) && $value !== '');
     }
 

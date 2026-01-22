@@ -67,16 +67,21 @@ class MenuRepository
             ->thenReturn();
 
         // Base order query for reuse
+        // Include orders with PROCESSED or PARTIALLY_SCHEDULED status
         $orderQuery = function ($selectRaw) use ($user) {
             return Order::selectRaw($selectRaw)
                 ->where('user_id', $user->id)
-                ->where('status', \App\Enums\OrderStatus::PROCESSED->value)
+                ->whereIn('status', [
+                    \App\Enums\OrderStatus::PROCESSED->value,
+                    \App\Enums\OrderStatus::PARTIALLY_SCHEDULED->value,
+                ])
                 ->whereRaw('DATE(dispatch_date) = DATE(menus.publication_date)');
         };
 
         $menus = $menus->addSelect([
             'has_order' => $orderQuery('CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END')->limit(1),
-            'order_id' => $orderQuery('MAX(id)')
+            'order_id' => $orderQuery('id')->limit(1),
+            'order_status' => $orderQuery('status')->limit(1),
         ]);
 
         if ($limit) {

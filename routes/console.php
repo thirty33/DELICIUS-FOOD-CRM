@@ -50,3 +50,13 @@ Artisan::command('queue:process', function () {
 Schedule::command('orders:update-production-status')
     ->everyMinute()
     ->withoutOverlapping();
+
+// Schedule: Generate best-selling products category for Cafe menus every 5 minutes
+Schedule::command('menus:generate-best-selling-category')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+// Schedule: Order category menu products by best-selling data for Cafe menus every 5 minutes
+Schedule::command('menus:order-category-products')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();

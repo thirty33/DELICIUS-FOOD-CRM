@@ -22,6 +22,8 @@ class UserRepository
      *   - 'company_search': Search in company name, fantasy_name, tax_id, company_code
      *   - 'branch_search': Search in branch fantasy_name, address, branch_code
      *   - 'user_search': Search in user nickname, name, email
+     *   - 'user_role': Filter by role name (exact match, values: Admin, Café, Convenio)
+     *   - 'user_permission': Filter by permission name (exact match, values: Consolidado, Individual)
      * @return LengthAwarePaginator
      */
     public function getSubordinateUsers(User $masterUser, int $perPage = 15, array $searchFilters = []): LengthAwarePaginator
@@ -34,6 +36,8 @@ class UserRepository
             UserFilters::CompanySearch->create(new FilterValue(['search' => $searchFilters['company_search'] ?? null])),
             UserFilters::BranchSearch->create(new FilterValue(['search' => $searchFilters['branch_search'] ?? null])),
             UserFilters::UserSearch->create(new FilterValue(['search' => $searchFilters['user_search'] ?? null])),
+            UserFilters::UserRole->create(new FilterValue(['role' => $searchFilters['user_role'] ?? null])),
+            UserFilters::UserPermission->create(new FilterValue(['permission' => $searchFilters['user_permission'] ?? null])),
             UserFilters::Sort->create(new FilterValue(null)),
         ];
 

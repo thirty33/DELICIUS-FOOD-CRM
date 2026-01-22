@@ -8,8 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 class Parameter extends Model
 {
     use HasFactory;
-    
+
     public const TAX_VALUE = 'Valor de Impuesto';
+    public const BEST_SELLING_CATEGORY_AUTO_GENERATE = 'Categoría Productos Más Vendidos - Auto Generar';
+    public const BEST_SELLING_CATEGORY_PRODUCTS_LIMIT = 'Categoría Productos Más Vendidos - Cantidad de Productos';
+    public const BEST_SELLING_CATEGORY_DATE_RANGE_DAYS = 'Categoría Productos Más Vendidos - Rango de Días';
     
     /**
      * The attributes that are mass assignable.

@@ -19,6 +19,7 @@ class Menu extends Model
      */
     protected $fillable = [
         'active',
+        'products_ordered',
         'title',
         'description',
         'publication_date',
@@ -34,6 +35,7 @@ class Menu extends Model
      */
     protected $casts = [
         'active' => 'boolean',
+        'products_ordered' => 'boolean',
     ];
 
     public function categoryMenus(): HasMany

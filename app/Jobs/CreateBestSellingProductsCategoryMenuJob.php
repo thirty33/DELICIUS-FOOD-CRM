@@ -95,7 +95,8 @@ class CreateBestSellingProductsCategoryMenuJob implements ShouldQueue
         $categoryMenu = $categoryMenuRepository->createOrUpdateWithProducts(
             $menu->id,
             $dynamicCategory->id,
-            $productIds
+            $productIds,
+            ['is_dynamic' => true]
         );
 
         Log::info('Best-selling products CategoryMenu created', [

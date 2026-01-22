@@ -21,7 +21,8 @@ class MenuResource extends JsonResource
             'description' => $this->description,
             'publication_date' => $this->publication_date,
             'has_order' => (int) ($this->has_order ?? 0),
-            'order_id' => $this->order_id ?? null
+            'order_id' => $this->order_id ?? null,
+            'order_status' => $this->order_status ?? null,
         ];
         
         return $data;

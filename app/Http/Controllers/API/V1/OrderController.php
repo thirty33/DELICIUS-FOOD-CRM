@@ -244,14 +244,13 @@ class OrderController extends Controller
                     );
                 }
 
-                // Super users can modify orders without changing the status
-                if (!$userForValidations->super_master_user) {
-                    $orderIsAlreadyStatus = $order->status === OrderStatus::PARTIALLY_SCHEDULED->value;
-                    $order->status = $orderIsAlreadyStatus || $orderIsPartiallyScheduled ? OrderStatus::PARTIALLY_SCHEDULED->value : OrderStatus::PENDING->value;
-
-                    if (!$order->orderLines()->where('partially_scheduled', true)->exists()) {
-                        $order->status = OrderStatus::PENDING->value;
-                    }
+                // Update order status based on partially_scheduled lines
+                // Status should be PARTIALLY_SCHEDULED if any order line has partially_scheduled = true
+                if ($order->orderLines()->where('partially_scheduled', true)->exists()) {
+                    $order->status = OrderStatus::PARTIALLY_SCHEDULED->value;
+                } elseif ($order->status === OrderStatus::PARTIALLY_SCHEDULED->value) {
+                    // Reset to PENDING only if it was PARTIALLY_SCHEDULED and no more partially_scheduled lines exist
+                    $order->status = OrderStatus::PENDING->value;
                 }
 
                 $order->save();
