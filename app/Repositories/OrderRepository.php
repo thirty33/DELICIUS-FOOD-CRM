@@ -404,6 +404,22 @@ class OrderRepository
     }
 
     /**
+     * Get the immediately previous order for a user before a given date.
+     *
+     * @param int $userId
+     * @param string $date Date in Y-m-d format
+     * @return Order|null
+     */
+    public function getPreviousOrder(int $userId, string $date): ?Order
+    {
+        return Order::with(['orderLines.product.category.subcategories'])
+            ->where('user_id', $userId)
+            ->where('dispatch_date', '<', $date)
+            ->orderBy('dispatch_date', 'desc')
+            ->first();
+    }
+
+    /**
      * Delete order lines that were not included in an import.
      *
      * Uses individual deletion (not bulk) to ensure observers are triggered,

@@ -49,6 +49,8 @@ Route::prefix('categories')->middleware(['auth:sanctum', ThrottleRequests::with(
 Route::prefix('orders')->middleware(['auth:sanctum', ThrottleRequests::with(60, 1)])->group(function () {
     Route::get('get-order/{date}', [OrderController::class, 'show'])
         ->name('orders.show');
+    Route::get('get-previous-order/{date}', [OrderController::class, 'getPreviousOrder'])
+        ->name('orders.get_previous_order');
     Route::get('get-order-by-id/{id}', [OrderController::class, 'showById'])
         ->name('orders.get-order-by-id');
     Route::get('get-orders', [OrderController::class, 'index'])

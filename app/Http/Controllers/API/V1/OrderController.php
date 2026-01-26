@@ -38,20 +38,26 @@ use App\Http\Requests\API\V1\Order\OrderByIdRequest;
 use App\Http\Requests\API\V1\Order\UpdateStatusRequest;
 use App\Http\Requests\API\V1\Order\OrderListRequest;
 use App\Http\Requests\API\V1\Order\UpdateOrderUserCommentRequest;
+use App\Http\Requests\API\V1\Order\GetPreviousOrderRequest;
 use App\Http\Resources\API\V1\OrderResourceCollection;
 use App\Models\Menu;
 use App\Models\Product;
 use App\Models\User;
 use Exception;
 use App\Repositories\UserDelegationRepository;
+use App\Repositories\OrderRepository;
 
 class OrderController extends Controller
 {
     protected UserDelegationRepository $userDelegationRepository;
-    
-    public function __construct(UserDelegationRepository $userDelegationRepository)
-    {
+    protected OrderRepository $orderRepository;
+
+    public function __construct(
+        UserDelegationRepository $userDelegationRepository,
+        OrderRepository $orderRepository
+    ) {
         $this->userDelegationRepository = $userDelegationRepository;
+        $this->orderRepository = $orderRepository;
     }
 
     public function index(OrderListRequest $request): JsonResponse
@@ -482,5 +488,21 @@ class OrderController extends Controller
                 'message' => [$e->getMessage()],
             ]);
         }
+    }
+
+    public function getPreviousOrder(GetPreviousOrderRequest $request, string $date): JsonResponse
+    {
+        $user = $request->user();
+
+        $previousOrder = $this->orderRepository->getPreviousOrder($user->id, $date);
+
+        if (!$previousOrder) {
+            return ApiResponseService::notFound('No previous order found');
+        }
+
+        return ApiResponseService::success(
+            new OrderResource($previousOrder),
+            'Previous order retrieved successfully',
+        );
     }
 }
