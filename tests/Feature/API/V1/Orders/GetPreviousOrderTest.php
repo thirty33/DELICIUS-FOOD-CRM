@@ -207,9 +207,9 @@ class GetPreviousOrderTest extends TestCase
     }
 
     /**
-     * Test that the API returns 404 when no previous order exists
+     * Test that the API returns 200 with null data when no previous order exists
      */
-    public function test_get_previous_order_returns_404_when_no_previous_order(): void
+    public function test_get_previous_order_returns_null_when_no_previous_order(): void
     {
         // === SETUP ===
         $cafeRole = Role::create(['name' => RoleName::CAFE->value]);
@@ -263,7 +263,8 @@ class GetPreviousOrderTest extends TestCase
         $response = $this->getJson('/api/v1/orders/get-previous-order/2026-02-01');
 
         // === ASSERTIONS ===
-        $response->assertStatus(404);
+        $response->assertStatus(200);
+        $this->assertNull($response->json('data'));
     }
 
     /**

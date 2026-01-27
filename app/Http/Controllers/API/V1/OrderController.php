@@ -492,12 +492,12 @@ class OrderController extends Controller
 
     public function getPreviousOrder(GetPreviousOrderRequest $request, string $date): JsonResponse
     {
-        $user = $request->user();
+        $user = $this->userDelegationRepository->getEffectiveUser($request);
 
         $previousOrder = $this->orderRepository->getPreviousOrder($user->id, $date);
 
         if (!$previousOrder) {
-            return ApiResponseService::notFound('No previous order found');
+            return ApiResponseService::success(null, 'No previous order found');
         }
 
         return ApiResponseService::success(
