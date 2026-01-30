@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\E164PhoneNumber;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Company extends Model
 {
     use HasFactory;
+
+    protected $casts = [
+        'phone_number' => E164PhoneNumber::class,
+    ];
 
     protected $fillable = [
         'name',
@@ -80,4 +85,8 @@ class Company extends Model
             ->withTimestamps();
     }
 
+    public function routeNotificationForWhatsApp(): ?string
+    {
+        return $this->phone_number;
+    }
 }
