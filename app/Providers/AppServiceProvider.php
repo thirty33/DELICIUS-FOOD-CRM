@@ -35,8 +35,10 @@ use App\Models\AdvanceOrder;
 use App\Models\AdvanceOrderProduct;
 use App\Models\Order;
 use App\Models\OrderLine;
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\WebRegistrationRequest;
+use App\Observers\ConversationObserver;
 use App\Observers\MessageObserver;
 use App\Observers\ProductObserver;
 use App\Observers\WebRegistrationRequestObserver;
@@ -170,6 +172,7 @@ class AppServiceProvider extends ServiceProvider
         AdvanceOrderProduct::observe(AdvanceOrderProductObserver::class);
         WebRegistrationRequest::observe(WebRegistrationRequestObserver::class);
         Message::observe(MessageObserver::class);
+        Conversation::observe(ConversationObserver::class);
 
         // Register Observers for production status updates
         AdvanceOrder::observe(AdvanceOrderProductionStatusObserver::class);

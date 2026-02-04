@@ -21,13 +21,13 @@ final class CreateConversationAction implements CreateAction
 
         if ($sourceType === 'company' && $companyId) {
             $company = Company::findOrFail($companyId);
-            $phone = $company->phone_number;
+            $phone = $company->routeNotificationForWhatsApp();
             $clientName = $company->fantasy_name ?: $company->name;
         }
 
         if ($sourceType === 'branch' && $branchId) {
             $branch = Branch::findOrFail($branchId);
-            $phone = $branch->contact_phone_number;
+            $phone = $branch->routeNotificationForWhatsApp();
             $clientName = $branch->fantasy_name ?: $branch->contact_name;
         }
 

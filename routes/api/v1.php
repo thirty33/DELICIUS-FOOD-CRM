@@ -119,6 +119,49 @@ Route::prefix('signed-urls')->middleware([
 
 });
 
+// WhatsApp Webhook
+Route::prefix('whatsapp')->group(function () {
+    Route::get('webhook', function (Request $request) {
+        \Illuminate\Support\Facades\Log::info('WhatsApp Webhook GET (verification)', $request->all());
+
+        $verifyToken = config('whatsapp.webhook_verify_token');
+        $mode = $request->query('hub_mode');
+        $token = $request->query('hub_verify_token');
+        $challenge = $request->query('hub_challenge');
+
+        if ($mode === 'subscribe' && $token === $verifyToken) {
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+        }
+
+        return response('Forbidden', 403);
+    })->name('whatsapp.webhook.verify');
+
+    Route::post('webhook', function (Request $request) {
+        \Illuminate\Support\Facades\Log::info('WhatsApp Webhook POST: ' . json_encode($request->all()));
+
+        $parser = new \App\Services\Chat\WebhookPayloadParserV24();
+        $messages = $parser->parse($request->all());
+        $incomingService = new \App\Services\Chat\IncomingMessageService();
+
+        foreach ($messages as $msg) {
+            $conversation = \App\Models\Conversation::where('phone_number', $msg['from'])->first();
+
+            if (!$conversation) {
+                continue;
+            }
+
+            \App\Actions\Conversations\UpdateConversationStatusAction::execute([
+                'conversation_id' => $conversation->id,
+                'status' => \App\Enums\ConversationStatus::RECEIVED,
+            ]);
+
+            $incomingService->handle($conversation->id, $msg['body'] ?? '', $msg['type']);
+        }
+
+        return response()->json(['status' => 'received']);
+    })->name('whatsapp.webhook');
+});
+
 // Web Registration - Public endpoint (API key required, no user auth)
 Route::prefix('web-registration')->middleware([
     VerifyPublicApiKey::class,

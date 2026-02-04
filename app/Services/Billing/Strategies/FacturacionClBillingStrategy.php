@@ -2,6 +2,7 @@
 
 namespace App\Services\Billing\Strategies;
 
+use App\Enums\IntegrationName;
 use App\Models\Integration;
 use App\Models\Order;
 use App\Services\Billing\Contracts\BillingStrategyInterface;
@@ -75,7 +76,7 @@ class FacturacionClBillingStrategy implements BillingStrategyInterface
 
     public function getIntegrationName(): string
     {
-        return Integration::NAME_FACTURACION_CL;
+        return IntegrationName::FACTURACION_CL->value;
     }
 
     private function buildRequestBody(Order $order): array

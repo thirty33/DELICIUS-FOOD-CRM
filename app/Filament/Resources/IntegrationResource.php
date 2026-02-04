@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\IntegrationName;
+use App\Enums\IntegrationType;
 use App\Filament\Resources\IntegrationResource\Pages;
 use App\Models\Integration;
 use Filament\Forms;
@@ -30,7 +32,7 @@ class IntegrationResource extends Resource
             ->schema([
                 Forms\Components\Select::make('name')
                     ->required()
-                    ->options(Integration::getNames())
+                    ->options(IntegrationName::getSelectOptions())
                     ->label('Nombre'),
                 Forms\Components\TextInput::make('url')
                     ->required()
@@ -44,10 +46,7 @@ class IntegrationResource extends Resource
                     ->label('URL Pruebas'),
                 Forms\Components\Select::make('type')
                     ->required()
-                    ->options([
-                        Integration::TYPE_BILLING => 'Facturación',
-                        Integration::TYPE_PAYMENT_GATEWAY => 'Pasarela de Pago',
-                    ])
+                    ->options(IntegrationType::getSelectOptions())
                     ->label('Tipo'),
                 Forms\Components\Toggle::make('production')
                     ->label('Modo Producción')
@@ -64,16 +63,17 @@ class IntegrationResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nombre')
-                    ->formatStateUsing(fn (string $state): string => Integration::getNames()[$state] ?? $state)
+                    ->formatStateUsing(fn ($state): string => $state instanceof IntegrationName ? $state->getLabel() : (IntegrationName::tryFrom($state)?->getLabel() ?? $state))
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Integration::getTypes()[$state] ?? $state)
-                    ->color(fn (string $state): string => match ($state) {
-                        Integration::TYPE_BILLING => 'primary',
-                        Integration::TYPE_PAYMENT_GATEWAY => 'success',
+                    ->formatStateUsing(fn ($state): string => $state instanceof IntegrationType ? $state->getLabel() : (IntegrationType::tryFrom($state)?->getLabel() ?? $state))
+                    ->color(fn ($state): string => match ($state instanceof IntegrationType ? $state : IntegrationType::tryFrom($state)) {
+                        IntegrationType::BILLING => 'primary',
+                        IntegrationType::PAYMENT_GATEWAY => 'success',
+                        IntegrationType::MESSAGING => 'info',
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('url')
@@ -105,7 +105,7 @@ class IntegrationResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Tipo')
-                    ->options(Integration::getTypes()),
+                    ->options(IntegrationType::getSelectOptions()),
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Activa'),
                 Tables\Filters\TernaryFilter::make('production')

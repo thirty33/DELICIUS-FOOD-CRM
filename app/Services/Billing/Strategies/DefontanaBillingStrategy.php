@@ -2,6 +2,7 @@
 
 namespace App\Services\Billing\Strategies;
 
+use App\Enums\IntegrationName;
 use App\Models\Integration;
 use App\Models\Order;
 use App\Services\Billing\Contracts\BillingStrategyInterface;
@@ -185,7 +186,7 @@ class DefontanaBillingStrategy implements BillingStrategyInterface
 
     public function getIntegrationName(): string
     {
-        return Integration::NAME_DEFONTANA;
+        return IntegrationName::DEFONTANA->value;
     }
 
     private function buildSaleData(Order $order): array

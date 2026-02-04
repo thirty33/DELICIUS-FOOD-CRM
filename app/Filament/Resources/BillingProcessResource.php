@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\IntegrationName;
 use App\Filament\Resources\BillingProcessResource\Pages;
 use App\Filament\Resources\BillingProcessResource\RelationManagers\AttemptsRelationManager;
 use App\Models\BillingProcess;
@@ -112,7 +113,7 @@ class BillingProcessResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('integration.name')
                     ->label('Integración')
-                    ->formatStateUsing(fn (string $state): string => Integration::getNames()[$state] ?? $state)
+                    ->formatStateUsing(fn (string $state): string => IntegrationName::tryFrom($state)?->getLabel() ?? $state)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creado')

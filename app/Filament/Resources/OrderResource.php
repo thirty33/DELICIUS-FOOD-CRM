@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\IntegrationType;
 use App\Enums\OrderStatus;
 use App\Enums\OrderProductionStatus;
 use App\Enums\RoleName;
@@ -505,7 +506,7 @@ class OrderResource extends Resource
                         ->action(function (Order $record) {
                             try {
                                 // Buscar la integración de facturación activa
-                                $integration = Integration::where('type', Integration::TYPE_BILLING)
+                                $integration = Integration::where('type', IntegrationType::BILLING)
                                     ->where('active', true)
                                     ->first();
 

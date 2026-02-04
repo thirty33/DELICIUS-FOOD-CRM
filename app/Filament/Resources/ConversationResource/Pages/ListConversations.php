@@ -15,6 +15,8 @@ class ListConversations extends ListRecords
 {
     protected static string $resource = ConversationResource::class;
 
+    protected ?string $pollingInterval = '30s';
+
     protected function getHeaderActions(): array
     {
         return [
@@ -58,7 +60,7 @@ class ListConversations extends ListRecords
                                 return;
                             }
                             $company = Company::find($state);
-                            $phone = $company?->phone_number;
+                            $phone = $company?->routeNotificationForWhatsApp();
                             $set('phone_preview', $phone ?: __('Sin teléfono registrado'));
                         }),
 
@@ -84,7 +86,7 @@ class ListConversations extends ListRecords
                                 return;
                             }
                             $branch = Branch::find($state);
-                            $phone = $branch?->contact_phone_number;
+                            $phone = $branch?->routeNotificationForWhatsApp();
                             $set('phone_preview', $phone ?: __('Sin teléfono registrado'));
                         }),
 

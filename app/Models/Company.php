@@ -8,10 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Notifications\Notifiable;
 
 class Company extends Model
 {
-    use HasFactory;
+    use HasFactory, Notifiable;
 
     protected $casts = [
         'phone_number' => E164PhoneNumber::class,
@@ -87,6 +88,14 @@ class Company extends Model
 
     public function routeNotificationForWhatsApp(): ?string
     {
+        $integration = Integration::where('name', \App\Enums\IntegrationName::WHATSAPP)
+            ->where('active', true)
+            ->first();
+
+        if ($integration && !$integration->production) {
+            return config('whatsapp.test_phone_number');
+        }
+
         return $this->phone_number;
     }
 }
