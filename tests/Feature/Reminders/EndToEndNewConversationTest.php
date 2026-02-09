@@ -29,19 +29,14 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Test 1: User responded to template → check-pending sends the reminder.
+ * End-to-End Test 1: Full flow without prior conversation.
  *
- * SCENARIO:
- * 1. reminders:process creates conversation + template + pending notification
- * 2. User responds (inbound message)
- * 3. reminders:check-pending detects the response and sends the reminder message
- *
- * EXPECTED:
- * - Reminder message sent as outbound text
- * - reminder_pending_notifications.status = 'sent'
- * - reminder_notified_menus.status = 'sent' with notified_at
+ * FLOW:
+ * 1. reminders:process → creates conversation + template + pending
+ * 2. User responds (webhook simulation)
+ * 3. reminders:check-pending → sends reminder with menu list
  */
-class CheckPendingUserRespondedTest extends TestCase
+class EndToEndNewConversationTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -101,11 +96,11 @@ class CheckPendingUserRespondedTest extends TestCase
         $priceList = PriceList::create(['name' => 'Test Price List']);
 
         $this->company = Company::create([
-            'name' => 'CHECK PENDING COMPANY S.A.',
-            'email' => 'check-pending@test.com',
+            'name' => 'E2E NEW CONV COMPANY S.A.',
+            'email' => 'e2e-new@test.com',
             'tax_id' => '11.111.111-1',
-            'company_code' => 'CHKPND',
-            'fantasy_name' => 'CHECK PENDING CO',
+            'company_code' => 'E2ENEW',
+            'fantasy_name' => 'E2E NEW CONV CO',
             'price_list_id' => $priceList->id,
             'phone_number' => '560000000099',
         ]);
@@ -115,15 +110,15 @@ class CheckPendingUserRespondedTest extends TestCase
             'address' => 'Test Address 123',
             'contact_name' => 'Test Contact',
             'contact_phone_number' => '560000000088',
-            'branch_code' => 'CP01',
-            'fantasy_name' => 'Check Pending Branch',
+            'branch_code' => 'EN01',
+            'fantasy_name' => 'E2E New Conv Branch',
             'min_price_order' => 0,
         ]);
 
         $user = User::create([
-            'name' => 'CHECK PENDING USER',
-            'nickname' => 'TEST.CHKPND.USER',
-            'email' => 'chkpnd-user@test.com',
+            'name' => 'E2E NEW CONV USER',
+            'nickname' => 'TEST.E2ENEW.USER',
+            'email' => 'e2e-new-user@test.com',
             'password' => bcrypt('password'),
             'company_id' => $this->company->id,
             'active' => true,
@@ -135,7 +130,7 @@ class CheckPendingUserRespondedTest extends TestCase
     private function createCampaignAndTrigger(): void
     {
         $this->campaign = Campaign::create([
-            'name' => 'Test Check Pending Reminder',
+            'name' => 'E2E New Conv Reminder',
             'type' => CampaignType::REMINDER->value,
             'channel' => 'whatsapp',
             'status' => CampaignStatus::ACTIVE->value,
@@ -175,19 +170,36 @@ class CheckPendingUserRespondedTest extends TestCase
     // TEST
     // =========================================================================
 
-    public function test_sends_reminder_when_user_has_responded(): void
+    public function test_full_flow_no_prior_conversation(): void
     {
-        // PHASE 1: Execute reminders:process command
+        // =================================================================
+        // PHASE 1: reminders:process creates conversation + template + pending
+        // =================================================================
         $this->artisan('reminders:process', ['--event' => 'menu_created'])
             ->assertSuccessful();
 
-        // Verify preconditions created by the command
         $this->assertEquals(1, Conversation::count());
-        $this->assertEquals(1, ReminderPendingNotification::where('status', 'waiting_response')->count());
+        $conversation = Conversation::first();
+
+        // 1 template outbound
+        $this->assertEquals(1, Message::where('conversation_id', $conversation->id)->count());
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'outbound',
+            'type' => 'template',
+        ]);
+
+        // 3 pending notified menus
         $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'pending')->count());
 
+        // 1 pending notification waiting
+        $this->assertEquals(1, ReminderPendingNotification::where('status', 'waiting_response')->count());
+        $pending = ReminderPendingNotification::first();
+        $this->assertCount(3, $pending->menu_ids);
+
+        // =================================================================
         // PHASE 2: User responds to template via WhatsApp webhook
-        $conversation = Conversation::first();
+        // =================================================================
         $this->postJson('/api/v1/whatsapp/webhook', [
             'entry' => [[
                 'changes' => [[
@@ -198,44 +210,48 @@ class CheckPendingUserRespondedTest extends TestCase
                             'from' => $conversation->phone_number,
                             'id' => 'wamid.webhook_' . uniqid(),
                             'type' => 'text',
-                            'text' => ['body' => 'Hola, si quiero ver los menus'],
+                            'text' => ['body' => 'Hola, quiero ver los menus'],
                         ]],
                     ],
                 ]],
             ]],
         ])->assertOk();
 
-        // PHASE 3: Execute reminders:check-pending command
+        // 2 messages now (template + inbound), reminder tables unchanged
+        $this->assertEquals(2, Message::where('conversation_id', $conversation->id)->count());
+        $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'pending')->count());
+        $this->assertEquals(1, ReminderPendingNotification::where('status', 'waiting_response')->count());
+
+        // =================================================================
+        // PHASE 3: reminders:check-pending sends the reminder
+        // =================================================================
         $this->artisan('reminders:check-pending')
             ->assertSuccessful();
 
-        // A. Reminder message sent as outbound text
-        $reminderMessage = Message::where('conversation_id', $conversation->id)
+        // 3 messages: template + inbound + reminder
+        $this->assertEquals(3, Message::where('conversation_id', $conversation->id)->count());
+
+        $reminderMsg = Message::where('conversation_id', $conversation->id)
             ->where('direction', 'outbound')
             ->where('type', 'text')
             ->first();
+        $this->assertNotNull($reminderMsg);
+        $this->assertEquals('Hay 3 nuevos menus: Menu Lunes, Menu Martes, Menu Miercoles', $reminderMsg->body);
 
-        $this->assertNotNull($reminderMessage);
-        $this->assertEquals('Hay 3 nuevos menus: Menu Lunes, Menu Martes, Menu Miercoles', $reminderMessage->body);
-
-        // Total messages: template (outbound) + user response (inbound) + reminder (outbound)
-        $this->assertEquals(3, Message::where('conversation_id', $conversation->id)->count());
-
-        // B. Pending notification marked as sent
+        // Pending notification → sent
         $this->assertEquals(0, ReminderPendingNotification::where('status', 'waiting_response')->count());
         $this->assertEquals(1, ReminderPendingNotification::where('status', 'sent')->count());
 
-        // C. All notified menus marked as sent with notified_at
+        // Notified menus → sent with notified_at
         $this->assertEquals(0, ReminderNotifiedMenu::where('status', 'pending')->count());
         $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'sent')->count());
-
         foreach (ReminderNotifiedMenu::all() as $notified) {
             $this->assertNotNull($notified->notified_at);
         }
 
         // NEGATIVE VALIDATIONS
         $this->assertEquals(1, Conversation::count());
-        $this->assertEquals(1, ReminderPendingNotification::count());
+        Http::assertSentCount(2); // 1 template (ConversationObserver) + 1 text reminder (MessageObserver)
         $this->assertEquals(3, ReminderNotifiedMenu::count());
     }
 }

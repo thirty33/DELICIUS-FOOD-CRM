@@ -83,12 +83,10 @@ class ProcessRemindersService
             return ['sent' => 0, 'pending' => 0, 'failed' => 0, 'skipped' => 0];
         }
 
-        $messageContent = $strategy->buildMessageContent($campaign, $eligibleEntities);
-
         $stats = ['sent' => 0, 'pending' => 0, 'failed' => 0, 'skipped' => 0];
 
         foreach ($recipients as $recipient) {
-            $result = $this->processRecipient($trigger, $recipient, $eligibleEntities, $messageContent);
+            $result = $this->processRecipient($trigger, $campaign, $strategy, $recipient, $eligibleEntities);
             $stats[$result]++;
         }
 
@@ -108,9 +106,10 @@ class ProcessRemindersService
 
     private function processRecipient(
         CampaignTrigger $trigger,
+        Campaign $campaign,
+        ReminderEventStrategy $strategy,
         array $recipient,
-        Collection $eligibleEntities,
-        string $messageContent
+        Collection $eligibleEntities
     ): string {
         $phoneNumber = $recipient['phone_number'];
 
@@ -121,6 +120,8 @@ class ProcessRemindersService
         if ($pendingEntities->isEmpty()) {
             return 'skipped';
         }
+
+        $messageContent = $strategy->buildMessageContent($campaign, $pendingEntities);
 
         $conversation = $this->conversationRepository->findActiveByPhoneNumber($phoneNumber);
 
