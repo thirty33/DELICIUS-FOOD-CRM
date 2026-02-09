@@ -276,6 +276,7 @@ class ReminderResource extends Resource
                     ->action(fn (Campaign $record) => $record->update(['status' => CampaignStatus::CANCELLED])),
                 Tables\Actions\EditAction::make()
                     ->visible(fn (Campaign $record) => in_array($record->status, [CampaignStatus::DRAFT, CampaignStatus::ACTIVE, CampaignStatus::PAUSED])),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

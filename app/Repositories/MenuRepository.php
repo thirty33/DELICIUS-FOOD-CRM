@@ -5,8 +5,8 @@ namespace App\Repositories;
 use App\Models\Menu;
 use App\Models\User;
 use App\Models\Order;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Carbon;
 use Illuminate\Pipeline\Pipeline;
 use App\Filters\FilterValue;
 use App\Enums\Filters\MenuFilters;
@@ -89,5 +89,24 @@ class MenuRepository
         }
 
         return $menus->get();
+    }
+
+    /**
+     * Get active menus created since a given date, filtered by role and permission.
+     */
+    public function getMenusCreatedSince(Carbon $since, array $roleIds, array $permissionIds): Collection
+    {
+        return Menu::query()
+            ->where('active', true)
+            ->where('created_at', '>=', $since)
+            ->where(function ($query) use ($roleIds) {
+                $query->whereIn('role_id', $roleIds)
+                    ->orWhereNull('role_id');
+            })
+            ->where(function ($query) use ($permissionIds) {
+                $query->whereIn('permissions_id', $permissionIds)
+                    ->orWhereNull('permissions_id');
+            })
+            ->get();
     }
 }
