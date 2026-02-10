@@ -20,6 +20,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Test Mode Lookback Minutes
+    |--------------------------------------------------------------------------
+    |
+    | When test_mode is enabled, this value determines how many minutes back
+    | to look for eligible entities. Must be greater than the scheduler
+    | interval (every 5 minutes) to avoid missing entities between runs.
+    |
+    */
+    'test_mode_lookback_minutes' => env('REMINDERS_TEST_LOOKBACK_MINUTES', 10),
+
+    /*
+    |--------------------------------------------------------------------------
     | Pending Notification Expiration
     |--------------------------------------------------------------------------
     |
@@ -28,5 +40,21 @@ return [
     |
     */
     'pending_expiration_hours' => env('REMINDERS_PENDING_EXPIRATION_HOURS', 48),
+
+    /*
+    |--------------------------------------------------------------------------
+    | WhatsApp Templates per Event Type
+    |--------------------------------------------------------------------------
+    |
+    | Each reminder event type must use a pre-approved WhatsApp template.
+    | Templates are configured per event type with name and language.
+    |
+    */
+    'templates' => [
+        'menu_created' => [
+            'name' => env('REMINDERS_TEMPLATE_MENU_CREATED', 'hello_world'),
+            'language' => env('REMINDERS_TEMPLATE_MENU_CREATED_LANG', 'es'),
+        ],
+    ],
 
 ];

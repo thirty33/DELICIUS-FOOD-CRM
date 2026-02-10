@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "delicius-menus": {
+      "command": "./vendor/bin/sail",
+      "args": ["artisan", "mcp:start", "menus"]
+    }
+  }
+}

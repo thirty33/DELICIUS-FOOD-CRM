@@ -60,3 +60,13 @@ Schedule::command('menus:generate-best-selling-category')
 Schedule::command('menus:order-category-products')
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+// Schedule: Process reminder notifications for menu_created event every 5 minutes
+Schedule::command('reminders:process --event=menu_created')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+// // Schedule: Check pending reminder notifications every 5 minutes
+// Schedule::command('reminders:check-pending')
+//     ->everyFiveMinutes()
+//     ->withoutOverlapping();

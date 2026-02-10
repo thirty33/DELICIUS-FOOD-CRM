@@ -4,7 +4,6 @@ namespace App\Services\Reminders;
 
 use App\Actions\Conversations\CreateConversationAction;
 use App\Actions\Conversations\CreateConversationMessageAction;
-use App\Actions\Reminders\CreateReminderPendingNotificationAction;
 use App\Actions\Reminders\RecordCampaignExecutionAction;
 use App\Actions\Reminders\RecordReminderNotificationAction;
 use App\Actions\Reminders\UpdateTriggerLastExecutedAction;
@@ -14,7 +13,7 @@ use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\CampaignTrigger;
 use App\Models\Company;
-use App\Models\Conversation;
+use App\Notifications\WhatsApp\TemplateNotification;
 use App\Repositories\CampaignTriggerRepository;
 use App\Repositories\ConversationRepository;
 use App\Repositories\ReminderNotificationRepository;
@@ -121,57 +120,58 @@ class ProcessRemindersService
             return 'skipped';
         }
 
-        $messageContent = $strategy->buildMessageContent($campaign, $pendingEntities);
+        $templateConfig = $strategy->getTemplateConfig($campaign, $pendingEntities);
 
-        $conversation = $this->conversationRepository->findActiveByPhoneNumber($phoneNumber);
-
-        if (! $conversation) {
-            return $this->handleNewConversation($trigger, $recipient, $pendingEntities, $messageContent);
-        }
-
-        if ($this->conversationRepository->hasUserResponded($conversation)) {
-            return $this->sendDirectMessage($trigger, $conversation, $pendingEntities, $messageContent);
-        }
-
-        return $this->handlePendingNotification($trigger, $conversation, $pendingEntities, $messageContent);
+        return $this->sendTemplateNotification($trigger, $recipient, $pendingEntities, $templateConfig);
     }
 
-    private function handleNewConversation(
+    private function sendTemplateNotification(
         CampaignTrigger $trigger,
         array $recipient,
         Collection $menus,
-        string $messageContent
+        array $templateConfig
     ): string {
         try {
-            $conversation = CreateConversationAction::execute([
-                'source_type' => $recipient['source_type'],
-                'company_id' => $recipient['company_id'],
-                'branch_id' => $recipient['branch_id'],
+            $conversation = $this->conversationRepository->findActiveByPhoneNumber($recipient['phone_number']);
+
+            if (! $conversation) {
+                $conversation = CreateConversationAction::execute([
+                    'source_type' => $recipient['source_type'],
+                    'company_id' => $recipient['company_id'],
+                    'branch_id' => $recipient['branch_id'],
+                    'without_events' => true,
+                ]);
+            }
+
+            // Record the message in the conversation
+            CreateConversationMessageAction::execute([
+                'conversation_id' => $conversation->id,
+                'direction' => 'outbound',
+                'type' => 'template',
+                'body' => "Template: {$templateConfig['name']}",
             ]);
 
+            // Send the WhatsApp template notification via the notifiable
+            $notifiable = $this->resolveNotifiable($recipient);
+            $notifiable->notify(new TemplateNotification(
+                $templateConfig['name'],
+                $templateConfig['language'],
+                $templateConfig['components'],
+            ));
+
             foreach ($menus as $menu) {
-                // Action 1: Record notification as pending (ReminderNotifiedMenu)
                 RecordReminderNotificationAction::execute([
                     'trigger_id' => $trigger->id,
                     'menu_id' => $menu->id,
                     'phone_number' => $recipient['phone_number'],
                     'conversation_id' => $conversation->id,
-                    'status' => 'pending',
-                ]);
-
-                // Action 2: Create/update pending notification (ReminderPendingNotification)
-                CreateReminderPendingNotificationAction::execute([
-                    'trigger_id' => $trigger->id,
-                    'conversation_id' => $conversation->id,
-                    'phone_number' => $recipient['phone_number'],
-                    'message_content' => $messageContent,
-                    'menu_id' => $menu->id,
+                    'status' => 'sent',
                 ]);
             }
 
-            return 'pending';
+            return 'sent';
         } catch (\Exception $e) {
-            Log::error('Error creating conversation for reminder', [
+            Log::error('Error sending reminder template', [
                 'trigger_id' => $trigger->id,
                 'phone_number' => $recipient['phone_number'],
                 'error' => $e->getMessage(),
@@ -181,68 +181,13 @@ class ProcessRemindersService
         }
     }
 
-    private function sendDirectMessage(
-        CampaignTrigger $trigger,
-        Conversation $conversation,
-        Collection $menus,
-        string $messageContent
-    ): string {
-        try {
-            CreateConversationMessageAction::execute([
-                'conversation_id' => $conversation->id,
-                'direction' => 'outbound',
-                'body' => $messageContent,
-            ]);
-
-            foreach ($menus as $menu) {
-                RecordReminderNotificationAction::execute([
-                    'trigger_id' => $trigger->id,
-                    'menu_id' => $menu->id,
-                    'phone_number' => $conversation->phone_number,
-                    'conversation_id' => $conversation->id,
-                    'status' => 'sent',
-                ]);
-            }
-
-            return 'sent';
-        } catch (\Exception $e) {
-            Log::error('Error sending reminder message', [
-                'trigger_id' => $trigger->id,
-                'conversation_id' => $conversation->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return 'failed';
-        }
-    }
-
-    private function handlePendingNotification(
-        CampaignTrigger $trigger,
-        Conversation $conversation,
-        Collection $menus,
-        string $messageContent
-    ): string {
-        foreach ($menus as $menu) {
-            // Action 1: Record notification as pending (ReminderNotifiedMenu)
-            RecordReminderNotificationAction::execute([
-                'trigger_id' => $trigger->id,
-                'menu_id' => $menu->id,
-                'phone_number' => $conversation->phone_number,
-                'conversation_id' => $conversation->id,
-                'status' => 'pending',
-            ]);
-
-            // Action 2: Create/update pending notification (ReminderPendingNotification)
-            CreateReminderPendingNotificationAction::execute([
-                'trigger_id' => $trigger->id,
-                'conversation_id' => $conversation->id,
-                'phone_number' => $conversation->phone_number,
-                'message_content' => $messageContent,
-                'menu_id' => $menu->id,
-            ]);
+    private function resolveNotifiable(array $recipient): Company|Branch
+    {
+        if ($recipient['source_type'] === 'branch' && $recipient['branch_id']) {
+            return Branch::findOrFail($recipient['branch_id']);
         }
 
-        return 'pending';
+        return Company::findOrFail($recipient['company_id']);
     }
 
     /**

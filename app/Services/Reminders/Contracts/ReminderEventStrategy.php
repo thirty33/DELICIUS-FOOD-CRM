@@ -26,4 +26,11 @@ interface ReminderEventStrategy
      * Build the message content replacing placeholders with actual data.
      */
     public function buildMessageContent(Campaign $campaign, Collection $entities): string;
+
+    /**
+     * Get the WhatsApp template config for this event type.
+     *
+     * @return array{name: string, language: string, components: array}
+     */
+    public function getTemplateConfig(Campaign $campaign, Collection $entities): array;
 }

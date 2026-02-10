@@ -34,16 +34,15 @@ use Tests\TestCase;
  * configured for the menu_created event, and the recipient has NO
  * prior WhatsApp conversation. The system should:
  * 1. Detect the menu as eligible
- * 2. Create a new conversation (which triggers the WhatsApp template)
- * 3. Record the notification as "pending" (waiting for user response)
- * 4. Store the pending notification with the message content
+ * 2. Create a new conversation
+ * 3. Send a WhatsApp template notification
+ * 4. Record the notification as "sent"
  * 5. Register the campaign execution
  * 6. Update the trigger's last_executed_at
  *
  * EXPECTED RESULT:
- * - processEventType() returns: triggers_processed=1, pending=1, sent=0
- * - 1 record in reminder_notified_menus with status=pending
- * - 1 record in reminder_pending_notifications with status=waiting_response
+ * - processEventType() returns: triggers_processed=1, sent=1
+ * - 1 record in reminder_notified_menus with status=sent
  * - 1 record in campaign_executions
  * - 1 conversation created
  */
@@ -178,7 +177,7 @@ class ProcessMenuCreatedNewConversationTest extends TestCase
     // TEST
     // =========================================================================
 
-    public function test_new_conversation_flow_creates_pending_notification(): void
+    public function test_new_conversation_flow_sends_template_notification(): void
     {
         $testPhone = config('whatsapp.test_phone_number');
 
@@ -189,8 +188,8 @@ class ProcessMenuCreatedNewConversationTest extends TestCase
 
         // A. Service returns correct totals
         $this->assertEquals(1, $result['triggers_processed']);
-        $this->assertEquals(0, $result['sent']);
-        $this->assertEquals(1, $result['pending']);
+        $this->assertEquals(1, $result['sent']);
+        $this->assertEquals(0, $result['pending']);
         $this->assertEquals(0, $result['failed']);
         $this->assertEquals(0, $result['skipped']);
 
@@ -201,38 +200,26 @@ class ProcessMenuCreatedNewConversationTest extends TestCase
             'branch_id' => $this->branch->id,
         ]);
 
-        // C. Template message was sent via ConversationObserver
+        // C. Template message recorded in conversation
         $this->assertDatabaseHas('messages', [
             'direction' => 'outbound',
             'type' => 'template',
-            'body' => 'hello_world',
         ]);
 
-        // D. Notification recorded as pending in reminder_notified_menus
+        // D. Notification recorded as sent in reminder_notified_menus
         $this->assertDatabaseHas('reminder_notified_menus', [
             'trigger_id' => $this->trigger->id,
             'menu_id' => $this->menu->id,
             'phone_number' => $testPhone,
-            'status' => 'pending',
-        ]);
-        $this->assertDatabaseMissing('reminder_notified_menus', [
             'status' => 'sent',
         ]);
 
-        // E. Pending notification stored with message content
-        $this->assertDatabaseHas('reminder_pending_notifications', [
-            'trigger_id' => $this->trigger->id,
-            'phone_number' => $testPhone,
-            'message_content' => 'Hay 1 nuevos menus: Menu Test Lunes',
-            'status' => 'waiting_response',
-        ]);
-
-        // F. Campaign execution recorded
+        // E. Campaign execution recorded
         $this->assertDatabaseHas('campaign_executions', [
             'campaign_id' => $this->campaign->id,
             'trigger_id' => $this->trigger->id,
             'total_recipients' => 1,
-            'sent_count' => 0,
+            'sent_count' => 1,
             'failed_count' => 0,
             'status' => CampaignExecutionStatus::COMPLETED->value,
         ]);
@@ -242,12 +229,12 @@ class ProcessMenuCreatedNewConversationTest extends TestCase
         $this->assertNotNull($this->trigger->last_executed_at);
     }
 
-    public function test_second_execution_skips_already_pending_recipient(): void
+    public function test_second_execution_skips_already_notified_recipient(): void
     {
         /** @var ProcessRemindersService $service */
         $service = app(ProcessRemindersService::class);
 
-        // First execution: creates pending notification
+        // First execution: sends template notification
         $service->processEventType(CampaignEventType::MENU_CREATED);
 
         // Second execution: same menu, same recipient → should skip

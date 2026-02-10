@@ -21,7 +21,6 @@ use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\PriceList;
 use App\Models\ReminderNotifiedMenu;
-use App\Models\ReminderPendingNotification;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Reminders\ProcessRemindersService;
@@ -44,7 +43,7 @@ use Tests\TestCase;
  * integration.production = true → each entity uses its own phone number.
  *
  * EXPECTED: 7 unique recipients, 7 conversations, 7 templates sent,
- * 49 reminder_notified_menus (7 menus × 7 recipients), 7 pending notifications.
+ * 49 reminder_notified_menus (7 menus × 7 recipients), all sent.
  */
 class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
 {
@@ -249,7 +248,7 @@ class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
     // TEST
     // =========================================================================
 
-    public function test_multiple_menus_and_companies_creates_pending_for_each_recipient(): void
+    public function test_multiple_menus_and_companies_sends_template_for_each_recipient(): void
     {
         /** @var ProcessRemindersService $service */
         $service = app(ProcessRemindersService::class);
@@ -258,8 +257,8 @@ class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
 
         // A. Service returns correct totals
         $this->assertEquals(1, $result['triggers_processed']);
-        $this->assertEquals(0, $result['sent']);
-        $this->assertEquals(7, $result['pending']);
+        $this->assertEquals(7, $result['sent']);
+        $this->assertEquals(0, $result['pending']);
         $this->assertEquals(0, $result['failed']);
         $this->assertEquals(0, $result['skipped']);
 
@@ -271,17 +270,16 @@ class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
             ]);
         }
 
-        // C. WhatsApp template sent for each conversation (7 templates)
+        // C. Template message recorded for each conversation
         $templateMessages = \App\Models\Message::where('direction', 'outbound')
             ->where('type', 'template')
             ->count();
         $this->assertEquals(7, $templateMessages);
-        Http::assertSentCount(7);
 
-        // D. 49 records in reminder_notified_menus (7 menus × 7 recipients)
+        // D. 49 records in reminder_notified_menus (7 menus × 7 recipients), all sent
         $this->assertEquals(49, ReminderNotifiedMenu::count());
-        $this->assertEquals(0, ReminderNotifiedMenu::where('status', 'sent')->count());
-        $this->assertEquals(49, ReminderNotifiedMenu::where('status', 'pending')->count());
+        $this->assertEquals(49, ReminderNotifiedMenu::where('status', 'sent')->count());
+        $this->assertEquals(0, ReminderNotifiedMenu::where('status', 'pending')->count());
 
         // Each menu has 7 notification records
         foreach ($this->menus as $menu) {
@@ -299,27 +297,12 @@ class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
             );
         }
 
-        // E. 7 pending notification records (one per recipient)
-        $this->assertEquals(7, ReminderPendingNotification::count());
-        $this->assertEquals(
-            7,
-            ReminderPendingNotification::where('status', 'waiting_response')->count()
-        );
-
-        // Each pending notification contains all 7 menu IDs
-        $menuIds = collect($this->menus)->pluck('id')->sort()->values()->toArray();
-        $pendingNotifications = ReminderPendingNotification::all();
-        foreach ($pendingNotifications as $pending) {
-            $storedMenuIds = collect($pending->menu_ids)->sort()->values()->toArray();
-            $this->assertEquals($menuIds, $storedMenuIds);
-        }
-
-        // F. Campaign execution recorded
+        // E. Campaign execution recorded
         $this->assertDatabaseHas('campaign_executions', [
             'campaign_id' => $this->campaign->id,
             'trigger_id' => $this->trigger->id,
             'total_recipients' => 7,
-            'sent_count' => 0,
+            'sent_count' => 7,
             'failed_count' => 0,
             'status' => CampaignExecutionStatus::COMPLETED->value,
         ]);
@@ -341,9 +324,12 @@ class ProcessMenuCreatedMultipleCompaniesTest extends TestCase
         $companyE = Company::where('company_code', 'COMPE')->first();
         $this->assertEquals(0, Conversation::where('company_id', $companyE->id)->count());
 
-        // No sent notifications
+        // No pending or failed notifications
         $this->assertDatabaseMissing('reminder_notified_menus', [
-            'status' => 'sent',
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('reminder_notified_menus', [
+            'status' => 'failed',
         ]);
     }
 }

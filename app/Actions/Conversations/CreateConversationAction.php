@@ -15,6 +15,7 @@ final class CreateConversationAction implements CreateAction
         $sourceType = data_get($data, 'source_type');
         $companyId = data_get($data, 'company_id');
         $branchId = data_get($data, 'branch_id');
+        $withoutEvents = data_get($data, 'without_events', false);
 
         $phone = null;
         $clientName = null;
@@ -35,15 +36,19 @@ final class CreateConversationAction implements CreateAction
             throw new \InvalidArgumentException(__('La selección no tiene un número de teléfono registrado.'));
         }
 
-        return Conversation::firstOrCreate(
-            ['phone_number' => $phone],
-            [
-                'company_id' => $companyId,
-                'branch_id' => $branchId,
-                'client_name' => $clientName,
-                'status' => ConversationStatus::NEW_CONVERSATION,
-                'last_message_at' => now(),
-            ]
-        );
+        $attributes = ['phone_number' => $phone];
+        $values = [
+            'company_id' => $companyId,
+            'branch_id' => $branchId,
+            'client_name' => $clientName,
+            'status' => ConversationStatus::NEW_CONVERSATION,
+            'last_message_at' => now(),
+        ];
+
+        if ($withoutEvents) {
+            return Conversation::withoutEvents(fn () => Conversation::firstOrCreate($attributes, $values));
+        }
+
+        return Conversation::firstOrCreate($attributes, $values);
     }
 }

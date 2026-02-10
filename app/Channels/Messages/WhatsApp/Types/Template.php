@@ -13,12 +13,17 @@ final readonly class Template
 
     public function toArray(): array
     {
-        return [
+        $data = [
             'name' => $this->templateName,
             'language' => [
                 'code' => $this->languageCode,
             ],
-            'components' => $this->components,
         ];
+
+        if (! empty($this->components)) {
+            $data['components'] = $this->components;
+        }
+
+        return $data;
     }
 }

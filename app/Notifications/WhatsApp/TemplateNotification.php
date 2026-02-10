@@ -14,8 +14,11 @@ class TemplateNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(private readonly string $template)
-    {}
+    public function __construct(
+        private readonly string $template,
+        private readonly string $language = 'en_US',
+        private readonly array $components = [],
+    ) {}
 
     public function via(object $notifiable): array
     {
@@ -24,7 +27,7 @@ class TemplateNotification extends Notification implements ShouldQueue
 
     public function toWhatsApp(object $notifiable): WhatsAppMessage
     {
-        $template = new Template($this->template);
+        $template = new Template($this->template, $this->language, $this->components);
 
         return (new TemplateMessage($template));
     }

@@ -30,7 +30,7 @@ class MenuCreatedStrategy implements ReminderEventStrategy
         $hoursAfter = $trigger->hours_after ?? 0;
 
         if (config('reminders.test_mode')) {
-            $since = now()->subMinute();
+            $since = now()->subMinutes(config('reminders.test_mode_lookback_minutes', 10));
         } else {
             $since = now()->subHours($hoursAfter);
         }
@@ -47,5 +47,16 @@ class MenuCreatedStrategy implements ReminderEventStrategy
             [$entities->count(), $entities->pluck('title')->join(', ')],
             $content
         );
+    }
+
+    public function getTemplateConfig(Campaign $campaign, Collection $entities): array
+    {
+        $templateConfig = config('reminders.templates.menu_created');
+
+        return [
+            'name' => $templateConfig['name'],
+            'language' => $templateConfig['language'],
+            'components' => [],
+        ];
     }
 }

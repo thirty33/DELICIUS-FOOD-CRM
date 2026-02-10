@@ -21,7 +21,6 @@ use App\Models\Message;
 use App\Models\Permission;
 use App\Models\PriceList;
 use App\Models\ReminderNotifiedMenu;
-use App\Models\ReminderPendingNotification;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,13 +28,17 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * End-to-End Test 2: Direct send with existing conversation that has interaction.
+ * End-to-End Test 2: Two batches with existing conversation.
  *
  * FLOW:
- * Phase 1 (setup): reminders:process (batch 1) → user responds → reminders:check-pending
- *   Result: conversation exists with inbound + outbound
- * Phase 2 (test):  Create new menus → reminders:process sends reminder directly
- *   No template, no new conversation, no pending notification
+ * Phase 1: reminders:process (batch 1) → creates conversation + sends template + marks sent
+ * Phase 2: Create new menus → reminders:process reuses conversation + sends template + marks sent
+ *
+ * VALIDATES:
+ * - Existing conversation is reused (no duplicate)
+ * - Second batch sends a new template
+ * - All menus marked as sent
+ * - No duplication of batch 1 notifications
  */
 class EndToEndExistingConversationTest extends TestCase
 {
@@ -171,13 +174,11 @@ class EndToEndExistingConversationTest extends TestCase
     // TEST
     // =========================================================================
 
-    public function test_sends_reminder_directly_when_conversation_has_interaction(): void
+    public function test_reuses_existing_conversation_for_second_batch(): void
     {
         // =================================================================
-        // PHASE 1: Setup - create conversation with full interaction
+        // PHASE 1: First batch → creates conversation + sends template
         // =================================================================
-
-        // Batch 1: create menus and process (creates conversation + pending)
         $batch1 = $this->createMenuBatch(['Lunes', 'Martes', 'Miercoles'], 0);
 
         $this->artisan('reminders:process', ['--event' => 'menu_created'])
@@ -186,60 +187,32 @@ class EndToEndExistingConversationTest extends TestCase
         $this->assertEquals(1, Conversation::count());
         $conversation = Conversation::first();
 
-        // User responds via WhatsApp webhook
-        $this->postJson('/api/v1/whatsapp/webhook', [
-            'entry' => [[
-                'changes' => [[
-                    'field' => 'messages',
-                    'value' => [
-                        'contacts' => [['wa_id' => $conversation->phone_number, 'profile' => ['name' => 'Test User']]],
-                        'messages' => [[
-                            'from' => $conversation->phone_number,
-                            'id' => 'wamid.webhook_' . uniqid(),
-                            'type' => 'text',
-                            'text' => ['body' => 'Hola, quiero ver los menus'],
-                        ]],
-                    ],
-                ]],
-            ]],
-        ])->assertOk();
+        // Template message recorded
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'outbound',
+            'type' => 'template',
+        ]);
 
-        // check-pending sends batch 1 reminder
-        $this->artisan('reminders:check-pending')
-            ->assertSuccessful();
-
-        // Verify phase 1 state: conversation has template + inbound + reminder
-        $this->assertEquals(3, Message::where('conversation_id', $conversation->id)->count());
+        // 3 notified menus, all sent
         $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'sent')->count());
-        $this->assertEquals(1, ReminderPendingNotification::where('status', 'sent')->count());
 
         // =================================================================
-        // PHASE 2: New menus → reminders:process sends directly
+        // PHASE 2: Second batch → reuses conversation + sends template
         // =================================================================
         $batch2 = $this->createMenuBatch(['Lunes', 'Martes', 'Miercoles'], 1);
 
         $this->artisan('reminders:process', ['--event' => 'menu_created'])
             ->assertSuccessful();
 
-        // A. Still 1 conversation (no new one created)
+        // A. Still 1 conversation (reused existing)
         $this->assertEquals(1, Conversation::count());
 
-        // B. No new template sent
-        // HTTP calls: 1 template (phase 1) + 1 text reminder batch 1 (phase 1) + 1 text reminder batch 2 (phase 2)
-        Http::assertSentCount(3);
+        // B. 6 notified menus total (3 batch 1 + 3 batch 2), all sent
+        $this->assertEquals(6, ReminderNotifiedMenu::count());
+        $this->assertEquals(6, ReminderNotifiedMenu::where('status', 'sent')->count());
 
-        // C. 4 messages: template + inbound + reminder batch 1 + reminder batch 2
-        $this->assertEquals(4, Message::where('conversation_id', $conversation->id)->count());
-
-        $batch2Reminder = Message::where('conversation_id', $conversation->id)
-            ->where('direction', 'outbound')
-            ->where('type', 'text')
-            ->orderByDesc('id')
-            ->first();
-        $this->assertNotNull($batch2Reminder);
-        $this->assertEquals('Hay 3 nuevos menus: Menu Lunes S2, Menu Martes S2, Menu Miercoles S2', $batch2Reminder->body);
-
-        // D. Batch 2 notified menus → sent directly (not pending)
+        // C. Batch 2 menus all marked as sent
         $batch2MenuIds = collect($batch2)->pluck('id')->toArray();
         $batch2Notifications = ReminderNotifiedMenu::whereIn('menu_id', $batch2MenuIds)->get();
         $this->assertCount(3, $batch2Notifications);
@@ -248,14 +221,7 @@ class EndToEndExistingConversationTest extends TestCase
             $this->assertNotNull($notified->notified_at);
         }
 
-        // E. No new waiting_response pending notification
-        $this->assertEquals(0, ReminderPendingNotification::where('status', 'waiting_response')->count());
-
-        // F. Totals: 6 notified menus (3 batch 1 + 3 batch 2), all sent
-        $this->assertEquals(6, ReminderNotifiedMenu::count());
-        $this->assertEquals(6, ReminderNotifiedMenu::where('status', 'sent')->count());
-
-        // G. Batch 1 menus not duplicated
+        // D. Batch 1 menus not duplicated
         $batch1MenuIds = collect($batch1)->pluck('id')->toArray();
         foreach ($batch1MenuIds as $menuId) {
             $this->assertEquals(1, ReminderNotifiedMenu::where('menu_id', $menuId)->count());

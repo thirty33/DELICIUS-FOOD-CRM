@@ -22,7 +22,6 @@ use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\PriceList;
 use App\Models\ReminderNotifiedMenu;
-use App\Models\ReminderPendingNotification;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Reminders\ProcessRemindersService;
@@ -31,20 +30,18 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Test 3: Two batches of menus without pending duplication.
+ * Test 3: Two batches of menus without notification duplication.
  *
  * SCENARIO:
  * Batch 1: 3 menus created (week 1) → processed → 1 conversation, 1 template,
- *          3 reminder_notified_menus, 1 pending_notification with 3 menu_ids.
- * Batch 2: 3 new menus created (week 2) → processed → NO new conversation,
- *          NO new template, 3 NEW reminder_notified_menus (total 6),
- *          pending_notification updated with 6 menu_ids.
+ *          3 reminder_notified_menus (all sent).
+ * Batch 2: 3 new menus created (week 2) → processed → reuses conversation,
+ *          sends new template, 3 NEW reminder_notified_menus (total 6, all sent).
  *
  * VALIDATES:
  * - Second batch does NOT duplicate notifications for first batch menus
  * - Second batch only processes new menus
- * - Pending notification accumulates menu_ids without duplicates
- * - No second template is sent (conversation exists, user hasn't responded)
+ * - All notifications are marked as sent
  */
 class ProcessMenuCreatedTwoBatchesTest extends TestCase
 {
@@ -182,7 +179,7 @@ class ProcessMenuCreatedTwoBatchesTest extends TestCase
     // TEST
     // =========================================================================
 
-    public function test_second_batch_does_not_duplicate_pending_from_first_batch(): void
+    public function test_second_batch_does_not_duplicate_notifications_from_first_batch(): void
     {
         /** @var ProcessRemindersService $service */
         $service = app(ProcessRemindersService::class);
@@ -196,25 +193,17 @@ class ProcessMenuCreatedTwoBatchesTest extends TestCase
 
         // A. Service returns correct totals for phase 1
         $this->assertEquals(1, $result1['triggers_processed']);
-        $this->assertEquals(0, $result1['sent']);
-        $this->assertEquals(1, $result1['pending']);
+        $this->assertEquals(1, $result1['sent']);
+        $this->assertEquals(0, $result1['pending']);
         $this->assertEquals(0, $result1['failed']);
         $this->assertEquals(0, $result1['skipped']);
 
-        // B. 1 conversation created, 1 template sent
+        // B. 1 conversation created
         $this->assertEquals(1, Conversation::count());
-        Http::assertSentCount(1);
 
-        // C. 3 reminder_notified_menus (3 menus × 1 recipient)
+        // C. 3 reminder_notified_menus (3 menus × 1 recipient), all sent
         $this->assertEquals(3, ReminderNotifiedMenu::count());
-        $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'pending')->count());
-
-        // D. 1 pending notification with 3 menu_ids
-        $this->assertEquals(1, ReminderPendingNotification::count());
-        $batch1MenuIds = collect($this->batch1Menus)->pluck('id')->sort()->values()->toArray();
-        $pending = ReminderPendingNotification::first();
-        $this->assertEquals($batch1MenuIds, collect($pending->menu_ids)->sort()->values()->toArray());
-        $this->assertEquals('waiting_response', $pending->status);
+        $this->assertEquals(3, ReminderNotifiedMenu::where('status', 'sent')->count());
 
         // =================================================================
         // PHASE 2: Second batch of menus (week 2)
@@ -223,22 +212,19 @@ class ProcessMenuCreatedTwoBatchesTest extends TestCase
 
         $result2 = $service->processEventType(CampaignEventType::MENU_CREATED);
 
-        // E. Service returns correct totals for phase 2
+        // D. Service returns correct totals for phase 2
         $this->assertEquals(1, $result2['triggers_processed']);
-        $this->assertEquals(0, $result2['sent']);
-        $this->assertEquals(1, $result2['pending']);
+        $this->assertEquals(1, $result2['sent']);
+        $this->assertEquals(0, $result2['pending']);
         $this->assertEquals(0, $result2['failed']);
         $this->assertEquals(0, $result2['skipped']);
 
-        // F. Still 1 conversation (no new one created)
+        // E. Still 1 conversation (reused existing)
         $this->assertEquals(1, Conversation::count());
 
-        // No second template sent (still 1 total)
-        Http::assertSentCount(1);
-
-        // G. 6 reminder_notified_menus total (3 batch 1 + 3 batch 2)
+        // F. 6 reminder_notified_menus total (3 batch 1 + 3 batch 2), all sent
         $this->assertEquals(6, ReminderNotifiedMenu::count());
-        $this->assertEquals(6, ReminderNotifiedMenu::where('status', 'pending')->count());
+        $this->assertEquals(6, ReminderNotifiedMenu::where('status', 'sent')->count());
 
         // Each batch has exactly 3 records
         foreach ($this->batch1Menus as $menu) {
@@ -248,19 +234,7 @@ class ProcessMenuCreatedTwoBatchesTest extends TestCase
             $this->assertEquals(1, ReminderNotifiedMenu::where('menu_id', $menu->id)->count());
         }
 
-        // H. Still 1 pending notification, now with 6 menu_ids
-        $this->assertEquals(1, ReminderPendingNotification::count());
-        $allMenuIds = collect(array_merge($this->batch1Menus, $this->batch2Menus))
-            ->pluck('id')->sort()->values()->toArray();
-        $pending->refresh();
-        $storedMenuIds = collect($pending->menu_ids)->sort()->values()->toArray();
-        $this->assertEquals($allMenuIds, $storedMenuIds);
-        $this->assertEquals('waiting_response', $pending->status);
-
-        // No duplicate menu_ids
-        $this->assertCount(6, array_unique($pending->menu_ids));
-
-        // I. 2 campaign executions (one per processing run)
+        // G. 2 campaign executions (one per processing run)
         $this->assertEquals(2, CampaignExecution::count());
         $this->assertEquals(
             2,
@@ -271,9 +245,12 @@ class ProcessMenuCreatedTwoBatchesTest extends TestCase
         // NEGATIVE VALIDATIONS
         // =================================================================
 
-        // No sent notifications
+        // No pending or failed notifications
         $this->assertDatabaseMissing('reminder_notified_menus', [
-            'status' => 'sent',
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('reminder_notified_menus', [
+            'status' => 'failed',
         ]);
 
         // No duplicate records in reminder_notified_menus

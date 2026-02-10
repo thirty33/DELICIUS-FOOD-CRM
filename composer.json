@@ -17,6 +17,7 @@
         "filament/filament": "^3.3",
         "laravel/envoy": "^2.9",
         "laravel/framework": "^11.9",
+        "laravel/mcp": "^0.5",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10",
         "league/commonmark": "^2.7.0",
