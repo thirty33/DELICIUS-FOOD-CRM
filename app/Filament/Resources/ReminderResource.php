@@ -83,14 +83,15 @@ class ReminderResource extends Resource
                             ]),
                     ]),
 
-                Forms\Components\Section::make('Mensaje')
-                    ->schema([
-                        Forms\Components\Textarea::make('content')
-                            ->label('Contenido del mensaje')
-                            ->required()
-                            ->rows(5)
-                            ->helperText('Variables disponibles: {{company.name}}, {{company.fantasy_name}}, {{branch.address}}, {{branch.contact_name}}'),
-                    ]),
+                // Hidden: message content is now managed via WhatsApp templates
+                // Forms\Components\Section::make('Mensaje')
+                //     ->schema([
+                //         Forms\Components\Textarea::make('content')
+                //             ->label('Contenido del mensaje')
+                //             ->required()
+                //             ->rows(5)
+                //             ->helperText('Variables disponibles: {{company.name}}, {{company.fantasy_name}}, {{branch.address}}, {{branch.contact_name}}'),
+                //     ]),
 
                 Forms\Components\Section::make('Destinatarios')
                     ->schema([
