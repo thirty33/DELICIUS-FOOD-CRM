@@ -6,6 +6,7 @@ use App\Imports\Concerns\OrderLineColumnDefinition;
 use App\Models\OrderLine;
 use App\Models\Order;
 use App\Models\ExportProcess;
+use App\Repositories\MasterCategoryRepository;
 use App\Enums\OrderStatus;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -63,6 +64,7 @@ class OrderLineExport implements
     private $totalChunks;
     private $orderLineIds = null;
     private $totalRecords = 0;
+    private MasterCategoryRepository $masterCategoryRepository;
 
     /**
      * Constructor with backward-compatible signature.
@@ -84,6 +86,7 @@ class OrderLineExport implements
         ?int $totalIds = null
     ) {
         $this->exportProcessId = $exportProcessId;
+        $this->masterCategoryRepository = app(MasterCategoryRepository::class);
 
         // If S3 base path is provided, use chunked mode
         // Otherwise, store IDs in memory (for tests and small exports)
@@ -197,7 +200,7 @@ class OrderLineExport implements
             'order.user',
             'order.user.company',
             'order.user.branch',
-            'product.category'
+            'product.category.masterCategories'
         ])->whereIn('id', $ids);
     }
 
@@ -309,6 +312,7 @@ class OrderLineExport implements
                 'nombre_fantasia_sucursal' => $branch ? $branch->fantasy_name : null,
                 'usuario' => $user ? ($user->email ?: $user->nickname) : null,
                 'codigo_de_facturacion_usuario' => $user ? ($user->billing_code ?? '') : '',
+                'categoria_maestra' => $category ? $this->masterCategoryRepository->getNamesForCategory($category->id)->implode(', ') : '',
                 'categoria' => $category ? $category->name : null,
                 'codigo_de_producto' => $codigoProducto,
                 'codigo_de_facturacion_producto' => $product ? ($product->billing_code ?? '') : '',

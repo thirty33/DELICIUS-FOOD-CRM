@@ -92,5 +92,10 @@ class Category extends Model
         return $this->belongsToMany(CategoryGroup::class, 'category_category_group')
             ->withTimestamps();
     }
-    
+
+    public function masterCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(MasterCategory::class, 'category_master_category')
+            ->withTimestamps();
+    }
 }

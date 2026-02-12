@@ -5,6 +5,7 @@ namespace App\Exports;
 use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Product;
 use App\Models\ExportProcess;
+use App\Repositories\MasterCategoryRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -40,16 +41,18 @@ class ProductsDataExport implements
 
     private $exportProcessId;
     private $productIds;
+    private MasterCategoryRepository $masterCategoryRepository;
 
     public function __construct(Collection $productIds, int $exportProcessId)
     {
         $this->productIds = $productIds;
         $this->exportProcessId = $exportProcessId;
+        $this->masterCategoryRepository = app(MasterCategoryRepository::class);
     }
 
     public function query()
     {
-        return Product::with(['category', 'ingredients', 'productionAreas'])
+        return Product::with(['category.masterCategories', 'ingredients', 'productionAreas'])
             ->whereIn('id', $this->productIds);
     }
     
@@ -66,6 +69,7 @@ class ProductsDataExport implements
                 'nombre' => $product->name,
                 'descripcion' => $product->description,
                 'precio' => '$' . number_format($product->price / 100, 2, '.', ','),
+                'categoria_maestra' => $this->masterCategoryRepository->getNamesForCategory($product->category_id)->implode(', '),
                 'categoria' => $product->category->name,
                 'unidad_de_medida' => $product->measure_unit,
                 'nombre_archivo_original' => $product->original_filename,

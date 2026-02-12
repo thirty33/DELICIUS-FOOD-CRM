@@ -6,6 +6,7 @@ use App\Imports\ProductsImport;
 use App\Models\Category;
 use App\Models\ImportProcess;
 use App\Models\Ingredient;
+use App\Models\MasterCategory;
 use App\Models\Product;
 use App\Models\ProductionArea;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -335,5 +336,135 @@ class ProductImportSingleProductTest extends TestCase
         $product3 = Product::where('code', 'TEST-BILL-003')->first();
         $this->assertNotNull($product3);
         $this->assertNull($product3->billing_code);
+    }
+
+    /**
+     * Test that master categories are imported from the "Categoria Maestra" column.
+     *
+     * Fixture: test_product_master_category.xlsx (3 products, 16 columns)
+     * - Product 1: TEST-MC-001, category MINI ENSALADAS, master categories "Almuerzos, Platos Fríos"
+     * - Product 2: TEST-MC-002, category BEBESTIBLES, master category "Bebidas"
+     * - Product 3: TEST-MC-003, category ACOMPAÑAMIENTOS, master category empty
+     *
+     * Expected:
+     * - MasterCategory "Almuerzos" created and associated to MINI ENSALADAS
+     * - MasterCategory "Platos Fríos" created and associated to MINI ENSALADAS
+     * - MasterCategory "Bebidas" created and associated to BEBESTIBLES
+     * - ACOMPAÑAMIENTOS has no master categories
+     */
+    public function test_imports_master_categories_from_excel(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        // Create categories needed
+        Category::create(['name' => 'BEBESTIBLES']);
+        Category::create(['name' => 'ACOMPAÑAMIENTOS']);
+
+        $this->assertEquals(0, MasterCategory::count(), 'Should start with 0 master categories');
+
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_PRODUCTS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        $testFile = base_path('tests/Fixtures/test_product_master_category.xlsx');
+        $this->assertFileExists($testFile);
+
+        Excel::import(
+            new ProductsImport($importProcess->id),
+            $testFile
+        );
+
+        $importProcess->refresh();
+        $this->assertEquals(
+            ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete without errors'
+        );
+
+        $this->assertEquals(3, Product::count(), 'Should have imported 3 products');
+
+        // Verify master categories were created
+        $this->assertEquals(3, MasterCategory::count(), 'Should have created 3 master categories');
+        $this->assertNotNull(MasterCategory::where('name', 'Almuerzos')->first());
+        $this->assertNotNull(MasterCategory::where('name', 'Platos Fríos')->first());
+        $this->assertNotNull(MasterCategory::where('name', 'Bebidas')->first());
+
+        // Verify associations to categories
+        $catEnsaladas = Category::where('name', 'MINI ENSALADAS')->first();
+        $masterNames = $catEnsaladas->masterCategories->pluck('name')->sort()->values()->toArray();
+        $this->assertEquals(['Almuerzos', 'Platos Fríos'], $masterNames);
+
+        $catBebidas = Category::where('name', 'BEBESTIBLES')->first();
+        $this->assertEquals(['Bebidas'], $catBebidas->masterCategories->pluck('name')->toArray());
+
+        // Category without master categories
+        $catAcomp = Category::where('name', 'ACOMPAÑAMIENTOS')->first();
+        $this->assertCount(0, $catAcomp->masterCategories);
+    }
+
+    /**
+     * Test that existing master categories are reused and associated
+     * (not duplicated) when reimporting.
+     */
+    public function test_imports_master_categories_reuses_existing(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        Category::create(['name' => 'BEBESTIBLES']);
+        Category::create(['name' => 'ACOMPAÑAMIENTOS']);
+
+        // Pre-create a master category
+        $existing = MasterCategory::create(['name' => 'Almuerzos']);
+
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_PRODUCTS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        Excel::import(
+            new ProductsImport($importProcess->id),
+            base_path('tests/Fixtures/test_product_master_category.xlsx')
+        );
+
+        // "Almuerzos" should NOT be duplicated
+        $this->assertEquals(3, MasterCategory::count(), 'Should have 3 master categories (not 4)');
+
+        // The existing one should be the same record
+        $catEnsaladas = Category::where('name', 'MINI ENSALADAS')->first();
+        $almuerzos = $catEnsaladas->masterCategories->where('name', 'Almuerzos')->first();
+        $this->assertEquals($existing->id, $almuerzos->id, 'Should reuse existing MasterCategory');
+    }
+
+    /**
+     * Test that master category field is not mandatory (products without it import fine).
+     */
+    public function test_imports_products_without_master_category(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        Category::create(['name' => 'BEBESTIBLES']);
+        Category::create(['name' => 'ACOMPAÑAMIENTOS']);
+
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_PRODUCTS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        Excel::import(
+            new ProductsImport($importProcess->id),
+            base_path('tests/Fixtures/test_product_master_category.xlsx')
+        );
+
+        // Product 3 has empty master category - should import fine
+        $product3 = Product::where('code', 'TEST-MC-003')->first();
+        $this->assertNotNull($product3, 'Product without master category should be imported');
+        $this->assertEquals('ACOMPAÑAMIENTOS', $product3->category->name);
+
+        $importProcess->refresh();
+        $this->assertNull($importProcess->error_log, 'No errors expected');
     }
 }

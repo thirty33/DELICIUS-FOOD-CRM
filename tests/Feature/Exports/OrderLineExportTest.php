@@ -9,6 +9,7 @@ use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\ExportProcess;
+use App\Models\MasterCategory;
 use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\PriceList;
@@ -352,6 +353,45 @@ class OrderLineExportTest extends TestCase
         $this->assertContains('Codigo de Facturacion Producto', $headers);
 
         $this->assertCellEquals($sheet, 'codigo_de_facturacion_producto', 2, 'FACT-PROD-001');
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    public function test_exports_master_category_when_present(): void
+    {
+        $mc1 = MasterCategory::create(['name' => 'Almuerzos']);
+        $mc2 = MasterCategory::create(['name' => 'Platos Fríos']);
+        $this->category->masterCategories()->sync([$mc1->id, $mc2->id]);
+
+        $filePath = $this->generateOrderLineExport(collect([$this->orderLine->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Categoria Maestra', $headers);
+
+        // Verify "Categoria Maestra" comes before "Categoría"
+        $mcIndex = array_search('Categoria Maestra', $headers);
+        $catIndex = array_search('Categoría', $headers);
+        $this->assertLessThan($catIndex, $mcIndex, '"Categoria Maestra" should come before "Categoría"');
+
+        // Verify comma-separated values
+        $mcValue = $sheet->getCell(OrderLineColumnDefinition::cell('categoria_maestra', 2))->getValue();
+        $mcNames = array_map('trim', explode(',', $mcValue));
+        sort($mcNames);
+        $this->assertEquals(['Almuerzos', 'Platos Fríos'], $mcNames);
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    public function test_exports_empty_master_category_when_none_associated(): void
+    {
+        $filePath = $this->generateOrderLineExport(collect([$this->orderLine->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Categoria Maestra', $headers);
+
+        $this->assertCellEmpty($sheet, 'categoria_maestra', 2, 'Master category should be empty when none associated');
 
         $this->cleanupTestFile($filePath);
     }

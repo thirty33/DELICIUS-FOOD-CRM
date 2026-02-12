@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Imports\Concerns\ProductColumnDefinition;
+use App\Actions\Products\SyncMasterCategoriesAction;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\ProductionArea;
@@ -39,9 +40,12 @@ class ProductsImport implements
 
     private $headingMap = ProductColumnDefinition::HEADING_MAP;
 
+    private SyncMasterCategoriesAction $syncMasterCategoriesAction;
+
     public function __construct(int $importProcessId)
     {
         $this->importProcessId = $importProcessId;
+        $this->syncMasterCategoriesAction = app(SyncMasterCategoriesAction::class);
     }
 
     public function collection(Collection $rows)
@@ -62,8 +66,10 @@ class ProductsImport implements
                     $productData = $this->prepareProductData($row, $category);
                     $ingredients = isset($productData['_ingredients']) ? $productData['_ingredients'] : [];
                     $productionAreas = isset($productData['_production_areas']) ? $productData['_production_areas'] : [];
+                    $masterCategories = isset($productData['_master_categories']) ? $productData['_master_categories'] : null;
                     unset($productData['_ingredients']);
                     unset($productData['_production_areas']);
+                    unset($productData['_master_categories']);
 
                     $product = Product::updateOrCreate(
                         [
@@ -99,6 +105,11 @@ class ProductsImport implements
                         if (!empty($productionAreaIds)) {
                             $product->productionAreas()->sync($productionAreaIds);
                         }
+                    }
+
+                    // Handle master categories
+                    if (!empty($masterCategories)) {
+                        $this->syncMasterCategoriesAction->execute($category, $masterCategories);
                     }
 
                 } catch (\Exception $e) {
@@ -137,6 +148,10 @@ class ProductsImport implements
 
         if (isset($row['areas_de_produccion']) && !empty($row['areas_de_produccion']) && $row['areas_de_produccion'] !== '-') {
             $data['_production_areas'] = explode(',', $row['areas_de_produccion']);
+        }
+
+        if (isset($row['categoria_maestra']) && !empty($row['categoria_maestra']) && $row['categoria_maestra'] !== '-') {
+            $data['_master_categories'] = $row['categoria_maestra'];
         }
 
         return $data;

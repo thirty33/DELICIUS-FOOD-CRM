@@ -8,6 +8,7 @@ use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Category;
 use App\Models\ExportProcess;
 use App\Models\Ingredient;
+use App\Models\MasterCategory;
 use App\Models\Product;
 use App\Models\ProductionArea;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -288,6 +289,54 @@ class ProductsDataExportTest extends TestCase
 
         $headers = $this->readHeaderRow($sheet);
         $this->assertContains('Codigo de Facturacion', $headers);
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * Test that master categories are exported as comma-separated values
+     * in the "Categoria Maestra" column, placed before "Categoría".
+     */
+    public function test_exports_master_categories_when_present(): void
+    {
+        // Associate master categories to the product's category
+        $mc1 = MasterCategory::create(['name' => 'Almuerzos']);
+        $mc2 = MasterCategory::create(['name' => 'Platos Fríos']);
+        $this->category->masterCategories()->sync([$mc1->id, $mc2->id]);
+
+        $filePath = $this->generateProductExport(collect([$this->product->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Categoria Maestra', $headers);
+
+        // Verify "Categoria Maestra" comes before "Categoría"
+        $mcIndex = array_search('Categoria Maestra', $headers);
+        $catIndex = array_search('Categoría', $headers);
+        $this->assertLessThan($catIndex, $mcIndex, '"Categoria Maestra" should come before "Categoría"');
+
+        // Verify comma-separated values
+        $mcValue = $sheet->getCell(ProductColumnDefinition::cell('categoria_maestra', 2))->getValue();
+        $mcNames = array_map('trim', explode(',', $mcValue));
+        sort($mcNames);
+        $this->assertEquals(['Almuerzos', 'Platos Fríos'], $mcNames);
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    /**
+     * Test that master category column is empty when category has no master categories.
+     */
+    public function test_exports_empty_master_category_when_none_associated(): void
+    {
+        // No master categories associated
+        $filePath = $this->generateProductExport(collect([$this->product->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Categoria Maestra', $headers);
+
+        $this->assertCellEmpty($sheet, 'categoria_maestra', 2, 'Master category should be empty when none associated');
 
         $this->cleanupTestFile($filePath);
     }
