@@ -22,7 +22,7 @@ class OrderHelper
     {
         $todayWithHour = Carbon::now();
         $today = Carbon::now()->startOfDay();
-        $daysDifference = $date->diffInDays($today, true);
+        $daysDifference = (int) $date->diffInDays($today, true);
         $preparationDays = $categoryLine->preparation_days;
 
         if ($daysDifference > $preparationDays) {
@@ -124,7 +124,7 @@ class OrderHelper
 
             $todayWithHour = Carbon::now();
             $today = Carbon::now()->startOfDay();
-            $daysDifference = $date->diffInDays($today, true);
+            $daysDifference = (int) $date->diffInDays($today, true);
             $preparationDays = $categoryLine->preparation_days;
 
             if ($daysDifference > $preparationDays) {

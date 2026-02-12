@@ -368,13 +368,13 @@ class MenusImport implements
         // Try string parsing if not numeric or serial conversion failed
         if (is_string($dateValue)) {
             try {
-                return Carbon::createFromFormat('d/m/Y', $dateValue);
+                return Carbon::createFromFormat('d/m/Y', (string) $dateValue);
             } catch (\Exception $e) {
                 // Try other common formats
                 $formats = ['Y-m-d', 'd-m-Y', 'm/d/Y'];
                 foreach ($formats as $format) {
                     try {
-                        return Carbon::createFromFormat($format, $dateValue);
+                        return Carbon::createFromFormat($format, (string) $dateValue);
                     } catch (\Exception $e) {
                         continue;
                     }
@@ -426,7 +426,7 @@ class MenusImport implements
 
         foreach ($formats as $format) {
             try {
-                return Carbon::createFromFormat($format, $dateString);
+                return Carbon::createFromFormat($format, (string) $dateString);
             } catch (\Exception $e) {
                 continue;
             }

@@ -3,6 +3,10 @@
     "delicius-menus": {
       "command": "./vendor/bin/sail",
       "args": ["artisan", "mcp:start", "menus"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
     }
   }
 }

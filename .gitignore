@@ -20,6 +20,7 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+.playwright-mcp/
 keys/
 Envoy.blade.php
 composer.lock

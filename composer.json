@@ -1,22 +1,59 @@
 {
+    "repositories": [
+        {
+            "type": "package",
+            "package": {
+                "name": "dreamonkey/laravel-cloudfront-url-signer",
+                "version": "3.4.1",
+                "source": {
+                    "url": "https://github.com/dreamonkey/laravel-cloudfront-url-signer.git",
+                    "type": "git",
+                    "reference": "master"
+                },
+                "require": {
+                    "php": "^7.3.0|^8.0",
+                    "illuminate/support": "^6.0|^7.0|^8.0|^9.0|^10.0|^11.0|^12.0",
+                    "aws/aws-sdk-php": "^3.52"
+                },
+                "autoload": {
+                    "psr-4": {
+                        "Dreamonkey\\CloudFrontUrlSigner\\": "src"
+                    },
+                    "files": [
+                        "src/helpers.php"
+                    ]
+                },
+                "extra": {
+                    "laravel": {
+                        "providers": [
+                            "Dreamonkey\\CloudFrontUrlSigner\\CloudFrontUrlSignerServiceProvider"
+                        ],
+                        "aliases": {
+                            "CloudFrontUrlSigner": "Dreamonkey\\CloudFrontUrlSigner\\Facades\\CloudFrontUrlSigner"
+                        }
+                    }
+                }
+            }
+        }
+    ],
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "^8.4",
         "aws/aws-sdk-php": "^3.339",
         "barryvdh/laravel-dompdf": "^3.1",
         "codeat3/blade-carbon-icons": "^2.29",
         "codeat3/blade-eos-icons": "^1.14",
         "codeat3/blade-iconpark": "^1.6",
-        "dreamonkey/laravel-cloudfront-url-signer": "dev-master",
+        "dreamonkey/laravel-cloudfront-url-signer": "^3.4",
         "eduard9969/blade-polaris-icons": "^2.7",
         "fakerphp/faker": "^1.23",
         "filament/filament": "^3.3",
         "laravel/envoy": "^2.9",
-        "laravel/framework": "^11.9",
+        "laravel/framework": "^12.50",
         "laravel/mcp": "^0.5",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10",
@@ -30,7 +67,7 @@
         "phpoffice/phpspreadsheet": "^1.30.0",
         "picqer/php-barcode-generator": "^3.2",
         "resend/resend-laravel": "^0.17.0",
-        "ryangjchandler/blade-tabler-icons": "^2.3",
+        "secondnetwork/blade-tabler-icons": "^3.36",
         "saade/blade-iconsax": "^1.2",
         "setasign/fpdi": "^2.6",
         "symfony/http-foundation": "^7.3.7",
@@ -41,7 +78,7 @@
         "laravel/dusk": "^8.3",
         "laravel/pint": "^1.13",
         "laravel/sail": "^1.31",
-        "laravel/telescope": "^5.2",
+        "laravel/telescope": "^5.5",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.0",
         "phpunit/phpunit": "^11.0.1"

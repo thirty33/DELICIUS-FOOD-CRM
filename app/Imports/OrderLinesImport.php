@@ -284,7 +284,7 @@ class OrderLinesImport implements
                     if (!is_numeric($row['fecha_de_orden'])) {
                         // If it's a string, validate DD/MM/YYYY format
                         try {
-                            Carbon::createFromFormat('d/m/Y', $row['fecha_de_orden']);
+                            Carbon::createFromFormat('d/m/Y', (string) $row['fecha_de_orden']);
                         } catch (\Exception $e) {
                             $validator->errors()->add(
                                 "{$index}.fecha_de_orden",
@@ -299,7 +299,7 @@ class OrderLinesImport implements
                     if (!is_numeric($row['fecha_de_despacho'])) {
                         // If it's a string, validate DD/MM/YYYY format
                         try {
-                            Carbon::createFromFormat('d/m/Y', $row['fecha_de_despacho']);
+                            Carbon::createFromFormat('d/m/Y', (string) $row['fecha_de_despacho']);
                         } catch (\Exception $e) {
                             $validator->errors()->add(
                                 "{$index}.fecha_de_despacho",
@@ -1150,12 +1150,12 @@ class OrderLinesImport implements
             // Convert Excel serial number to Unix timestamp
             // Excel base date is 1899-12-30 (accounting for Excel's leap year bug)
             $unixTimestamp = ($dateValue - 25569) * 86400;
-            return Carbon::createFromTimestamp($unixTimestamp)->format('Y-m-d');
+            return Carbon::createFromTimestamp($unixTimestamp, config('app.timezone'))->format('Y-m-d');
         }
 
         // If it's already a string in DD/MM/YYYY format
         if (is_string($dateValue) && strpos($dateValue, '/') !== false) {
-            return Carbon::createFromFormat('d/m/Y', $dateValue)->format('Y-m-d');
+            return Carbon::createFromFormat('d/m/Y', (string) $dateValue)->format('Y-m-d');
         }
 
         // If it's a standard date string (Y-m-d or similar)

@@ -81,7 +81,7 @@ class ProductImageSignerDecorator
 
                 // Si la URL no ha expirado, usarla
                 if ($expirationTimestamp > $nowTimestamp) {
-                    $diffDays = $nowDateTime->diffInDays($expirationDateTime);
+                    $diffDays = (int) $nowDateTime->diffInDays($expirationDateTime);
 
                     return [
                         'original_file' => $filePath,
