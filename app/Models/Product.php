@@ -29,7 +29,8 @@ class Product extends Model
         'original_filename',
         'cloudfront_signed_url',
         'signed_url_expiration',
-        'is_null_product'
+        'is_null_product',
+        'billing_code',
     ];
 
     protected $casts = [

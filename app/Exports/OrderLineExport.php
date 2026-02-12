@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Imports\Concerns\OrderLineColumnDefinition;
 use App\Models\OrderLine;
 use App\Models\Order;
 use App\Models\ExportProcess;
@@ -55,35 +56,7 @@ class OrderLineExport implements
      */
     public $timeout = 1200;
 
-    /**
-     * Headers modified to display user-friendly texts while maintaining compatibility
-     * with the keys expected by the import system.
-     * Keys are the internal names used by the system and values are the visible texts.
-     */
-    private $headers = [
-        'id_orden' => 'ID Orden',
-        'codigo_de_pedido' => 'Código de Pedido',
-        'estado' => 'Estado',
-        'fecha_de_orden' => 'Fecha de Orden',
-        'fecha_de_despacho' => 'Fecha de Despacho',
-        'codigo_empresa' => 'Código de Empresa', // NEW: Company code
-        'empresa' => 'Empresa',
-        // 'nombre_fantasia' => 'Nombre Fantasía', // REMOVED: Replaced by branch info
-        // 'cliente' => 'Cliente', // REMOVED: Replaced by branch info
-        'codigo_sucursal' => 'Código Sucursal', // NEW: Branch code
-        'nombre_fantasia_sucursal' => 'Nombre Fantasía Sucursal', // NEW: Branch fantasy name
-        'usuario' => 'Usuario',
-        'categoria_producto' => 'Categoría',
-        'codigo_de_producto' => 'Código de Producto',
-        'nombre_producto' => 'Nombre Producto',
-        'cantidad' => 'Cantidad',
-        'precio_neto' => 'Precio Neto',
-        'precio_con_impuesto' => 'Precio con Impuesto',
-        'precio_total_neto' => 'Precio Total Neto',
-        'precio_total_con_impuesto' => 'Precio Total con Impuesto',
-        'parcialmente_programado' => 'Parcialmente Programado',
-        // 'precio_transporte' => 'Precio Transporte' // REMOVED: Will be separate row
-    ];
+    private $headers = OrderLineColumnDefinition::COLUMNS;
 
     private $exportProcessId;
     private $orderLineIdsS3BasePath;
@@ -323,23 +296,22 @@ class OrderLineExport implements
             // }
 
 
-            // Map data using the same keys expected by the importer
+            // Map data using keys matching OrderLineColumnDefinition::COLUMNS
             return [
                 'id_orden' => $order ? $order->id : null,
                 'codigo_de_pedido' => $codigoPedido,
                 'estado' => $estadoOrden,
                 'fecha_de_orden' => $fechaOrden,
                 'fecha_de_despacho' => $fechaDespacho,
-                'codigo_empresa' => $company ? $company->company_code : null, // NEW: Company code
+                'codigo_de_empresa' => $company ? $company->company_code : null,
                 'empresa' => $company ? $company->name : null,
-                // OLD FIELDS (commented for validation):
-                // 'nombre_fantasia' => $company ? $company->fantasy_name : null,
-                // 'cliente' => $user ? $user->name : null,
-                'codigo_sucursal' => $branch ? $branch->branch_code : null, // NEW: Branch code
-                'nombre_fantasia_sucursal' => $branch ? $branch->fantasy_name : null, // NEW: Branch fantasy name
+                'codigo_sucursal' => $branch ? $branch->branch_code : null,
+                'nombre_fantasia_sucursal' => $branch ? $branch->fantasy_name : null,
                 'usuario' => $user ? ($user->email ?: $user->nickname) : null,
-                'categoria_producto' => $category ? $category->name : null,
+                'codigo_de_facturacion_usuario' => $user ? ($user->billing_code ?? '') : '',
+                'categoria' => $category ? $category->name : null,
                 'codigo_de_producto' => $codigoProducto,
+                'codigo_de_facturacion_producto' => $product ? ($product->billing_code ?? '') : '',
                 'nombre_producto' => $product ? $product->name : null,
                 'cantidad' => $orderLine->quantity,
                 'precio_neto' => $orderLine->unit_price / 100,
@@ -347,8 +319,6 @@ class OrderLineExport implements
                 'precio_total_neto' => $precioTotalNeto / 100,
                 'precio_total_con_impuesto' => $precioTotalConImpuesto / 100,
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0',
-                // OLD FIELD (commented for validation):
-                // 'precio_transporte' => $transportPriceValue
             ];
         } catch (\Exception $e) {
             Log::error('Error mapping order line for export', [
@@ -382,13 +352,12 @@ class OrderLineExport implements
     public function columnFormats(): array
     {
         return [
-            'B' => NumberFormat::FORMAT_NUMBER,                     // codigo_de_pedido
-            'K' => NumberFormat::FORMAT_TEXT,                       // codigo_de_producto (alfanumérico)
-            'N' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,    // precio_neto
-            'O' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,    // precio_con_impuesto
-            'P' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,    // precio_total_neto
-            'Q' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,    // precio_total_con_impuesto
-            'S' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,    // precio_transporte
+            OrderLineColumnDefinition::columnLetter('codigo_de_pedido') => NumberFormat::FORMAT_NUMBER,
+            OrderLineColumnDefinition::columnLetter('codigo_de_producto') => NumberFormat::FORMAT_TEXT,
+            OrderLineColumnDefinition::columnLetter('precio_neto') => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            OrderLineColumnDefinition::columnLetter('precio_con_impuesto') => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            OrderLineColumnDefinition::columnLetter('precio_total_neto') => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            OrderLineColumnDefinition::columnLetter('precio_total_con_impuesto') => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
         ];
     }
 
@@ -451,31 +420,52 @@ class OrderLineExport implements
     {
         $lastRow = $sheet->getHighestRow();
 
+        // Resolve column letters from the single source of truth
+        $colIdOrden = OrderLineColumnDefinition::columnLetter('id_orden');
+        $colCodigoPedido = OrderLineColumnDefinition::columnLetter('codigo_de_pedido');
+        $colEstado = OrderLineColumnDefinition::columnLetter('estado');
+        $colFechaOrden = OrderLineColumnDefinition::columnLetter('fecha_de_orden');
+        $colFechaDespacho = OrderLineColumnDefinition::columnLetter('fecha_de_despacho');
+        $colCodigoEmpresa = OrderLineColumnDefinition::columnLetter('codigo_de_empresa');
+        $colEmpresa = OrderLineColumnDefinition::columnLetter('empresa');
+        $colCodigoSucursal = OrderLineColumnDefinition::columnLetter('codigo_sucursal');
+        $colNombreFantasia = OrderLineColumnDefinition::columnLetter('nombre_fantasia_sucursal');
+        $colUsuario = OrderLineColumnDefinition::columnLetter('usuario');
+        $colBillingUsuario = OrderLineColumnDefinition::columnLetter('codigo_de_facturacion_usuario');
+        $colCategoria = OrderLineColumnDefinition::columnLetter('categoria');
+        $colCodigoProducto = OrderLineColumnDefinition::columnLetter('codigo_de_producto');
+        $colBillingProducto = OrderLineColumnDefinition::columnLetter('codigo_de_facturacion_producto');
+        $colNombreProducto = OrderLineColumnDefinition::columnLetter('nombre_producto');
+        $colCantidad = OrderLineColumnDefinition::columnLetter('cantidad');
+        $colPrecioNeto = OrderLineColumnDefinition::columnLetter('precio_neto');
+        $colPrecioImpuesto = OrderLineColumnDefinition::columnLetter('precio_con_impuesto');
+        $colTotalNeto = OrderLineColumnDefinition::columnLetter('precio_total_neto');
+        $colTotalImpuesto = OrderLineColumnDefinition::columnLetter('precio_total_con_impuesto');
+        $colParcial = OrderLineColumnDefinition::columnLetter('parcialmente_programado');
+
         // Collect order data while reading the sheet
         $ordersData = [];
         $currentRow = 2; // Start after header
 
         // Read all rows and group by order_id
         while ($currentRow <= $lastRow) {
-            $orderId = $sheet->getCell('A' . $currentRow)->getValue(); // Column A = id_orden
+            $orderId = $sheet->getCell($colIdOrden . $currentRow)->getValue();
 
             if ($orderId) {
                 if (!isset($ordersData[$orderId])) {
-                    // Store order info from first line of this order
                     $ordersData[$orderId] = [
                         'last_row' => $currentRow,
-                        'codigo_pedido' => $sheet->getCell('B' . $currentRow)->getValue(),
-                        'estado' => $sheet->getCell('C' . $currentRow)->getValue(),
-                        'fecha_orden' => $sheet->getCell('D' . $currentRow)->getValue(),
-                        'fecha_despacho' => $sheet->getCell('E' . $currentRow)->getValue(),
-                        'codigo_empresa' => $sheet->getCell('F' . $currentRow)->getValue(),
-                        'empresa' => $sheet->getCell('G' . $currentRow)->getValue(),
-                        'codigo_sucursal' => $sheet->getCell('H' . $currentRow)->getValue(),
-                        'nombre_fantasia_sucursal' => $sheet->getCell('I' . $currentRow)->getValue(),
-                        'usuario' => $sheet->getCell('J' . $currentRow)->getValue(),
+                        'codigo_pedido' => $sheet->getCell($colCodigoPedido . $currentRow)->getValue(),
+                        'estado' => $sheet->getCell($colEstado . $currentRow)->getValue(),
+                        'fecha_orden' => $sheet->getCell($colFechaOrden . $currentRow)->getValue(),
+                        'fecha_despacho' => $sheet->getCell($colFechaDespacho . $currentRow)->getValue(),
+                        'codigo_empresa' => $sheet->getCell($colCodigoEmpresa . $currentRow)->getValue(),
+                        'empresa' => $sheet->getCell($colEmpresa . $currentRow)->getValue(),
+                        'codigo_sucursal' => $sheet->getCell($colCodigoSucursal . $currentRow)->getValue(),
+                        'nombre_fantasia_sucursal' => $sheet->getCell($colNombreFantasia . $currentRow)->getValue(),
+                        'usuario' => $sheet->getCell($colUsuario . $currentRow)->getValue(),
                     ];
                 } else {
-                    // Update last_row for this order
                     $ordersData[$orderId]['last_row'] = $currentRow;
                 }
             }
@@ -485,41 +475,39 @@ class OrderLineExport implements
 
         // Now add transport rows in reverse order (to avoid shifting row numbers)
         $orderIds = array_keys($ordersData);
-        rsort($orderIds); // Reverse sort to insert from bottom to top
+        rsort($orderIds);
 
         foreach ($orderIds as $orderId) {
             $orderData = $ordersData[$orderId];
             $insertAfterRow = $orderData['last_row'];
 
-            // Get the order from database to fetch dispatch_cost
             $order = Order::find($orderId);
 
             if ($order && $order->dispatch_cost !== null && $order->dispatch_cost > 0) {
-                // Insert new row after the last order line
                 $sheet->insertNewRowBefore($insertAfterRow + 1, 1);
+                $r = $insertAfterRow + 1;
 
-                // Populate transport row
-                $transportRow = $insertAfterRow + 1;
-
-                $sheet->setCellValue('A' . $transportRow, $orderId); // id_orden
-                $sheet->setCellValue('B' . $transportRow, $orderData['codigo_pedido']); // codigo_de_pedido
-                $sheet->setCellValue('C' . $transportRow, $orderData['estado']); // estado
-                $sheet->setCellValue('D' . $transportRow, $orderData['fecha_orden']); // fecha_de_orden
-                $sheet->setCellValue('E' . $transportRow, $orderData['fecha_despacho']); // fecha_de_despacho
-                $sheet->setCellValue('F' . $transportRow, $orderData['codigo_empresa']); // codigo_empresa
-                $sheet->setCellValue('G' . $transportRow, $orderData['empresa']); // empresa
-                $sheet->setCellValue('H' . $transportRow, $orderData['codigo_sucursal']); // codigo_sucursal
-                $sheet->setCellValue('I' . $transportRow, $orderData['nombre_fantasia_sucursal']); // nombre_fantasia_sucursal
-                $sheet->setCellValue('J' . $transportRow, $orderData['usuario']); // usuario
-                $sheet->setCellValue('K' . $transportRow, ''); // categoria_producto (empty)
-                $sheet->setCellValue('L' . $transportRow, ''); // codigo_de_producto (empty)
-                $sheet->setCellValue('M' . $transportRow, 'TRANSPORTE'); // nombre_producto
-                $sheet->setCellValue('N' . $transportRow, 1); // cantidad
-                $sheet->setCellValue('O' . $transportRow, $order->dispatch_cost / 100); // precio_neto
-                $sheet->setCellValue('P' . $transportRow, $order->dispatch_cost / 100); // precio_con_impuesto
-                $sheet->setCellValue('Q' . $transportRow, $order->dispatch_cost / 100); // precio_total_neto
-                $sheet->setCellValue('R' . $transportRow, $order->dispatch_cost / 100); // precio_total_con_impuesto
-                $sheet->setCellValue('S' . $transportRow, ''); // parcialmente_programado (empty)
+                $sheet->setCellValue($colIdOrden . $r, $orderId);
+                $sheet->setCellValue($colCodigoPedido . $r, $orderData['codigo_pedido']);
+                $sheet->setCellValue($colEstado . $r, $orderData['estado']);
+                $sheet->setCellValue($colFechaOrden . $r, $orderData['fecha_orden']);
+                $sheet->setCellValue($colFechaDespacho . $r, $orderData['fecha_despacho']);
+                $sheet->setCellValue($colCodigoEmpresa . $r, $orderData['codigo_empresa']);
+                $sheet->setCellValue($colEmpresa . $r, $orderData['empresa']);
+                $sheet->setCellValue($colCodigoSucursal . $r, $orderData['codigo_sucursal']);
+                $sheet->setCellValue($colNombreFantasia . $r, $orderData['nombre_fantasia_sucursal']);
+                $sheet->setCellValue($colUsuario . $r, $orderData['usuario']);
+                $sheet->setCellValue($colBillingUsuario . $r, '');
+                $sheet->setCellValue($colCategoria . $r, '');
+                $sheet->setCellValue($colCodigoProducto . $r, '');
+                $sheet->setCellValue($colBillingProducto . $r, '');
+                $sheet->setCellValue($colNombreProducto . $r, 'TRANSPORTE');
+                $sheet->setCellValue($colCantidad . $r, 1);
+                $sheet->setCellValue($colPrecioNeto . $r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colPrecioImpuesto . $r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colTotalNeto . $r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colTotalImpuesto . $r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colParcial . $r, '');
             }
         }
     }

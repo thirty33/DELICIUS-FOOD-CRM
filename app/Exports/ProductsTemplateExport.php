@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Imports\Concerns\ProductColumnDefinition;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -9,22 +10,7 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 
 class ProductsTemplateExport implements FromArray, WithStyles, ShouldAutoSize
 {
-    private $headers = [
-        'codigo' => 'Código',
-        'nombre' => 'Nombre',
-        'descripcion' => 'Descripción',
-        'precio' => 'Precio',
-        'categoria' => 'Categoría',
-        'unidad_de_medida' => 'Unidad de Medida',
-        'nombre_archivo_original' => 'Nombre Archivo Original',
-        'precio_lista' => 'Precio Lista',
-        'stock' => 'Stock',
-        'peso' => 'Peso',
-        'permitir_ventas_sin_stock' => 'Permitir Ventas sin Stock',
-        'activo' => 'Activo',
-        'ingredientes' => 'Ingredientes',
-        'areas_de_produccion' => 'Áreas de Producción'
-    ];
+    private $headers = ProductColumnDefinition::COLUMNS;
 
     public function array(): array
     {

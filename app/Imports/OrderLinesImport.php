@@ -15,6 +15,7 @@ use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Classes\Orders\Validations\OrderStatusValidation;
 use App\Classes\Orders\Validations\MaxOrderAmountValidation;
 use App\Events\OrderLineQuantityReducedBelowProduced;
+use App\Imports\Concerns\OrderLineColumnDefinition;
 use App\Repositories\ImportOrderLineTrackingRepository;
 use App\Repositories\OrderRepository;
 use Illuminate\Support\Collection;
@@ -57,35 +58,7 @@ class OrderLinesImport implements
     private $currentExcelRowNumber = 0;
     private ImportOrderLineTrackingRepository $trackingRepository;
 
-    /**
-     * Header mapping between Excel file and internal system.
-     * KEYS are the Excel headers as converted by Laravel Excel (slug format).
-     * VALUES are internal field names for processing.
-     *
-     * Note: Laravel Excel converts "Código de Empresa" to "codigo_de_empresa" automatically.
-     */
-    private $headingMap = [
-        'id_orden' => 'order_id',
-        'codigo_de_pedido' => 'order_number',
-        'estado' => 'status',
-        'fecha_de_orden' => 'created_at',
-        'fecha_de_despacho' => 'dispatch_date',
-        'codigo_de_empresa' => 'company_code',                 // Laravel Excel converts "Código de Empresa"
-        'empresa' => 'company_name',                           // Informational - not validated
-        'codigo_sucursal' => 'branch_code',                    // Laravel Excel converts "Código Sucursal"
-        'nombre_fantasia_sucursal' => 'branch_fantasy_name',   // Informational - not validated
-        'usuario' => 'user_email',
-        'categoria' => 'category_name',                        // Laravel Excel converts "Categoría"
-        'codigo_de_producto' => 'product_code',
-        'nombre_producto' => 'product_name',                   // Check for "TRANSPORTE" to skip row
-        'cantidad' => 'quantity',
-        'precio_neto' => 'unit_price',
-        'precio_con_impuesto' => 'unit_price_with_tax',
-        'precio_total_neto' => 'total_price_net',
-        'precio_total_con_impuesto' => 'total_price_with_tax',
-        'parcialmente_programado' => 'partially_scheduled'
-        // Note: dispatch_cost is calculated internally, not imported from Excel
-    ];
+    private $headingMap = OrderLineColumnDefinition::HEADING_MAP;
 
     public function __construct(int $importProcessId)
     {

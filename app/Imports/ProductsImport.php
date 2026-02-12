@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\ProductionArea;
@@ -36,20 +37,7 @@ class ProductsImport implements
 {
     private $importProcessId;
 
-    private $headingMap = [
-        'codigo' => 'code',
-        'nombre' => 'name',
-        'descripcion' => 'description',
-        'precio' => 'price',
-        'categoria' => 'category_id',
-        'unidad_de_medida' => 'measure_unit',
-        'nombre_archivo_original' => 'original_filename',
-        'precio_lista' => 'price_list',
-        'stock' => 'stock',
-        'peso' => 'weight',
-        'permitir_ventas_sin_stock' => 'allow_sales_without_stock',
-        'activo' => 'active'
-    ];
+    private $headingMap = ProductColumnDefinition::HEADING_MAP;
 
     public function __construct(int $importProcessId)
     {
@@ -138,6 +126,10 @@ class ProductsImport implements
             'allow_sales_without_stock' => $this->convertToBoolean($row['permitir_ventas_sin_stock'] ?? false),
             'active' => $this->convertToBoolean($row['activo'] ?? false)
         ];
+
+        if (!empty($row['codigo_de_facturacion'])) {
+            $data['billing_code'] = $row['codigo_de_facturacion'];
+        }
 
         if (isset($row['ingredientes']) && !empty($row['ingredientes'])) {
             $data['_ingredients'] = explode(',', $row['ingredientes']);

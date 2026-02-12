@@ -4,6 +4,7 @@ namespace Tests\Feature\Exports;
 
 use App\Exports\ProductsDataExport;
 use App\Exports\ProductsTemplateExport;
+use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Category;
 use App\Models\ExportProcess;
 use App\Models\Ingredient;
@@ -22,8 +23,12 @@ use Tests\TestCase;
  * This test validates the complete export flow for products,
  * including headers order and data accuracy.
  *
+ * Column positions are resolved via ProductColumnDefinition::cell() so that
+ * adding, removing, or reordering columns only requires updating the
+ * shared definition — not every assertion in this file.
+ *
  * Test validates:
- * 1. Headers match import headers order (compatibility)
+ * 1. Headers match ProductColumnDefinition order (compatibility)
  * 2. Product data is exported correctly (all fields)
  * 3. Prices are formatted correctly ($X,XXX.XX)
  * 4. Ingredients are exported as comma-separated list
@@ -89,55 +94,19 @@ class ProductsDataExportTest extends TestCase
     }
 
     /**
-     * Test that headers are in the correct order matching import structure
+     * Test that headers are in the correct order matching ProductColumnDefinition
      */
-    public function test_export_headers_match_import_order(): void
+    public function test_export_headers_match_column_definition(): void
     {
-        // Expected headers (same order as ProductsImport)
-        $expectedHeaders = [
-            'Código',
-            'Nombre',
-            'Descripción',
-            'Precio',
-            'Categoría',
-            'Unidad de Medida',
-            'Nombre Archivo Original',
-            'Precio Lista',
-            'Stock',
-            'Peso',
-            'Permitir Ventas sin Stock',
-            'Activo',
-            'Ingredientes',
-            'Áreas de Producción',
-        ];
-
-        // Generate export file
         $filePath = $this->generateProductExport(collect([$this->product->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
 
-        // Load Excel file
-        $spreadsheet = $this->loadExcelFile($filePath);
-        $sheet = $spreadsheet->getActiveSheet();
-
-        // Read headers from row 1
-        $actualHeaders = [];
-        $highestColumn = $sheet->getHighestColumn();
-        $columnIndex = 1;
-
-        for ($col = 'A'; $col <= $highestColumn; $col++) {
-            $headerValue = $sheet->getCell($col . '1')->getValue();
-            if ($headerValue) {
-                $actualHeaders[] = $headerValue;
-            }
-        }
-
-        // Assert headers match expected order
         $this->assertEquals(
-            $expectedHeaders,
-            $actualHeaders,
-            'Export headers should match import headers order exactly'
+            ProductColumnDefinition::headers(),
+            $this->readHeaderRow($sheet),
+            'Export headers should match ProductColumnDefinition'
         );
 
-        // Clean up
         $this->cleanupTestFile($filePath);
     }
 
@@ -146,57 +115,35 @@ class ProductsDataExportTest extends TestCase
      */
     public function test_exports_product_data_correctly(): void
     {
-        // Generate export file
         $filePath = $this->generateProductExport(collect([$this->product->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
 
-        // Load Excel file
-        $spreadsheet = $this->loadExcelFile($filePath);
-        $sheet = $spreadsheet->getActiveSheet();
+        $r = 2; // Row 1 = headers, Row 2 = first data row
 
-        // Row 1 is headers, row 2 is data
-        $dataRow = 2;
-
-        // Verify each column
-        $this->assertEquals('TEST-EXPORT-001', $sheet->getCell('A' . $dataRow)->getValue(), 'Código should match');
-        $this->assertEquals('TEST - Producto Exportación', $sheet->getCell('B' . $dataRow)->getValue(), 'Nombre should match');
-        $this->assertEquals('Descripción del producto de prueba', $sheet->getCell('C' . $dataRow)->getValue(), 'Descripción should match');
-
-        // Verify price formatting: $1,250.50
-        $priceValue = $sheet->getCell('D' . $dataRow)->getValue();
-        $this->assertEquals('$1,250.50', $priceValue, 'Precio should be formatted as $1,250.50');
-
-        $this->assertEquals('MINI ENSALADAS', $sheet->getCell('E' . $dataRow)->getValue(), 'Categoría should match');
-        $this->assertEquals('UND', $sheet->getCell('F' . $dataRow)->getValue(), 'Unidad de Medida should match');
-        $this->assertEquals('test_export_001.jpg', $sheet->getCell('G' . $dataRow)->getValue(), 'Nombre Archivo Original should match');
-
-        // Verify price list formatting: $1,350.75
-        $priceListValue = $sheet->getCell('H' . $dataRow)->getValue();
-        $this->assertEquals('$1,350.75', $priceListValue, 'Precio Lista should be formatted as $1,350.75');
-
-        // Verify stock (with leading apostrophe for text format)
-        $stockValue = $sheet->getCell('I' . $dataRow)->getValue();
-        $this->assertEquals("'150", $stockValue, 'Stock should have leading apostrophe');
-
-        // Verify weight (with leading apostrophe for text format)
-        $weightValue = $sheet->getCell('J' . $dataRow)->getValue();
-        $this->assertEquals("'0.35", $weightValue, 'Peso should have leading apostrophe');
-
-        // Verify boolean flags
-        $this->assertEquals('VERDADERO', $sheet->getCell('K' . $dataRow)->getValue(), 'Permitir Ventas sin Stock should be VERDADERO');
-        $this->assertEquals('VERDADERO', $sheet->getCell('L' . $dataRow)->getValue(), 'Activo should be VERDADERO');
+        $this->assertCellEquals($sheet, 'codigo', $r, 'TEST-EXPORT-001');
+        $this->assertCellEquals($sheet, 'nombre', $r, 'TEST - Producto Exportación');
+        $this->assertCellEquals($sheet, 'descripcion', $r, 'Descripción del producto de prueba');
+        $this->assertCellEquals($sheet, 'precio', $r, '$1,250.50');
+        $this->assertCellEquals($sheet, 'categoria', $r, 'MINI ENSALADAS');
+        $this->assertCellEquals($sheet, 'unidad_de_medida', $r, 'UND');
+        $this->assertCellEquals($sheet, 'nombre_archivo_original', $r, 'test_export_001.jpg');
+        $this->assertCellEquals($sheet, 'precio_lista', $r, '$1,350.75');
+        $this->assertCellEquals($sheet, 'stock', $r, "'150");
+        $this->assertCellEquals($sheet, 'peso', $r, "'0.35");
+        $this->assertCellEquals($sheet, 'permitir_ventas_sin_stock', $r, 'VERDADERO');
+        $this->assertCellEquals($sheet, 'activo', $r, 'VERDADERO');
 
         // Verify ingredients (comma-separated)
-        $ingredientsValue = $sheet->getCell('M' . $dataRow)->getValue();
-        $this->assertStringContainsString('Lechuga', $ingredientsValue, 'Ingredients should contain Lechuga');
-        $this->assertStringContainsString('Tomate', $ingredientsValue, 'Ingredients should contain Tomate');
-        $this->assertStringContainsString('Pepino', $ingredientsValue, 'Ingredients should contain Pepino');
+        $ingredientsValue = $sheet->getCell(ProductColumnDefinition::cell('ingredientes', $r))->getValue();
+        $this->assertStringContainsString('Lechuga', $ingredientsValue);
+        $this->assertStringContainsString('Tomate', $ingredientsValue);
+        $this->assertStringContainsString('Pepino', $ingredientsValue);
 
         // Verify production areas (comma-separated)
-        $areasValue = $sheet->getCell('N' . $dataRow)->getValue();
-        $this->assertStringContainsString('CUARTO FRIO ENSALADAS', $areasValue, 'Areas should contain CUARTO FRIO ENSALADAS');
-        $this->assertStringContainsString('EMPLATADO', $areasValue, 'Areas should contain EMPLATADO');
+        $areasValue = $sheet->getCell(ProductColumnDefinition::cell('areas_de_produccion', $r))->getValue();
+        $this->assertStringContainsString('CUARTO FRIO ENSALADAS', $areasValue);
+        $this->assertStringContainsString('EMPLATADO', $areasValue);
 
-        // Clean up
         $this->cleanupTestFile($filePath);
     }
 
@@ -205,7 +152,6 @@ class ProductsDataExportTest extends TestCase
      */
     public function test_exports_multiple_products(): void
     {
-        // Create second product
         $product2 = Product::create([
             'code' => 'TEST-EXPORT-002',
             'name' => 'TEST - Segundo Producto',
@@ -219,28 +165,19 @@ class ProductsDataExportTest extends TestCase
             'active' => false,
         ]);
 
-        // Generate export with both products
         $filePath = $this->generateProductExport(collect([$this->product->id, $product2->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
 
-        // Load Excel file
-        $spreadsheet = $this->loadExcelFile($filePath);
-        $sheet = $spreadsheet->getActiveSheet();
+        $this->assertEquals(3, $sheet->getHighestRow(), 'Should have 1 header row + 2 data rows');
 
-        // Verify we have 2 data rows (+ 1 header row)
-        $lastRow = $sheet->getHighestRow();
-        $this->assertEquals(3, $lastRow, 'Should have 1 header row + 2 data rows');
+        $this->assertCellEquals($sheet, 'codigo', 2, 'TEST-EXPORT-001');
 
-        // Verify first product (row 2)
-        $this->assertEquals('TEST-EXPORT-001', $sheet->getCell('A2')->getValue());
+        $this->assertCellEquals($sheet, 'codigo', 3, 'TEST-EXPORT-002');
+        $this->assertCellEquals($sheet, 'nombre', 3, 'TEST - Segundo Producto');
+        $this->assertCellEquals($sheet, 'precio', 3, '$2,000.00');
+        $this->assertCellEquals($sheet, 'permitir_ventas_sin_stock', 3, 'FALSO');
+        $this->assertCellEquals($sheet, 'activo', 3, 'FALSO');
 
-        // Verify second product (row 3)
-        $this->assertEquals('TEST-EXPORT-002', $sheet->getCell('A3')->getValue());
-        $this->assertEquals('TEST - Segundo Producto', $sheet->getCell('B3')->getValue());
-        $this->assertEquals('$2,000.00', $sheet->getCell('D3')->getValue());
-        $this->assertEquals('FALSO', $sheet->getCell('K3')->getValue(), 'Allow sales should be FALSO');
-        $this->assertEquals('FALSO', $sheet->getCell('L3')->getValue(), 'Active should be FALSO');
-
-        // Clean up
         $this->cleanupTestFile($filePath);
     }
 
@@ -249,7 +186,6 @@ class ProductsDataExportTest extends TestCase
      */
     public function test_exports_product_without_optional_fields(): void
     {
-        // Create minimal product
         $minimalProduct = Product::create([
             'code' => 'TEST-MINIMAL-001',
             'name' => 'TEST - Producto Mínimo',
@@ -261,177 +197,196 @@ class ProductsDataExportTest extends TestCase
             'allow_sales_without_stock' => true,
             'active' => true,
         ]);
-        // No ingredients, no production areas
 
         $filePath = $this->generateProductExport(collect([$minimalProduct->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
 
-        // Load Excel file
-        $spreadsheet = $this->loadExcelFile($filePath);
-        $sheet = $spreadsheet->getActiveSheet();
+        $r = 2;
 
-        // Verify product code
-        $this->assertEquals('TEST-MINIMAL-001', $sheet->getCell('A2')->getValue());
+        $this->assertCellEquals($sheet, 'codigo', $r, 'TEST-MINIMAL-001');
+        $this->assertCellEmpty($sheet, 'ingredientes', $r, 'Ingredients should be empty');
+        $this->assertCellEmpty($sheet, 'areas_de_produccion', $r, 'Production areas should be empty');
 
-        // Verify ingredients column is empty
-        $ingredientsValue = $sheet->getCell('M2')->getValue();
-        $this->assertEmpty($ingredientsValue, 'Ingredients should be empty');
-
-        // Verify production areas column is empty
-        $areasValue = $sheet->getCell('N2')->getValue();
-        $this->assertEmpty($areasValue, 'Production areas should be empty');
-
-        // Clean up
         $this->cleanupTestFile($filePath);
     }
 
     /**
-     * Test that ProductsTemplateExport headers match ProductsDataExport headers
+     * Test that ProductsTemplateExport headers match ProductColumnDefinition
      */
-    public function test_template_export_headers_match_data_export_headers(): void
+    public function test_template_headers_match_column_definition(): void
     {
-        // Expected headers (should match both template and data export)
-        $expectedHeaders = [
-            'Código',
-            'Nombre',
-            'Descripción',
-            'Precio',
-            'Categoría',
-            'Unidad de Medida',
-            'Nombre Archivo Original',
-            'Precio Lista',
-            'Stock',
-            'Peso',
-            'Permitir Ventas sin Stock',
-            'Activo',
-            'Ingredientes',
-            'Áreas de Producción',
-        ];
-
-        // Generate template file
         $templatePath = $this->generateProductTemplate();
+        $sheet = $this->loadExcelFile($templatePath)->getActiveSheet();
 
-        // Load template file
-        $spreadsheet = $this->loadExcelFile($templatePath);
-        $sheet = $spreadsheet->getActiveSheet();
+        $this->assertEquals(1, $sheet->getHighestRow(), 'Template should have only 1 row (headers)');
 
-        // Verify template has only 1 row (headers only, no data)
-        $lastRow = $sheet->getHighestRow();
-        $this->assertEquals(1, $lastRow, 'Template should have only 1 row (headers)');
-
-        // Read headers from template
-        $actualHeaders = [];
-        $highestColumn = $sheet->getHighestColumn();
-
-        for ($col = 'A'; $col <= $highestColumn; $col++) {
-            $headerValue = $sheet->getCell($col . '1')->getValue();
-            if ($headerValue) {
-                $actualHeaders[] = $headerValue;
-            }
-        }
-
-        // Assert template headers match expected headers
         $this->assertEquals(
-            $expectedHeaders,
-            $actualHeaders,
-            'Template headers should match expected headers order exactly'
+            ProductColumnDefinition::headers(),
+            $this->readHeaderRow($sheet),
+            'Template headers should match ProductColumnDefinition'
         );
 
-        // Verify header styling (should have bold font and green background)
         $headerCell = $sheet->getCell('A1');
         $this->assertTrue(
             $headerCell->getStyle()->getFont()->getBold(),
             'Template headers should be bold'
         );
 
-        $fillColor = $headerCell->getStyle()->getFill()->getStartColor()->getRGB();
         $this->assertEquals(
             'E2EFDA',
-            $fillColor,
+            $headerCell->getStyle()->getFill()->getStartColor()->getRGB(),
             'Template headers should have green background (E2EFDA)'
         );
 
-        // Clean up
         $this->cleanupTestFile($templatePath);
     }
 
     /**
-     * Generate product export file and return path
+     * Test that template headers and data export headers are identical
      */
+    public function test_template_headers_match_data_export_headers(): void
+    {
+        $templatePath = $this->generateProductTemplate();
+        $dataPath = $this->generateProductExport(collect([$this->product->id]));
+
+        $templateHeaders = $this->readHeaderRow(
+            $this->loadExcelFile($templatePath)->getActiveSheet()
+        );
+        $dataHeaders = $this->readHeaderRow(
+            $this->loadExcelFile($dataPath)->getActiveSheet()
+        );
+
+        $this->assertEquals(
+            $templateHeaders,
+            $dataHeaders,
+            'Template headers and data export headers must be identical'
+        );
+
+        $this->cleanupTestFile($templatePath);
+        $this->cleanupTestFile($dataPath);
+    }
+
+    public function test_exports_billing_code_when_present(): void
+    {
+        $this->product->update(['billing_code' => 'FACT-EXPORT-001']);
+
+        $filePath = $this->generateProductExport(collect([$this->product->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Codigo de Facturacion', $headers);
+
+        $this->assertCellEquals($sheet, 'codigo_de_facturacion', 2, 'FACT-EXPORT-001');
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    public function test_template_includes_billing_code_column(): void
+    {
+        $filePath = $this->generateProductTemplate();
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $headers = $this->readHeaderRow($sheet);
+        $this->assertContains('Codigo de Facturacion', $headers);
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
+    /**
+     * Assert a cell value by column key (resolves letter automatically).
+     */
+    private function assertCellEquals($sheet, string $columnKey, int $row, mixed $expected, ?string $message = null): void
+    {
+        $cell = ProductColumnDefinition::cell($columnKey, $row);
+        $this->assertEquals(
+            $expected,
+            $sheet->getCell($cell)->getValue(),
+            $message ?? "Cell {$cell} ({$columnKey}) should be '{$expected}'"
+        );
+    }
+
+    /**
+     * Assert a cell is empty by column key.
+     */
+    private function assertCellEmpty($sheet, string $columnKey, int $row, ?string $message = null): void
+    {
+        $cell = ProductColumnDefinition::cell($columnKey, $row);
+        $this->assertEmpty(
+            $sheet->getCell($cell)->getValue(),
+            $message ?? "Cell {$cell} ({$columnKey}) should be empty"
+        );
+    }
+
+    protected function readHeaderRow($sheet): array
+    {
+        $headers = [];
+        $highestColumn = $sheet->getHighestColumn();
+
+        for ($col = 'A'; $col <= $highestColumn; $col++) {
+            $value = $sheet->getCell($col . '1')->getValue();
+            if ($value) {
+                $headers[] = $value;
+            }
+        }
+
+        return $headers;
+    }
+
     protected function generateProductExport(Collection $productIds): string
     {
-        // Ensure test-exports directory exists
         $testExportsDir = storage_path('app/test-exports');
         if (!is_dir($testExportsDir)) {
             mkdir($testExportsDir, 0755, true);
         }
 
-        // Create export process
         $exportProcess = ExportProcess::create([
             'type' => ExportProcess::TYPE_PRODUCTS,
             'status' => ExportProcess::STATUS_QUEUED,
             'file_url' => '-'
         ]);
 
-        // Generate filename
         $fileName = 'test-exports/products-export-' . now()->format('Y-m-d-His') . '.xlsx';
         $fullPath = storage_path('app/' . $fileName);
 
-        // Create export instance
         $export = new ProductsDataExport($productIds, $exportProcess->id);
-
-        // Generate file content (bypass queuing)
         $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
-
-        // Write to file
         file_put_contents($fullPath, $content);
 
-        $this->assertFileExists($fullPath, "Excel file should be created at {$fullPath}");
+        $this->assertFileExists($fullPath);
 
         return $fullPath;
     }
 
-    /**
-     * Generate product template file and return path
-     */
     protected function generateProductTemplate(): string
     {
-        // Ensure test-exports directory exists
         $testExportsDir = storage_path('app/test-exports');
         if (!is_dir($testExportsDir)) {
             mkdir($testExportsDir, 0755, true);
         }
 
-        // Generate filename
         $fileName = 'test-exports/products-template-' . now()->format('Y-m-d-His') . '.xlsx';
         $fullPath = storage_path('app/' . $fileName);
 
-        // Create template export instance
         $export = new ProductsTemplateExport();
-
-        // Generate file content
         $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
-
-        // Write to file
         file_put_contents($fullPath, $content);
 
-        $this->assertFileExists($fullPath, "Template file should be created at {$fullPath}");
+        $this->assertFileExists($fullPath);
 
         return $fullPath;
     }
 
-    /**
-     * Load Excel file and return Spreadsheet object
-     */
     protected function loadExcelFile(string $filePath): Spreadsheet
     {
-        $this->assertFileExists($filePath, "Excel file should exist at {$filePath}");
+        $this->assertFileExists($filePath);
 
         return IOFactory::load($filePath);
     }
 
-    /**
-     * Clean up test file
-     */
     protected function cleanupTestFile(string $filePath): void
     {
         if (file_exists($filePath)) {

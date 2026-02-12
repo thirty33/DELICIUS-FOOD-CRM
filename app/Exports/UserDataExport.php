@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Imports\Concerns\UserColumnDefinition;
 use App\Models\User;
 use App\Models\ExportProcess;
 use Illuminate\Support\Collection;
@@ -31,24 +32,7 @@ class UserDataExport implements
 {
     use Exportable;
 
-    private $headers = [
-        'nombre' => 'Nombre',
-        'correo_electronico' => 'Correo Electrónico',
-        'tipo_de_usuario' => 'Tipo de Usuario',
-        'tipo_de_convenio' => 'Tipo de Convenio',
-        'codigo_empresa' => 'Código Empresa',
-        'empresa' => 'Empresa',
-        'codigo_sucursal' => 'Código Sucursal',
-        'nombre_fantasia_sucursal' => 'Nombre Fantasía Sucursal',
-        'lista_de_precio' => 'Lista de Precio',
-        'validar_fecha_y_reglas_de_despacho' => 'Validar Fecha y Reglas de Despacho',
-        'validar_precio_minimo' => 'Validar Precio Mínimo',
-        'validar_reglas_de_subcategoria' => 'Validar Reglas de Subcategoría',
-        'usuario_maestro' => 'Usuario Maestro',
-        'pedidos_en_fines_de_semana' => 'Pedidos en Fines de Semana',
-        'nombre_de_usuario' => 'Nombre de Usuario',
-        'contrasena' => 'Contraseña',
-    ];
+    private $headers = UserColumnDefinition::COLUMNS;
 
     private $exportProcessId;
     private $userIds;
@@ -93,6 +77,7 @@ class UserDataExport implements
                 'pedidos_en_fines_de_semana' => $user->allow_weekend_orders ? '1' : '0',
                 'nombre_de_usuario' => $user->nickname ?? '',
                 'contrasena' => $user->plain_password ?? '',
+                'codigo_de_facturacion' => $user->billing_code ?? '',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando usuario para exportación', [
@@ -116,8 +101,8 @@ class UserDataExport implements
         $sheet->getColumnDimension('A')->setWidth(50); // Nombre
         $sheet->getColumnDimension('B')->setWidth(40); // Correo electrónico
 
-        // Las demás columnas con ancho estándar (now we have 16 columns total: A-P)
-        for ($i = 'C'; $i <= 'P'; $i++) {
+        // Las demás columnas con ancho estándar (A-Q)
+        for ($i = 'C'; $i <= 'Q'; $i++) {
             $sheet->getColumnDimension($i)->setWidth(25);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use App\Imports\Concerns\UserColumnDefinition;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Branch;
@@ -46,24 +47,7 @@ class UserImport implements
     private $importProcessId;
     private $errors = [];
 
-    private $headingMap = [
-        'nombre' => 'name',
-        'correo_electronico' => 'email',
-        'tipo_de_usuario' => 'roles',
-        'tipo_de_convenio' => 'permissions',
-        'codigo_empresa' => 'company_code',
-        'empresa' => 'company_name',
-        'codigo_sucursal' => 'branch_code',
-        'nombre_fantasia_sucursal' => 'branch_fantasy_name',
-        'lista_de_precio' => 'price_list_name',
-        'validar_fecha_y_reglas_de_despacho' => 'allow_late_orders',
-        'validar_precio_minimo' => 'validate_min_price',
-        'validar_reglas_de_subcategoria' => 'validate_subcategory_rules',
-        'usuario_maestro' => 'master_user',
-        'pedidos_en_fines_de_semana' => 'allow_weekend_orders',
-        'nombre_de_usuario' => 'nickname',
-        'contrasena' => 'plain_password'
-    ];
+    private $headingMap = UserColumnDefinition::HEADING_MAP;
 
     public function __construct(int $importProcessId)
     {
@@ -482,6 +466,11 @@ class UserImport implements
         // Add nickname if present
         if (!empty($row['nombre_de_usuario'])) {
             $userData['nickname'] = $row['nombre_de_usuario'];
+        }
+
+        // Add billing code if present
+        if (!empty($row['codigo_de_facturacion'])) {
+            $userData['billing_code'] = $row['codigo_de_facturacion'];
         }
 
         // Add password if present

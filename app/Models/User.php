@@ -45,6 +45,7 @@ class User extends Authenticatable implements FilamentUser
         'validate_subcategory_rules',
         'nickname',
         'plain_password',
+        'billing_code',
         'master_user',
         'super_master_user',
     ];

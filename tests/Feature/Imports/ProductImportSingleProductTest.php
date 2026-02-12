@@ -290,4 +290,50 @@ class ProductImportSingleProductTest extends TestCase
         $product = Product::where('code', 'TEST-PROD-001')->first();
         $this->assertEquals($originalId, $product->id, 'Product ID should be the same (updated, not duplicated)');
     }
+
+    /**
+     * Test that billing code is imported when present in the Excel file.
+     *
+     * Fixture: test_product_import_billing_code.xlsx (3 products, 15 columns)
+     * - Product 1: TEST-BILL-001, billing_code = FACT-PROD-001
+     * - Product 2: TEST-BILL-002, billing_code = FACT-PROD-002
+     * - Product 3: TEST-BILL-003, billing_code = empty
+     */
+    public function test_imports_billing_code_when_present(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_PRODUCTS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        $testFile = base_path('tests/Fixtures/test_product_import_billing_code.xlsx');
+        $this->assertFileExists($testFile);
+
+        Excel::import(
+            new ProductsImport($importProcess->id),
+            $testFile
+        );
+
+        $importProcess->refresh();
+        $this->assertEquals(ImportProcess::STATUS_PROCESSED, $importProcess->status);
+        $this->assertEquals(3, Product::count());
+
+        // Product with billing code
+        $product1 = Product::where('code', 'TEST-BILL-001')->first();
+        $this->assertNotNull($product1);
+        $this->assertEquals('FACT-PROD-001', $product1->billing_code);
+
+        // Product with billing code
+        $product2 = Product::where('code', 'TEST-BILL-002')->first();
+        $this->assertNotNull($product2);
+        $this->assertEquals('FACT-PROD-002', $product2->billing_code);
+
+        // Product without billing code
+        $product3 = Product::where('code', 'TEST-BILL-003')->first();
+        $this->assertNotNull($product3);
+        $this->assertNull($product3->billing_code);
+    }
 }

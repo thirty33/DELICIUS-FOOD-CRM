@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Imports;
 
+use App\Imports\Concerns\OrderLineColumnDefinition;
 use App\Imports\OrderLinesImport;
 use App\Models\ImportProcess;
 use App\Models\Order;
@@ -16,6 +17,8 @@ use Database\Seeders\OrderLinesImportTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 use Tests\Traits\ConfiguresImportTests;
 
@@ -889,5 +892,115 @@ class OrderLinesImportPilotTest extends TestCase
             $existingOrder->orderLines->contains('product_id', $productLast->id),
             'Last product from Chunk 2 should exist in order'
         );
+    }
+
+    /**
+     * Test import with 21-column export format (includes billing code columns).
+     *
+     * The export now adds 2 billing code columns:
+     * - "Codigo de Facturacion Usuario" (after Usuario)
+     * - "Codigo de Facturacion Producto" (after Código de Producto)
+     *
+     * The import should handle the new format without errors.
+     */
+    public function test_imports_order_from_21_column_export_format(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        $this->assertEquals(0, Order::count());
+        $this->assertEquals(0, OrderLine::count());
+
+        // Generate fixture with 21-column export format
+        $fixtureFile = $this->generate21ColumnFixture();
+
+        $importProcess = ImportProcess::create([
+            'type' => ImportProcess::TYPE_ORDERS,
+            'status' => ImportProcess::STATUS_QUEUED,
+            'file_url' => '-',
+        ]);
+
+        Excel::import(
+            new OrderLinesImport($importProcess->id),
+            $fixtureFile
+        );
+
+        $importProcess->refresh();
+
+        $this->assertEquals(
+            ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete without errors'
+        );
+
+        $this->assertEquals(1, Order::count());
+
+        $order = Order::first();
+        $this->assertEquals('20251103510024', $order->order_number);
+        $this->assertEquals(OrderStatus::PROCESSED->value, $order->status);
+        $this->assertEquals(4, $order->orderLines->count());
+
+        $expectedProducts = [
+            'ACM00000043' => ['quantity' => 1, 'price' => 400],
+            'EXT00000001' => ['quantity' => 1, 'price' => 100],
+            'PCH00000003' => ['quantity' => 1, 'price' => 4600],
+            'PTR00000005' => ['quantity' => 1, 'price' => 850],
+        ];
+
+        foreach ($expectedProducts as $code => $expected) {
+            $product = Product::where('code', $code)->first();
+            $orderLine = OrderLine::where('order_id', $order->id)
+                ->where('product_id', $product->id)
+                ->first();
+
+            $this->assertNotNull($orderLine, "Order line for {$code} should exist");
+            $this->assertEquals($expected['quantity'], $orderLine->quantity, "Quantity for {$code}");
+            $this->assertEquals($expected['price'], $orderLine->unit_price, "Unit price for {$code}");
+        }
+
+        // Cleanup
+        if (file_exists($fixtureFile)) {
+            unlink($fixtureFile);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
+    /**
+     * Generate a fixture with 21-column export format.
+     * Headers from OrderLineColumnDefinition, data matching the seeder.
+     */
+    private function generate21ColumnFixture(): string
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $headers = OrderLineColumnDefinition::headers();
+        foreach ($headers as $index => $header) {
+            $sheet->setCellValueByColumnAndRow($index + 1, 1, $header);
+        }
+
+        // Same data as test_single_order.xlsx but with 21 columns
+        // (billing code columns are empty)
+        $rows = [
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', 'MINI ENSALADAS DE ACOMPAÑAMIENTO', 'ACM00000043', '', 'ACM - MINI ENSALADA ACEITUNAS Y HUEVO DURO', 1, 4, 4.76, 4, 4.76, 0],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', 'ACOMPAÑAMIENTOS', 'EXT00000001', '', 'EXT - AMASADO DELICIUS MINI', 1, 1, 1.19, 1, 1.19, 0],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', 'PLATOS VARIABLES PARA CALENTAR HORECA', 'PCH00000003', '', 'PCH - HORECA ALBONDIGAS ATOMATADAS CON ARROZ PRIMAVERA', 1, 46, 54.74, 46, 54.74, 0],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', 'POSTRES', 'PTR00000005', '', 'PTR - FRUTA ESTACION 150 GR.', 1, 8.50, 10.12, 8.50, 10.12, 0],
+        ];
+
+        foreach ($rows as $rowIndex => $rowData) {
+            $excelRow = $rowIndex + 2;
+            foreach ($rowData as $colIndex => $value) {
+                $sheet->setCellValueByColumnAndRow($colIndex + 1, $excelRow, $value);
+            }
+        }
+
+        $filePath = base_path('tests/Fixtures/test_order_21_columns.xlsx');
+        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+        $writer->save($filePath);
+
+        return $filePath;
     }
 }

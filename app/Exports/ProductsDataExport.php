@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Product;
 use App\Models\ExportProcess;
 use Illuminate\Support\Collection;
@@ -35,22 +36,7 @@ class ProductsDataExport implements
 {
     use Exportable;
 
-    private $headers = [
-        'codigo' => 'Código',
-        'nombre' => 'Nombre',
-        'descripcion' => 'Descripción',
-        'precio' => 'Precio',
-        'categoria' => 'Categoría',
-        'unidad_de_medida' => 'Unidad de Medida',
-        'nombre_archivo_original' => 'Nombre Archivo Original',
-        'precio_lista' => 'Precio Lista',
-        'stock' => 'Stock',
-        'peso' => 'Peso',
-        'permitir_ventas_sin_stock' => 'Permitir Ventas sin Stock',
-        'activo' => 'Activo',
-        'ingredientes' => 'Ingredientes',
-        'areas_de_produccion' => 'Áreas de Producción'
-    ];
+    private $headers = ProductColumnDefinition::COLUMNS;
 
     private $exportProcessId;
     private $productIds;
@@ -89,7 +75,8 @@ class ProductsDataExport implements
                 'permitir_ventas_sin_stock' => $product->allow_sales_without_stock ? 'VERDADERO' : 'FALSO',
                 'activo' => $product->active ? 'VERDADERO' : 'FALSO',
                 'ingredientes' => $product->ingredients->pluck('descriptive_text')->implode(', '),
-                'areas_de_produccion' => $product->productionAreas->pluck('name')->implode(', ')
+                'areas_de_produccion' => $product->productionAreas->pluck('name')->implode(', '),
+                'codigo_de_facturacion' => $product->billing_code ?? '',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando producto para exportación', [
@@ -123,8 +110,8 @@ class ProductsDataExport implements
     public function columnFormats(): array
     {
         return [
-            'I' => NumberFormat::FORMAT_TEXT,  // Stock (column I)
-            'J' => NumberFormat::FORMAT_TEXT,  // Peso (column J)
+            ProductColumnDefinition::columnLetter('stock') => NumberFormat::FORMAT_TEXT,
+            ProductColumnDefinition::columnLetter('peso') => NumberFormat::FORMAT_TEXT,
         ];
     }
 
