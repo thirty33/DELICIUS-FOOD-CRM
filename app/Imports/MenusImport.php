@@ -426,7 +426,7 @@ class MenusImport implements
 
         foreach ($formats as $format) {
             try {
-                return Carbon::createFromFormat($format, $dateString);
+                return Carbon::createFromFormat($format, (string) $dateString);
             } catch (\Exception $e) {
                 continue;
             }
