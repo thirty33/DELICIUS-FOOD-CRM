@@ -30,17 +30,17 @@ enum NutritionalValueType: string
     public function label(): string
     {
         return match($this) {
-            self::CALORIES => 'Calorías',
-            self::PROTEIN => 'Proteína',
+            self::CALORIES => 'Energía',
+            self::PROTEIN => 'Proteínas',
             self::FAT_TOTAL => 'Grasa Total',
             self::FAT_SATURATED => 'Grasa Saturada',
             self::FAT_MONOUNSATURATED => 'Grasa Monoinsaturada',
             self::FAT_POLYUNSATURATED => 'Grasa Poliinsaturada',
             self::FAT_TRANS => 'Grasa Trans',
             self::CHOLESTEROL => 'Colesterol',
-            self::CARBOHYDRATE => 'Carbohidrato',
+            self::CARBOHYDRATE => 'H. de Carbono disp.',
             self::FIBER => 'Fibra',
-            self::SUGAR => 'Azúcar',
+            self::SUGAR => 'Azúcares totales',
             self::SODIUM => 'Sodio',
             self::HIGH_SODIUM => 'Alto en Sodio',
             self::HIGH_CALORIES => 'Alto en Calorías',
@@ -55,7 +55,7 @@ enum NutritionalValueType: string
     public function unit(): string
     {
         return match($this) {
-            self::CALORIES => 'kcal',
+            self::CALORIES => 'Kcal',
             self::PROTEIN, self::FAT_TOTAL, self::FAT_SATURATED,
             self::FAT_MONOUNSATURATED, self::FAT_POLYUNSATURATED,
             self::FAT_TRANS, self::CARBOHYDRATE, self::FIBER, self::SUGAR => 'g',
