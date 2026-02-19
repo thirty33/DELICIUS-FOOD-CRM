@@ -2,11 +2,12 @@
 
 namespace App\Repositories;
 
-use App\Models\User;
-use App\Filters\FilterValue;
 use App\Enums\Filters\UserFilters;
-use Illuminate\Pipeline\Pipeline;
+use App\Filters\FilterValue;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pipeline\Pipeline;
+use Illuminate\Support\Collection;
 
 class UserRepository
 {
@@ -16,15 +17,12 @@ class UserRepository
      * If the user is a super_master_user, returns users from all companies.
      * Otherwise, returns only users from the same company.
      *
-     * @param User $masterUser
-     * @param int $perPage
-     * @param array $searchFilters Additional search filters:
-     *   - 'company_search': Search in company name, fantasy_name, tax_id, company_code
-     *   - 'branch_search': Search in branch fantasy_name, address, branch_code
-     *   - 'user_search': Search in user nickname, name, email
-     *   - 'user_role': Filter by role name (exact match, values: Admin, Café, Convenio)
-     *   - 'user_permission': Filter by permission name (exact match, values: Consolidado, Individual)
-     * @return LengthAwarePaginator
+     * @param  array  $searchFilters  Additional search filters:
+     *                                - 'company_search': Search in company name, fantasy_name, tax_id, company_code
+     *                                - 'branch_search': Search in branch fantasy_name, address, branch_code
+     *                                - 'user_search': Search in user nickname, name, email
+     *                                - 'user_role': Filter by role name (exact match, values: Admin, Café, Convenio)
+     *                                - 'user_permission': Filter by permission name (exact match, values: Consolidado, Individual)
      */
     public function getSubordinateUsers(User $masterUser, int $perPage = 15, array $searchFilters = []): LengthAwarePaginator
     {
@@ -47,5 +45,13 @@ class UserRepository
             ->thenReturn();
 
         return $query->paginate($perPage);
+    }
+
+    public function getSellers(): Collection
+    {
+        return User::query()
+            ->where('is_seller', true)
+            ->orderBy('nickname')
+            ->get();
     }
 }

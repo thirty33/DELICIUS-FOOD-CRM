@@ -1,0 +1,17 @@
+{
+    "agents": [
+        "claude_code"
+    ],
+    "guidelines": true,
+    "herd_mcp": false,
+    "mcp": true,
+    "sail": true,
+    "skills": [
+        "mcp-development",
+        "livewire-development",
+        "database-management",
+        "model-migration-review",
+        "production-bug-replica-tests",
+        "software-architecture"
+    ]
+}

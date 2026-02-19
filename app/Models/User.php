@@ -3,20 +3,21 @@
 namespace App\Models;
 
 use App\Enums\RoleName;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Filament\Panel;
-use Filament\Models\Contracts\FilamentUser;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements FilamentUser
 {
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable;
 
     public function canAccessPanel(Panel $panel): bool
     {
@@ -48,6 +49,8 @@ class User extends Authenticatable implements FilamentUser
         'billing_code',
         'master_user',
         'super_master_user',
+        'is_seller',
+        'seller_id',
     ];
 
     /**
@@ -72,6 +75,7 @@ class User extends Authenticatable implements FilamentUser
             'password' => 'hashed',
             'master_user' => 'boolean',
             'super_master_user' => 'boolean',
+            'is_seller' => 'boolean',
         ];
     }
 
@@ -145,5 +149,30 @@ class User extends Authenticatable implements FilamentUser
     public function categoryUserLines(): HasMany
     {
         return $this->hasMany(CategoryUserLine::class);
+    }
+
+    public function seller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'seller_id');
+    }
+
+    public function clients(): HasMany
+    {
+        return $this->hasMany(User::class, 'seller_id');
+    }
+
+    public function sellerPortfolios(): HasMany
+    {
+        return $this->hasMany(SellerPortfolio::class, 'seller_id');
+    }
+
+    public function activePortfolio(): HasOne
+    {
+        return $this->hasOne(UserPortfolio::class)->where('is_active', true);
+    }
+
+    public function portfolioHistory(): HasMany
+    {
+        return $this->hasMany(UserPortfolio::class)->orderByDesc('assigned_at');
     }
 }

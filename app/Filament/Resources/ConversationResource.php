@@ -8,7 +8,6 @@ use App\Models\Conversation;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class ConversationResource extends Resource
 {
@@ -49,7 +48,7 @@ class ConversationResource extends Resource
                 Tables\Columns\TextColumn::make('phone_number')
                     ->label(__('Teléfono'))
                     ->searchable()
-                    ->formatStateUsing(fn (string $state) => '+' . $state),
+                    ->formatStateUsing(fn (string $state) => '+'.$state),
                 Tables\Columns\TextColumn::make('status')
                     ->label(__('Estado'))
                     ->badge()
@@ -74,8 +73,7 @@ class ConversationResource extends Resource
                     ->label(__('Empresa'))
                     ->multiple()
                     ->relationship('company', 'fantasy_name')
-                    ->getOptionLabelFromRecordUsing(fn ($record) =>
-                        ($record->company_code ?? 'N/A') . ' - ' . $record->fantasy_name
+                    ->getOptionLabelFromRecordUsing(fn ($record) => ($record->company_code ?? 'N/A').' - '.$record->fantasy_name
                     )
                     ->searchable()
                     ->preload(),
@@ -83,8 +81,7 @@ class ConversationResource extends Resource
                     ->label(__('Sucursal'))
                     ->multiple()
                     ->relationship('branch', 'fantasy_name')
-                    ->getOptionLabelFromRecordUsing(fn ($record) =>
-                        ($record->branch_code ?? 'N/A') . ' - ' . $record->fantasy_name
+                    ->getOptionLabelFromRecordUsing(fn ($record) => ($record->branch_code ?? 'N/A').' - '.$record->fantasy_name
                     )
                     ->searchable()
                     ->preload(),
@@ -94,7 +91,13 @@ class ConversationResource extends Resource
                 Tables\Actions\Action::make('openChat')
                     ->label(__('Abrir Chat'))
                     ->icon('heroicon-o-chat-bubble-left-ellipsis')
-                    ->url(fn (Conversation $record) => url('/chat/' . $record->id)),
+                    ->url(fn (Conversation $record) => url('/chat/'.$record->id)),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
             ]);
     }
 

@@ -2,41 +2,38 @@
 
 namespace App\Filament\Resources;
 
+use App\Classes\ErrorManagment\ExportErrorHandler;
 use App\Enums\RoleName;
+use App\Exports\UserDataExport;
+use App\Exports\UserTemplateExport;
 use App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource\RelationManagers;
+use App\Imports\UserImport;
+use App\Jobs\BulkDeleteUsers;
+use App\Jobs\SendCredentialsEmails;
+use App\Models\ExportProcess;
+use App\Models\ImportProcess;
 use App\Models\Role;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Support\Enums\ActionSize;
+use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
+use Filament\Tables\Actions\ActionGroup as ActionsActionGroup;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Illuminate\Support\Facades\Hash;
-use Filament\Forms\Components\Toggle;
-use Closure;
-use Filament\Forms\Get;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Imports\UserImport;
-use App\Exports\UserDataExport;
-use App\Exports\UserTemplateExport;
-use App\Jobs\BulkDeleteUsers;
-use App\Models\ImportProcess;
-use App\Models\ExportProcess;
-use App\Classes\ErrorManagment\ExportErrorHandler;
-use Filament\Notifications\Notification;
-use Filament\Support\Enums\MaxWidth;
-use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
-use Filament\Tables\Columns\TextColumn;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use App\Jobs\SendCredentialsEmails;
-use Filament\Support\Enums\ActionSize;
-use Filament\Tables\Actions\ActionGroup as ActionsActionGroup;
+use Maatwebsite\Excel\Facades\Excel;
+use Malzariey\FilamentDaterangepickerFilter\Filters\DateRangeFilter;
 
 class UserResource extends Resource
 {
@@ -74,7 +71,7 @@ class UserResource extends Resource
                     ->label(__('Nombre')),
                 TextInput::make('email')
                     ->email()
-                    ->required(fn(Get $get): bool => empty($get('nickname')))
+                    ->required(fn (Get $get): bool => empty($get('nickname')))
                     ->maxLength(200)
                     ->unique(static::getModel(), 'email', ignoreRecord: true)
                     ->label(__('Correo electrónico'))
@@ -82,7 +79,7 @@ class UserResource extends Resource
                     ->extraAttributes(['required' => false]),
                 TextInput::make('nickname')
                     ->maxLength(200)
-                    ->required(fn(Get $get): bool => empty($get('email')))
+                    ->required(fn (Get $get): bool => empty($get('email')))
                     ->unique(static::getModel(), 'nickname', ignoreRecord: true)
                     ->label(__('Nickname'))
                     // Evitar validación nativa del navegador
@@ -99,7 +96,7 @@ class UserResource extends Resource
                     ->required(function (Get $get) {
                         $agreementRoleId = Role::where('name', RoleName::AGREEMENT)->first()->id;
                         $cafeRoleId = Role::where('name', RoleName::CAFE)->first()->id;
-                        $selectedRoles = (array)$get('roles');
+                        $selectedRoles = (array) $get('roles');
 
                         return in_array($agreementRoleId, $selectedRoles) ||
                             in_array($cafeRoleId, $selectedRoles);
@@ -112,21 +109,20 @@ class UserResource extends Resource
                     ->columns(1)
                     ->searchable()
                     ->live()
-                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->company_code . ' - ' . $record->fantasy_name),
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->company_code.' - '.$record->fantasy_name),
                 Forms\Components\Select::make('branch_id')
                     ->label(__('Sucursal'))
                     ->relationship(
                         name: 'company.branches',
                         titleAttribute: 'fantasy_name',
-                        modifyQueryUsing: fn(Builder $query, callable $get) =>
-                        $query->when(
+                        modifyQueryUsing: fn (Builder $query, callable $get) => $query->when(
                             $get('company_id'),
-                            fn($query, $companyId) => $query->where('company_id', $companyId)
+                            fn ($query, $companyId) => $query->where('company_id', $companyId)
                         )
                     )
                     ->required()
                     ->searchable()
-                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->branch_code . ' - ' . $record->fantasy_name),
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->branch_code.' - '.$record->fantasy_name),
                 Forms\Components\Section::make(__('Información de contraseña'))
                     ->description(__('La contraseña debe tener entre 8 y 25 caracteres'))
                     ->schema([
@@ -138,8 +134,8 @@ class UserResource extends Resource
                             ->visible(function ($record, $livewire) {
                                 // Mostrar si hay un registro existente con plain_password
                                 // o si se ha ingresado una nueva contraseña
-                                return ($record && !empty($record->plain_password)) ||
-                                    (!empty($livewire->data['plain_password']));
+                                return ($record && ! empty($record->plain_password)) ||
+                                    (! empty($livewire->data['plain_password']));
                             })
                             ->afterStateHydrated(function (TextInput $component, $record) {
                                 if ($record && $record->plain_password) {
@@ -164,7 +160,7 @@ class UserResource extends Resource
                                         } catch (\Exception $e) {
                                             \Log::error('Error saving plain_password', [
                                                 'error' => $e->getMessage(),
-                                                'trace' => $e->getTraceAsString()
+                                                'trace' => $e->getTraceAsString(),
                                             ]);
                                         }
                                     }
@@ -174,8 +170,8 @@ class UserResource extends Resource
 
                                 return null;
                             })
-                            ->dehydrated(fn($state) => filled($state))
-                            ->required(fn(string $context): bool => $context === 'create')
+                            ->dehydrated(fn ($state) => filled($state))
+                            ->required(fn (string $context): bool => $context === 'create')
                             ->confirmed()
                             ->minLength(8)
                             ->maxLength(25)
@@ -207,6 +203,10 @@ class UserResource extends Resource
                     ->label(__('Usuario Maestro Superior'))
                     ->inline(false)
                     ->helperText(__('Puede acceder a todas las sucursales del sistema desde el frontis')),
+                Toggle::make('is_seller')
+                    ->label(__('Es vendedor'))
+                    ->inline(false)
+                    ->helperText(__('Permite al usuario ser asignado como vendedor en carteras de clientes')),
             ]);
     }
 
@@ -223,7 +223,7 @@ class UserResource extends Resource
                             ->orWhere('email', 'like', "%{$search}%")
                             ->orWhere('nickname', 'like', "%{$search}%");
                     })
-                    ->description(fn(User $user) => $user->email ?: $user->nickname),
+                    ->description(fn (User $user) => $user->email ?: $user->nickname),
                 Tables\Columns\TextColumn::make('user_type')
                     ->label(__('Tipo de usuario / Convenio'))
                     ->state(function (User $record): string {
@@ -231,7 +231,7 @@ class UserResource extends Resource
                         $permission = $record->permissions->first()?->name ?? '';
 
                         if ($role && $permission) {
-                            return $role . ' / ' . $permission;
+                            return $role.' / '.$permission;
                         }
 
                         return $role ?: $permission ?: '-';
@@ -243,8 +243,8 @@ class UserResource extends Resource
 
                         return new \Illuminate\Support\HtmlString(
                             '<div class="flex items-center gap-1">
-                                <span class="text-sm text-gray-500">' . __('Usuario Maestro:') . '</span>
-                                ' . $icon . '
+                                <span class="text-sm text-gray-500">'.__('Usuario Maestro:').'</span>
+                                '.$icon.'
                             </div>'
                         );
                     })
@@ -253,24 +253,23 @@ class UserResource extends Resource
                     ->sortable(false),
                 Tables\Columns\TextColumn::make('company.fantasy_name')
                     ->label(__('Empresa'))
-                    ->formatStateUsing(fn(User $record) =>
-                        $record->company
-                            ? $record->company->company_code . ' - ' . $record->company->fantasy_name
+                    ->formatStateUsing(fn (User $record) => $record->company
+                            ? $record->company->company_code.' - '.$record->company->fantasy_name
                             : '-'
                     )
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query->whereHas('company', function (Builder $q) use ($search) {
                             $q->where('fantasy_name', 'like', "%{$search}%")
-                              ->orWhere('company_code', 'like', "%{$search}%");
+                                ->orWhere('company_code', 'like', "%{$search}%");
                         })->orWhereHas('branch', function (Builder $q) use ($search) {
                             $q->where('fantasy_name', 'like', "%{$search}%");
                         });
                     })
-                    ->description(fn(User $user) => $user->branch?->fantasy_name),
+                    ->description(fn (User $user) => $user->branch?->fantasy_name),
                 Tables\Columns\TextColumn::make('dispatch_rule')
                     ->label(__('Asociado a regla de despacho'))
                     ->getStateUsing(function (User $record): string {
-                        $repository = new \App\Repositories\DispatchRuleRepository();
+                        $repository = new \App\Repositories\DispatchRuleRepository;
                         $dispatchRule = $repository->getDispatchRuleForUser($record);
 
                         return $dispatchRule ? $dispatchRule->name : 'No';
@@ -377,7 +376,7 @@ class UserResource extends Resource
                         ->action(function () {
                             try {
                                 return Excel::download(
-                                    new UserTemplateExport(),
+                                    new UserTemplateExport,
                                     'template_importacion_usuarios.xlsx'
                                 );
                             } catch (\Exception $e) {
@@ -395,13 +394,13 @@ class UserResource extends Resource
                                     ->send();
                             }
                         }),
-                ])->dropdownWidth(MaxWidth::ExtraSmall)
+                ])->dropdownWidth(MaxWidth::ExtraSmall),
             ])
             ->actions([
                 ActionsActionGroup::make([
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make()
-                        ->hidden(fn(User $record): bool => $record->id === auth()->id())
+                        ->hidden(fn (User $record): bool => $record->id === auth()->id())
                         ->before(function (User $record) {
                             if ($record->id === auth()->id()) {
                                 Notification::make()
@@ -409,7 +408,7 @@ class UserResource extends Resource
                                     ->body('No puedes eliminar tu propio usuario.')
                                     ->danger()
                                     ->send();
-    
+
                                 return false;
                             }
                         })
@@ -417,37 +416,37 @@ class UserResource extends Resource
                             try {
                                 Log::info('Iniciando proceso de eliminación de usuario', [
                                     'user_id' => $record->id,
-                                    'user_name' => $record->name
+                                    'user_name' => $record->name,
                                 ]);
-    
+
                                 // Crear array con el ID del usuario a eliminar
                                 $userIdToDelete = [$record->id];
-    
+
                                 // Dispatch el job para eliminar el usuario en segundo plano
                                 BulkDeleteUsers::dispatch($userIdToDelete);
-    
+
                                 Notification::make()
                                     ->title('Eliminación en proceso')
                                     ->body('El usuario será eliminado en segundo plano.')
                                     ->success()
                                     ->send();
-    
+
                                 Log::info('Job de eliminación de usuario enviado a la cola', [
-                                    'user_id' => $record->id
+                                    'user_id' => $record->id,
                                 ]);
                             } catch (\Exception $e) {
                                 Log::error('Error al preparar eliminación de usuario', [
                                     'user_id' => $record->id,
                                     'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
+                                    'trace' => $e->getTraceAsString(),
                                 ]);
-    
+
                                 Notification::make()
                                     ->title('Error')
-                                    ->body('Ha ocurrido un error al preparar la eliminación del usuario: ' . $e->getMessage())
+                                    ->body('Ha ocurrido un error al preparar la eliminación del usuario: '.$e->getMessage())
                                     ->danger()
                                     ->send();
-    
+
                                 // Re-lanzar la excepción para que Filament la maneje
                                 throw $e;
                             }
@@ -460,40 +459,40 @@ class UserResource extends Resource
                             try {
                                 // Crear array con el ID del usuario
                                 $userIdToSend = [$record->id];
-    
+
                                 // Dispatch el job para enviar el correo en segundo plano
                                 SendCredentialsEmails::dispatch($userIdToSend);
-    
+
                                 Notification::make()
                                     ->title('Envío en proceso')
                                     ->body('Las credenciales serán enviadas en segundo plano.')
                                     ->success()
                                     ->send();
-    
+
                                 Log::info('Job de envío de credenciales enviado a la cola', [
-                                    'user_id' => $record->id
+                                    'user_id' => $record->id,
                                 ]);
                             } catch (\Exception $e) {
                                 Log::error('Error al preparar envío de credenciales', [
                                     'user_id' => $record->id,
                                     'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
+                                    'trace' => $e->getTraceAsString(),
                                 ]);
-    
+
                                 Notification::make()
                                     ->title('Error')
-                                    ->body('Ha ocurrido un error al preparar el envío de credenciales: ' . $e->getMessage())
+                                    ->body('Ha ocurrido un error al preparar el envío de credenciales: '.$e->getMessage())
                                     ->danger()
                                     ->send();
                             }
                         }),
 
                 ])
-                ->label('Acciones')
-                ->icon('heroicon-m-ellipsis-vertical')
-                ->size(ActionSize::Small)
-                ->color('primary')
-                ->button()
+                    ->label('Acciones')
+                    ->icon('heroicon-m-ellipsis-vertical')
+                    ->size(ActionSize::Small)
+                    ->color('primary')
+                    ->button(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -503,7 +502,7 @@ class UserResource extends Resource
                             try {
                                 \Log::info('Iniciando proceso de eliminación masiva de usuarios', [
                                     'total_records' => $records->count(),
-                                    'user_ids' => $records->pluck('id')->toArray()
+                                    'user_ids' => $records->pluck('id')->toArray(),
                                 ]);
 
                                 $currentUserId = auth()->id();
@@ -519,7 +518,7 @@ class UserResource extends Resource
 
                                 \Log::info('Registros después de filtrar', [
                                     'filtered_count' => count($userIdsToDelete),
-                                    'filtered_ids' => $userIdsToDelete
+                                    'filtered_ids' => $userIdsToDelete,
                                 ]);
 
                                 // Si se intentó eliminar al usuario actual, mostrar notificación
@@ -534,7 +533,7 @@ class UserResource extends Resource
                                 }
 
                                 // Dispatch el job para eliminar los usuarios en segundo plano
-                                if (!empty($userIdsToDelete)) {
+                                if (! empty($userIdsToDelete)) {
                                     BulkDeleteUsers::dispatch($userIdsToDelete);
 
                                     Notification::make()
@@ -544,7 +543,7 @@ class UserResource extends Resource
                                         ->send();
 
                                     \Log::info('Job de eliminación masiva de usuarios enviado a la cola', [
-                                        'user_ids' => $userIdsToDelete
+                                        'user_ids' => $userIdsToDelete,
                                     ]);
                                 } else {
                                     Notification::make()
@@ -556,12 +555,12 @@ class UserResource extends Resource
                             } catch (\Exception $e) {
                                 \Log::error('Error al preparar eliminación de usuarios', [
                                     'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
+                                    'trace' => $e->getTraceAsString(),
                                 ]);
 
                                 Notification::make()
                                     ->title('Error')
-                                    ->body('Ha ocurrido un error al preparar la eliminación de usuarios: ' . $e->getMessage())
+                                    ->body('Ha ocurrido un error al preparar la eliminación de usuarios: '.$e->getMessage())
                                     ->danger()
                                     ->send();
                             }
@@ -577,10 +576,10 @@ class UserResource extends Resource
                                 $exportProcess = ExportProcess::create([
                                     'type' => ExportProcess::TYPE_USERS,
                                     'status' => ExportProcess::STATUS_QUEUED,
-                                    'file_url' => '-'
+                                    'file_url' => '-',
                                 ]);
 
-                                $fileName = "exports/users/usuarios_export_{$exportProcess->id}_" . time() . '.xlsx';
+                                $fileName = "exports/users/usuarios_export_{$exportProcess->id}_".time().'.xlsx';
 
                                 Excel::store(
                                     new UserDataExport($userIds, $exportProcess->id),
@@ -591,7 +590,7 @@ class UserResource extends Resource
 
                                 $fileUrl = Storage::disk('s3')->url($fileName);
                                 $exportProcess->update([
-                                    'file_url' => $fileUrl
+                                    'file_url' => $fileUrl,
                                 ]);
 
                                 Notification::make()
@@ -623,14 +622,14 @@ class UserResource extends Resource
                             try {
                                 Log::info('Iniciando proceso de envío masivo de credenciales', [
                                     'total_records' => $records->count(),
-                                    'user_ids' => $records->pluck('id')->toArray()
+                                    'user_ids' => $records->pluck('id')->toArray(),
                                 ]);
 
                                 // Obtener los IDs de los usuarios seleccionados
                                 $userIds = $records->pluck('id')->toArray();
 
                                 // Dispatch el job para enviar los correos en segundo plano
-                                if (!empty($userIds)) {
+                                if (! empty($userIds)) {
                                     SendCredentialsEmails::dispatch($userIds);
 
                                     Notification::make()
@@ -640,7 +639,7 @@ class UserResource extends Resource
                                         ->send();
 
                                     Log::info('Job de envío masivo de credenciales enviado a la cola', [
-                                        'user_ids' => $userIds
+                                        'user_ids' => $userIds,
                                     ]);
                                 } else {
                                     Notification::make()
@@ -652,12 +651,12 @@ class UserResource extends Resource
                             } catch (\Exception $e) {
                                 Log::error('Error al preparar envío masivo de credenciales', [
                                     'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
+                                    'trace' => $e->getTraceAsString(),
                                 ]);
 
                                 Notification::make()
                                     ->title('Error')
-                                    ->body('Ha ocurrido un error al preparar el envío masivo de credenciales: ' . $e->getMessage())
+                                    ->body('Ha ocurrido un error al preparar el envío masivo de credenciales: '.$e->getMessage())
                                     ->danger()
                                     ->send();
                             }
@@ -673,7 +672,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\CategoryUserLinesRelationManager::class
+            RelationManagers\CategoryUserLinesRelationManager::class,
         ];
     }
 

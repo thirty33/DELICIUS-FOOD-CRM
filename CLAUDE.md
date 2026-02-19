@@ -297,1046 +297,341 @@ public function test_status_change_triggers_event(): void
 
 ---
 
-## Creating Production Bug Replica Tests
+## Skills Reference
 
-When production bugs are reported, follow this systematic process to create a test that replicates the EXACT production scenario before fixing the bug.
+The following detailed guides have been moved to `.ai/skills/` for on-demand loading:
 
-### Step 1: Gather Production Data Using Tinker
+- **production-bug-replica-tests** - Creating tests that replicate exact production bug scenarios (Individual & Consolidated agreements)
+- **model-migration-review** - Mandatory protocol for reviewing migrations and models before writing tests
+- **database-management** - Creating databases, importing dumps, and troubleshooting with Laravel Sail
+- **software-architecture** - Architecture patterns: Actions (create/update), Repositories (queries), Services with Contracts (multi-client module operations)
 
-**ALWAYS use `./vendor/bin/sail tinker` to investigate production data BEFORE creating the test.**
+These skills are loaded automatically by AI agents when working on relevant tasks.
 
-#### 1.1 Identify the User
-```bash
-./vendor/bin/sail tinker --execute="
-\$user = App\Models\User::where('nickname', 'USER.NICKNAME')->first();
-echo \"User ID: \" . \$user->id . \"\n\";
-echo \"Company ID: \" . \$user->company_id . \"\n\";
-echo \"Company: \" . \$user->company->name . \"\n\";
-echo \"Role: \" . \$user->roles->first()->name . \" (ID: \" . \$user->roles->first()->id . \")\n\";
-echo \"Permission: \" . \$user->permissions->first()->name . \" (ID: \" . \$user->permissions->first()->id . \")\n\";
-echo \"validate_subcategory_rules: \" . (\$user->validate_subcategory_rules ? 'true' : 'false') . \"\n\";
-"
-```
+===
 
-#### 1.2 Analyze the Order
-```bash
-./vendor/bin/sail tinker --execute="
-\$order = App\Models\Order::find(ORDER_ID);
-echo \"Order ID: \" . \$order->id . \"\n\";
-echo \"User: \" . \$order->user->nickname . \"\n\";
-echo \"Date: \" . \$order->date . \"\n\";
-echo \"Status: \" . \$order->status . \"\n\n\";
+<laravel-boost-guidelines>
+=== foundation rules ===
 
-echo \"Order Lines:\n\";
-foreach (\$order->orderLines as \$line) {
-    \$subcats = \$line->product->category->subcategories->pluck('name')->toArray();
-    echo \"  - Product ID: \" . \$line->product->id . \"\n\";
-    echo \"    Name: \" . \$line->product->name . \"\n\";
-    echo \"    Category: \" . \$line->product->category->name . \"\n\";
-    echo \"    Subcategories: [\" . implode(', ', \$subcats) . \"]\n\";
-}
-"
-```
+# Laravel Boost Guidelines
 
-#### 1.3 Check Products and Categories
-```bash
-./vendor/bin/sail tinker --execute="
-\$product = App\Models\Product::find(PRODUCT_ID);
-echo \"Product ID: \" . \$product->id . \"\n\";
-echo \"Name: \" . \$product->name . \"\n\";
-echo \"Category: \" . \$product->category->name . \" (ID: \" . \$product->category->id . \")\n\";
-\$subcats = \$product->category->subcategories->pluck('name')->toArray();
-echo \"Subcategories: [\" . implode(', ', \$subcats) . \"]\n\";
-"
-```
+The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
 
-#### 1.4 Verify Active Rules (for validation issues)
-```bash
-./vendor/bin/sail tinker --execute="
-\$rules = App\Models\OrderRule::where('is_active', true)
-    ->where('rule_type', 'subcategory_exclusion')
-    ->get();
+## Foundational Context
 
-echo \"Active Rules:\n\";
-foreach (\$rules as \$rule) {
-    echo \"  Rule ID \" . \$rule->id . \": \" . \$rule->name . \" (Priority: \" . \$rule->priority . \")\n\";
-    echo \"    Role: \" . \$rule->role->name . \" (\" . \$rule->role_id . \")\n\";
-    echo \"    Permission: \" . \$rule->permission->name . \" (\" . \$rule->permission_id . \")\n\";
-    echo \"    Companies: \" . \$rule->companies->count() . \"\n\";
+This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-    if (\$rule->companies->count() > 0) {
-        echo \"      - \" . \$rule->companies->pluck('name')->join(', ') . \"\n\";
-    }
+- php - 8.4.17
+- filament/filament (FILAMENT) - v3
+- laravel/envoy (ENVOY) - v2
+- laravel/framework (LARAVEL) - v12
+- laravel/mcp (MCP) - v0
+- laravel/prompts (PROMPTS) - v0
+- laravel/sanctum (SANCTUM) - v4
+- livewire/livewire (LIVEWIRE) - v3
+- laravel/boost (BOOST) - v2
+- laravel/dusk (DUSK) - v8
+- laravel/pint (PINT) - v1
+- laravel/sail (SAIL) - v1
+- laravel/telescope (TELESCOPE) - v5
+- phpunit/phpunit (PHPUNIT) - v11
 
-    echo \"    Exclusions:\n\";
-    foreach (\$rule->subcategoryExclusions as \$ex) {
-        echo \"      - \" . \$ex->subcategory->name . \" => \" . \$ex->excludedSubcategory->name . \"\n\";
-    }
-    echo \"\n\";
-}
-"
-```
+## Skills Activation
 
-#### 1.5 Test Repository Logic (if applicable)
-```bash
-./vendor/bin/sail tinker --execute="
-\$user = App\Models\User::where('nickname', 'USER.NICKNAME')->first();
-\$repo = new App\Repositories\OrderRuleRepository();
+This project has domain-specific skills available. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
 
-\$orderRule = \$repo->getOrderRuleForUser(\$user, 'subcategory_exclusion');
+- `mcp-development` — Develops MCP servers, tools, resources, and prompts. Activates when creating MCP tools, resources, or prompts; setting up AI integrations; debugging MCP connections; working with routes/ai.php; or when the user mentions MCP, Model Context Protocol, AI tools, AI server, or building tools for AI assistants.
+- `livewire-development` — Develops reactive Livewire 3 components. Activates when creating, updating, or modifying Livewire components; working with wire:model, wire:click, wire:loading, or any wire: directives; adding real-time updates, loading states, or reactivity; debugging component behavior; writing Livewire tests; or when the user mentions Livewire, component, counter, or reactive UI.
+- `database-management` — Guide for creating databases, importing SQL dumps, granting permissions, and troubleshooting database connections using Laravel Sail and Docker.
+- `model-migration-review` — Mandatory protocol for reviewing model migrations, fillable fields, relationships, and pivot tables before creating any test that involves model instances.
+- `production-bug-replica-tests` — Create tests that replicate exact production bug scenarios, including data investigation with tinker, anonymized data, and correct assertion patterns.
+- `software-architecture` — Architecture patterns for this project — Actions (create/update), Repositories (queries), and Services with Contracts for multi-client module operations.
 
-if (\$orderRule) {
-    echo \"Selected Rule for User:\n\";
-    echo \"  ID: \" . \$orderRule->id . \"\n\";
-    echo \"  Name: \" . \$orderRule->name . \"\n\";
-    echo \"  Priority: \" . \$orderRule->priority . \"\n\";
-    echo \"  Companies: \" . \$orderRule->companies->count() . \"\n\n\";
+## Conventions
 
-    echo \"  Exclusions:\n\";
-    foreach (\$orderRule->subcategoryExclusions as \$ex) {
-        echo \"    - \" . \$ex->subcategory->name . \" => \" . \$ex->excludedSubcategory->name . \"\n\";
-    }
-}
-"
-```
+- You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
+- Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
+- Check for existing components to reuse before writing a new one.
 
-### Step 2: Review Existing Test Classes
+## Verification Scripts
 
-**ALWAYS** review similar existing test files to understand the project's testing patterns:
+- Do not create verification scripts or tinker when tests cover that functionality and prove they work. Unit and feature tests are more important.
 
-```bash
-# Find similar tests
-ls -la tests/Feature/API/V1/Agreement/Individual/
+## Application Structure & Architecture
 
-# Read base test class
-cat tests/BaseIndividualAgreementTest.php
+- Stick to existing directory structure; don't create new base folders without approval.
+- Do not change the application's dependencies without approval.
 
-# Read a similar test for reference
-cat tests/Feature/API/V1/Agreement/Individual/CompanySpecificRulesTest.php
-```
+## Frontend Bundling
 
-**Key patterns to observe:**
-- How users are created and authenticated (`Sanctum::actingAs()`)
-- How roles and permissions are retrieved (`Role::where()->first()`)
-- How test data is structured (Company, Branch, PriceList, etc.)
-- How API requests are made (`$this->postJson()`)
-- Assertion patterns
+- If the user doesn't see a frontend change reflected in the UI, it could mean they need to run `vendor/bin/sail npm run build`, `vendor/bin/sail npm run dev`, or `vendor/bin/sail composer run dev`. Ask them.
 
-### Step 3: Create the Production Replica Test
+## Documentation Files
 
-#### 3.1 Test File Naming Convention
-- Place in appropriate directory: `tests/Feature/API/V1/[Module]/`
-- Name descriptively: `ProductionBug[Description]ReplicaTest.php`
-- Example: `ProductionBugUniconMultipleEntradasReplicaTest.php`
+- You must only create documentation files if explicitly requested by the user.
 
-#### 3.2 Test Structure Template
+## Replies
 
+- Be concise in your explanations - focus on what's important rather than explaining obvious details.
+
+=== boost rules ===
+
+# Laravel Boost
+
+- Laravel Boost is an MCP server that comes with powerful tools designed specifically for this application. Use them.
+
+## Artisan
+
+- Use the `list-artisan-commands` tool when you need to call an Artisan command to double-check the available parameters.
+
+## URLs
+
+- Whenever you share a project URL with the user, you should use the `get-absolute-url` tool to ensure you're using the correct scheme, domain/IP, and port.
+
+## Tinker / Debugging
+
+- You should use the `tinker` tool when you need to execute PHP to debug code or query Eloquent models directly.
+- Use the `database-query` tool when you only need to read from the database.
+- Use the `database-schema` tool to inspect table structure before writing migrations or models.
+
+## Reading Browser Logs With the `browser-logs` Tool
+
+- You can read browser logs, errors, and exceptions using the `browser-logs` tool from Boost.
+- Only recent browser logs will be useful - ignore old logs.
+
+## Searching Documentation (Critically Important)
+
+- Boost comes with a powerful `search-docs` tool you should use before trying other approaches when working with Laravel or Laravel ecosystem packages. This tool automatically passes a list of installed packages and their versions to the remote Boost API, so it returns only version-specific documentation for the user's circumstance. You should pass an array of packages to filter on if you know you need docs for particular packages.
+- Search the documentation before making code changes to ensure we are taking the correct approach.
+- Use multiple, broad, simple, topic-based queries at once. For example: `['rate limiting', 'routing rate limiting', 'routing']`. The most relevant results will be returned first.
+- Do not add package names to queries; package information is already shared. For example, use `test resource table`, not `filament 4 test resource table`.
+
+### Available Search Syntax
+
+1. Simple Word Searches with auto-stemming - query=authentication - finds 'authenticate' and 'auth'.
+2. Multiple Words (AND Logic) - query=rate limit - finds knowledge containing both "rate" AND "limit".
+3. Quoted Phrases (Exact Position) - query="infinite scroll" - words must be adjacent and in that order.
+4. Mixed Queries - query=middleware "rate limit" - "middleware" AND exact phrase "rate limit".
+5. Multiple Queries - queries=["authentication", "middleware"] - ANY of these terms.
+
+=== php rules ===
+
+# PHP
+
+- Always use curly braces for control structures, even for single-line bodies.
+
+## Constructors
+
+- Use PHP 8 constructor property promotion in `__construct()`.
+    - `public function __construct(public GitHub $github) { }`
+- Do not allow empty `__construct()` methods with zero parameters unless the constructor is private.
+
+## Type Declarations
+
+- Always use explicit return type declarations for methods and functions.
+- Use appropriate PHP type hints for method parameters.
+
+<!-- Explicit Return Types and Method Params -->
 ```php
-<?php
-
-namespace Tests\Feature\API\V1\[Module];
-
-use App\Models\[RequiredModels];
-use App\Enums\[RequiredEnums];
-use Carbon\Carbon;
-use Laravel\Sanctum\Sanctum;
-use Tests\[BaseTestClass];
-
-/**
- * Production Bug Replica Test - [Bug Description]
- *
- * PRODUCTION DATA:
- * - User: [USERNAME] (Company: [COMPANY_NAME])
- * - [Other relevant production info]
- *
- * SCENARIO:
- * [Describe the exact production scenario step by step]
- *
- * EXPECTED:
- * [What should happen]
- *
- * ACTUAL BUG:
- * [What actually happens - the error]
- *
- * API ENDPOINT:
- * [The failing endpoint]
- */
-class ProductionBug[Description]ReplicaTest extends [BaseTestClass]
+protected function isAccessible(User $user, ?string $path = null): bool
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-        Carbon::setTestNow('[PRODUCTION_DATE] 00:00:00');
-    }
-
-    protected function tearDown(): void
-    {
-        Carbon::setTestNow();
-        parent::tearDown();
-    }
-
-    public function test_[descriptive_name_of_bug](): void
-    {
-        // 1. GET ROLES AND PERMISSIONS (from parent setUp)
-        $role = Role::where('name', RoleName::VALUE)->first();
-        $permission = Permission::where('name', PermissionName::VALUE)->first();
-
-        // 2. CREATE COMPANY-SPECIFIC DATA
-        $priceList = PriceList::create([...]);
-        $company = Company::create([...]);
-        $branch = Branch::create([...]);
-
-        // 3. CREATE RULES (if applicable)
-        $rule = OrderRule::create([...]);
-        $rule->companies()->attach($company->id);
-        $this->createSubcategoryExclusions($rule, [...]);
-
-        // 4. CREATE USER
-        $user = User::create([...]);
-        $user->roles()->attach($role->id);
-        $user->permissions()->attach($permission->id);
-
-        // 5. CREATE CATEGORIES, PRODUCTS, MENUS
-        $category = Category::create([...]);
-        $category->subcategories()->attach([...]);
-
-        $product = Product::create([
-            'name' => '...',
-            'description' => '...', // ALWAYS include description!
-            'code' => '...',
-            'category_id' => $category->id,
-            'active' => true,
-            'measure_unit' => 'UND',
-            'weight' => 0,
-            'allow_sales_without_stock' => true,
-        ]);
-
-        PriceListLine::create([...]);
-
-        $menu = Menu::create([...]);
-        $categoryMenu = CategoryMenu::create([...]);
-        $categoryMenu->products()->attach($product->id);
-
-        // 6. AUTHENTICATE USER
-        Sanctum::actingAs($user);
-
-        // 7. REPLICATE THE EXACT API CALLS FROM PRODUCTION
-        // Step 1: Initial request (if applicable)
-        $response = $this->postJson("/api/v1/endpoint", [...]);
-        $response->assertStatus(200);
-
-        // Step 2: The failing request
-        $response = $this->postJson("/api/v1/endpoint", [...]);
-
-        // 8. ASSERTIONS - EXPECT 200, BUT IT WILL FAIL WITH PRODUCTION ERROR
-        $response->assertStatus(200); // This will fail, showing the bug
-
-        // Additional assertions to verify expected behavior
-        $order = $user->orders()->where('date', $date)->first();
-        $this->assertNotNull($order);
-        $this->assertEquals(EXPECTED_COUNT, $order->orderLines->count());
-    }
+    ...
 }
 ```
 
-#### 3.3 Critical Requirements for Production Replica Tests
-
-**MUST-HAVE ELEMENTS:**
-1. **Comprehensive Documentation**: Include detailed comments explaining:
-   - Production data (user, company, order IDs)
-   - Expected vs actual behavior
-   - API endpoint and request payload
-   - Root cause of the bug
+## Enums
 
-2. **Exact Data Replication**: Match production data:
-   - Same subcategories and category relationships
-   - Same product structure
-   - Same rules and priorities
-   - Same user configuration
+- Typically, keys in an Enum should be TitleCase. For example: `FavoritePerson`, `BestLake`, `Monthly`.
 
-3. **Product Requirements**:
-   - ALWAYS include `description` field (required in DB)
-   - Include all required fields: `measure_unit`, `weight`, `allow_sales_without_stock`
+## Comments
 
-4. **Date Management**:
-   - Use `Carbon::setTestNow()` in `setUp()`
-   - Reset with `Carbon::setTestNow()` in `tearDown()`
+- Prefer PHPDoc blocks over inline comments. Never use comments within the code itself unless the logic is exceptionally complex.
 
-5. **Authentication**:
-   - Use `Sanctum::actingAs($user)` before API calls
-   - Attach roles and permissions to user
-
-6. **Assertions**:
-   - Test should assert the EXPECTED behavior (200 OK)
-   - Let it fail with the production error
-   - This documents what SHOULD happen vs what DOES happen
-
-### Step 4: Run the Test to Verify Bug Replication
-
-```bash
-./vendor/bin/sail artisan test --filter=[TestClassName]
-```
-
-**Expected outcome**: Test FAILS with the EXACT same error as production.
-
-**Example of successful bug replication:**
-```
-FAIL  Tests\Feature\API\V1\Agreement\Individual\ProductionBugReplicaTest
-Expected response status code [200] but received 422.
-{
-    "message": "error",
-    "errors": {
-        "message": ["Solo puedes elegir un ENTRADA por pedido.\n\n"]
-    }
-}
-```
-
-### Step 5: Document Test Location and Purpose
-
-Add to pull request or issue:
-```
-**Bug Replica Test**: tests/Feature/API/V1/[Module]/ProductionBug[Description]ReplicaTest.php
-
-This test replicates the exact production scenario:
-- User: [USERNAME]
-- Company: [COMPANY]
-- Issue: [DESCRIPTION]
-- Test Status: ❌ FAILING (as expected - replicates bug)
-
-Once fixed, this test should pass (✅ 200 OK).
-```
-
-### Common Pitfalls to Avoid
-
-1. **Missing Production Data**:
-   - ❌ Creating generic test data
-   - ✅ Using EXACT production data structure
-
-2. **Incomplete Investigation**:
-   - ❌ Jumping straight to coding
-   - ✅ Using tinker to understand ALL aspects
-
-3. **Wrong Assertions**:
-   - ❌ `$response->assertStatus(422)` (accepting the bug)
-   - ✅ `$response->assertStatus(200)` (expecting correct behavior)
-
-4. **Missing Required Fields**:
-   - ❌ Skipping `description` in Product creation
-   - ✅ Including ALL required DB fields
-
-5. **Ignoring Existing Patterns**:
-   - ❌ Creating tests from scratch without reviewing existing ones
-   - ✅ Following established patterns in similar tests
-
-### Test Lifecycle
-
-1. **Initial State**: Test FAILS ❌ (replicates production bug)
-2. **After Fix**: Test PASSES ✅ (bug is resolved)
-3. **Regression Prevention**: Test continues to run, preventing bug reintroduction
-
-### Example: Real Production Bug Test
-
-See: `tests/Feature/API/V1/Agreement/Individual/ProductionBugReplicaTest.php`
-
-This test demonstrates:
-- Complete production data replication
-- Tinker investigation results in comments
-- Exact API call sequence
-- Expected behavior assertions
-- Comprehensive documentation
-
-**Key Learning**: This test found that `OneProductPerSubcategory` validation was ignoring database-driven rules and using hardcoded validation logic.
-
----
-
-## Creating Production Replica Tests for Consolidated Agreements
-
-For Consolidated Agreement tests, follow the same process but with these specific considerations:
-
-### Additional Tinker Investigations for Consolidated
-
-#### Analyze Menu Details
-```bash
-./vendor/bin/sail artisan tinker --execute="
-\ = App\Models\Menu::find(MENU_ID);
-echo \"=== MENU ===\\n\";
-echo \"Menu ID: \" . \->id . \"\\n\";
-echo \"Title: \" . \->title . \"\\n\";
-echo \"Publication Date: \" . \->publication_date . \"\\n\";
-echo \"Role: \" . (\->role ? \->role->name : 'N/A') . \"\\n\";
-echo \"Permission: \" . (\->permission ? \->permission->name : 'N/A') . \"\\n\";
-echo \"Active: \" . (\->active ? 'Yes' : 'No') . \"\\n\";
-echo \"Category Menus: \" . \->categoryMenus->count() . \"\\n\";
-"
-```
-
-#### Get Company Details
-```bash
-./vendor/bin/sail artisan tinker --execute="
-\ = App\Models\Company::find(COMPANY_ID);
-echo \"=== COMPANY ===\\n\";
-echo \"Company ID: \" . \->id . \"\\n\";
-echo \"Name: \" . \->name . \"\\n\";
-echo \"Tax ID: \" . \->tax_id . \"\\n\";
-echo \"Company Code: \" . \->company_code . \"\\n\";
-echo \"Fantasy Name: \" . \->fantasy_name . \"\\n\";
-echo \"Price List ID: \" . \->price_list_id . \"\\n\";
-"
-```
-
-### Data Anonymization Rules
-
-**CRITICAL**: Never use real production data in tests. Always anonymize:
-
-❌ **WRONG**:
-```php
-$user = User::create([
-    'nickname' => 'EXACTO.FRIA',  // Real company name
-    'email' => 'contacto@exacto.cl',  // Real email
-]);
-```
-
-✅ **CORRECT**:
-```php
-$user = User::create([
-    'nickname' => 'TEST.CONSOLIDATED.USER',  // Generic name
-    'email' => 'test.consolidated@test.com',  // Test email
-]);
-```
-
-**Anonymization Guidelines**:
-1. **User Names**: Use TEST.CONSOLIDATED.USER, TEST.AGREEMENT.USER, etc.
-2. **Company Names**: Use TEST CONSOLIDATED COMPANY S.A., TEST COMPANY INC
-3. **Tax IDs**: Use fake IDs like 12.345.678-9
-4. **Emails**: Use @test.com domain
-5. **Product Names**: Keep generic descriptions (Sandwich type A, Juice boxes, etc.)
-
-**Document Real IDs in Comments**:
-```php
-/**
- * PRODUCTION DATA (anonymized):
- * - User: TEST.CONSOLIDATED.USER (production ID: 380)
- * - Company: TEST CONSOLIDATED COMPANY (production ID: 594)
- * - Order: production order ID 109
- */
-```
-
-### Test Location for Consolidated
-
-Place consolidated agreement tests in:
-```
-tests/Feature/API/V1/Agreement/Consolidated/
-```
-
-Examples:
-- `OrderUpdateStatusProductionReplicaTest.php` - Order status updates
-- `CategoryMenuWithShowAllProductsTest.php` - Category menu behavior
-- `MissingCategoryProductValidationTest.php` - Product validation
-
-### Example: Consolidated Order Update Status Test
-
-See: `tests/Feature/API/V1/Agreement/Consolidated/OrderUpdateStatusProductionReplicaTest.php`
-
-This test demonstrates anonymized production data replication for order status updates with consolidated agreement validation.
-
----
-
-## MANDATORY: Model and Migration Review Before Creating Tests
-
-### ⚠️ CRITICAL PROTOCOL - MUST FOLLOW FOR EVERY TEST ⚠️
-
-**BEFORE writing ANY test that creates model instances, you MUST:**
-
-1. **Read CLAUDE.md FIRST** - Review testing guidelines and data anonymization rules
-2. **Review ALL model migrations** - Understand required fields and constraints
-3. **Review ALL model classes** - Understand fillable fields, relationships, and casts
-4. **Verify table relationships** - Check pivot tables and foreign keys
-5. **Test with tinker** - Validate queries work before writing test code
-
-### Required Tables to Review
-
-For EVERY model you use in a test, review:
-
-1. **Primary Migration** (`create_{table}_table.php`) - Base schema
-2. **Update Migrations** (`update_{table}_table.php`) - Added columns
-3. **Model Class** (`app/Models/{Model}.php`) - Fillable, casts, relationships
-4. **Pivot Tables** (if applicable) - Junction table structure
-
-### Example Checklist for Order Tests
-
-When creating a test involving Orders:
-
-- [ ] Read `database/migrations/*create_orders_table.php`
-- [ ] Read `database/migrations/*update_orders_table.php` (all updates)
-- [ ] Read `app/Models/Order.php` - Check fillable, appends, relationships
-- [ ] Read `database/migrations/*create_order_lines_table.php`
-- [ ] Read `app/Models/OrderLine.php`
-- [ ] Read `database/migrations/*create_dispatch_rules_table.php`
-- [ ] Read `database/migrations/*create_dispatch_rule_ranges_table.php`
-- [ ] Read `database/migrations/*create_dispatch_rule_companies_table.php` (pivot)
-- [ ] Read `database/migrations/*create_dispatch_rule_branches_table.php` (pivot)
-- [ ] Read `app/Models/DispatchRule.php` - Verify relationship method names
-- [ ] Read `app/Models/DispatchRuleRange.php`
-- [ ] Test query in tinker: `DispatchRule::whereHas('companies', fn($q) => $q->where('companies.id', 1))->first()`
-
-### Common Mistakes to Avoid
-
-#### Mistake 1: Using Non-Existent Fields
-
-❌ **WRONG**:
-```php
-Branch::create([
-    'name' => 'Test Branch',  // Field doesn't exist!
-    'company_id' => $company->id,
-]);
-```
-
-✅ **CORRECT**:
-```bash
-# First check migration
-cat database/migrations/*create_branches_table.php
-
-# Then check model
-cat app/Models/Branch.php
-```
-
-```php
-Branch::create([
-    'company_id' => $company->id,  // Only use fields that exist
-    'address' => 'Test Address',
-    'min_price_order' => 0,
-]);
-```
-
-#### Mistake 2: Wrong Column Names in Relationships
-
-❌ **WRONG**:
-```php
-Menu::create([
-    'permission_id' => $permission->id,  // Column is 'permissions_id'!
-]);
-```
-
-✅ **CORRECT**:
-```bash
-# Check migration first
-cat database/migrations/*update_menus_table.php
-# Shows: $table->unsignedBigInteger('permissions_id')
-```
-
-```php
-Menu::create([
-    'permissions_id' => $permission->id,  // Use exact column name
-]);
-```
-
-#### Mistake 3: Missing Required Fields
-
-❌ **WRONG**:
-```php
-CategoryLine::create([
-    'category_id' => $category->id,
-    'weekday' => 'monday',
-    // Missing required fields!
-]);
-```
-
-✅ **CORRECT**:
-```bash
-# Check migration
-cat database/migrations/*create_category_lines_table.php
-# Shows: preparation_days, maximum_order_time are required
-```
-
-```php
-CategoryLine::create([
-    'category_id' => $category->id,
-    'weekday' => 'monday',
-    'preparation_days' => 1,        // Required
-    'maximum_order_time' => '15:00:00',  // Required
-    'active' => true,
-]);
-```
-
-#### Mistake 4: Wrong Relationship Queries
-
-❌ **WRONG**:
-```php
-DispatchRule::whereHas('companies', function($q) use ($companyId) {
-    $q->where('company_id', $companyId);  // Wrong table context!
-});
-```
-
-✅ **CORRECT**:
-```bash
-# Check pivot table migration
-cat database/migrations/*create_dispatch_rule_companies_table.php
-# Shows: dispatch_rule_id, company_id
-
-# Check model relationship
-cat app/Models/DispatchRule.php
-# Shows: belongsToMany(Company::class, 'dispatch_rule_companies')
-```
-
-```php
-DispatchRule::whereHas('companies', function($q) use ($companyId) {
-    $q->where('companies.id', $companyId);  // Reference parent table
-});
-```
-
-### Investigation Workflow
-
-**Step 1: Use Tinker to Understand Production Data**
-```bash
-./vendor/bin/sail tinker --execute="
-\$order = App\Models\Order::find(193);
-echo \"Order Lines: \" . \$order->orderLines->count() . \"\\n\";
-echo \"Dispatch Cost: \" . \$order->dispatch_cost . \"\\n\";
-echo \"User Company: \" . \$order->user->company->name . \"\\n\";
-"
-```
-
-**Step 2: Find Related Tables**
-```bash
-# Find all migrations for a model
-ls -la database/migrations/ | grep dispatch
-
-# Read them in chronological order
-cat database/migrations/2025_08_27_132308_create_dispatch_rules_table.php
-cat database/migrations/2025_08_27_132315_create_dispatch_rule_companies_table.php
-cat database/migrations/2025_08_27_132326_create_dispatch_rule_ranges_table.php
-```
-
-**Step 3: Verify Model Relationships**
-```bash
-cat app/Models/DispatchRule.php | grep -A 3 "function companies"
-# Output: public function companies(): BelongsToMany
-#         {
-#             return $this->belongsToMany(Company::class, 'dispatch_rule_companies')
-```
-
-**Step 4: Test Query Before Using in Test**
-```bash
-./vendor/bin/sail tinker --execute="
-\$rule = App\Models\DispatchRule::whereHas('companies', function(\$q) {
-    \$q->where('companies.id', 489);
-})->first();
-echo \"Found rule: \" . \$rule->name . \"\\n\";
-"
-```
-
-**Step 5: Only Then Write Test Code**
-
-### Case Study: EmptyOrderDispatchCostBugTest
-
-**Problems Encountered:**
-
-1. ❌ Used `Branch::create(['name' => ...])` - field doesn't exist
-2. ❌ Used `Menu::create(['permission_id' => ...])` - should be `permissions_id`
-3. ❌ Used `DispatchRule::create(['role_id' => ...])` - fields don't exist
-4. ❌ Used `CategoryLine::create(['day_of_week' => 6])` - should be `weekday => 'saturday'`
-5. ❌ Missing `preparation_days` and `maximum_order_time` in CategoryLine
-6. ❌ Wrong query `where('company_id', $id)` in whereHas - should be `where('companies.id', $id)`
-
-**Time Wasted**: ~2 hours debugging errors that could have been avoided
-
-**Correct Approach**:
-1. Read CLAUDE.md first (5 minutes)
-2. Review all 15 migrations (15 minutes)
-3. Review all 8 model files (10 minutes)
-4. Test queries in tinker (5 minutes)
-5. Write test (10 minutes)
-
-**Total Time**: 45 minutes vs 2+ hours
-
-### Enforcement Rule
-
-**IF you start writing a test without reviewing migrations and models:**
-1. STOP immediately
-2. User will ask: "¿revisaste las migraciones y modelos?"
-3. You MUST go back and review them
-4. Document what you found
-5. Then proceed with the test
-
-This is **NON-NEGOTIABLE** and applies to EVERY test creation.
-
----
-
-## Critical Lessons: Creating Production Replica Tests
-
-### Lesson 1: ALWAYS Replicate EXACT Production Structure
-
-**THE GOLDEN RULE**: When asked to "emulate what happens in production", replicate the EXACT data structure from production - no more, no less.
-
-**User's Request Pattern**:
-- "EMULES EN EL TEST LO QUE PASA EN PROD"
-- "el test debe validar que el api devuelva status 200"
-
-**This means**:
-1. Investigate production data with tinker FIRST
-2. Replicate EXACT structure (same number of products, same categories, same rules)
-3. Test should assert expected behavior (200 OK), even if it currently fails in production
-4. DO NOT modify the test data to make it pass - replica means EXACT copy
-
-### Lesson 2: Test Assertions vs Current Behavior
-
-**CRITICAL UNDERSTANDING**:
-- Test assertions should reflect EXPECTED behavior (what SHOULD happen)
-- NOT current production behavior (what currently happens)
-
-**Example**:
-```php
-// Production currently returns 422 with error
-// But test should assert 200 (expected behavior)
-$response = $this->postJson("/api/v1/orders/update-order-status/{$date}", [
-    'status' => 'PROCESSED',
-]);
-
-$response->assertStatus(200); // Expected behavior (will fail initially)
-```
-
-**Why?**:
-- When the test FAILS, it documents the bug
-- When the bug is FIXED, the test will PASS
-- This creates a regression test for the future
-
-### Lesson 3: Menu Structure Matters for Validators
-
-**Key Discovery**: The `AtLeastOneProductByCategory` validator requires:
-- ALL categories WITHOUT subcategories that are in the menu
-- MUST have at least one product in the order
-- When `validate_subcategory_rules = true`
-
-**Example**:
-```
-Menu has:
-- MINI ENSALADAS (has subcategories: ENTRADA, FRIA) ✅ Optional
-- PLATOS VARIABLES (has subcategories: PLATO DE FONDO) ✅ Optional
-- ACOMPAÑAMIENTOS (has subcategories: PAN) ✅ Optional
-- POSTRES (NO subcategories) ⚠️ REQUIRED if in menu
-- BEBESTIBLES (NO subcategories) ⚠️ REQUIRED if in menu
-
-Order must have:
-- At least one product from POSTRES (because it's in menu and has no subcategories)
-- At least one product from BEBESTIBLES (because it's in menu and has no subcategories)
-```
-
-### Lesson 4: Investigation Before Implementation
-
-**MANDATORY PROCESS**:
-
-1. **Gather ALL production data**:
-   ```bash
-   # Order structure
-   ./vendor/bin/sail tinker --execute="
-   \$order = App\Models\Order::find(ORDER_ID);
-   echo \"Order Lines: \" . \$order->orderLines->count() . \"\\n\";
-   foreach (\$order->orderLines as \$line) {
-       echo \"  Product: \" . \$line->product->name . \"\\n\";
-       echo \"  Category: \" . \$line->product->category->name . \"\\n\";
-       \$subcats = \$line->product->category->subcategories->pluck('name')->toArray();
-       echo \"  Subcategories: [\" . implode(', ', \$subcats) . \"]\\n\";
-   }
-   "
-
-   # Menu structure
-   ./vendor/bin/sail tinker --execute="
-   \$menu = App\Models\Menu::find(MENU_ID);
-   echo \"Category Menus: \" . \$menu->categoryMenus->count() . \"\\n\";
-   foreach (\$menu->categoryMenus as \$cm) {
-       echo \"  Category: \" . \$cm->category->name . \"\\n\";
-       \$subcats = \$cm->category->subcategories->pluck('name')->toArray();
-       echo \"  Subcategories: [\" . implode(', ', \$subcats) . \"]\\n\";
-   }
-   "
-
-   # User configuration
-   ./vendor/bin/sail tinker --execute="
-   \$user = App\Models\User::find(USER_ID);
-   echo \"validate_subcategory_rules: \" . (\$user->validate_subcategory_rules ? 'true' : 'false') . \"\\n\";
-   echo \"Role: \" . \$user->roles->first()->name . \"\\n\";
-   echo \"Permission: \" . \$user->permissions->first()->name . \"\\n\";
-   "
-
-   # Order rules
-   ./vendor/bin/sail tinker --execute="
-   \$rules = App\Models\OrderRule::where('is_active', true)->get();
-   foreach (\$rules as \$rule) {
-       echo \"Rule: \" . \$rule->name . \" (Priority: \" . \$rule->priority . \")\\n\";
-       echo \"  Companies: \" . \$rule->companies->count() . \"\\n\";
-       echo \"  Exclusions: \" . \$rule->exclusions->count() . \"\\n\";
-   }
-   "
-   ```
-
-2. **Document findings in test comments**:
-   ```php
-   /**
-    * PRODUCTION DATA (anonymized):
-    * - User: TEST.USER (production ID: 185, nickname: PROD.USER)
-    * - Menu: production menu ID 328 (26 category menus)
-    * - Order: production order ID 161 (3 products)
-    *
-    * EXACT PRODUCTION ORDER STRUCTURE:
-    * 1. Mini Salad - Category: MINI ENSALADAS, Subcategories: [ENTRADA, FRIA]
-    * 2. Hot Dish - Category: PLATOS VARIABLES, Subcategories: [PLATO DE FONDO]
-    * 3. Bread - Category: ACOMPAÑAMIENTOS, Subcategories: [PAN]
-    *
-    * NOTE: Menu includes POSTRES category (NO subcategories) but order has NO POSTRES product
-    */
-   ```
-
-3. **Replicate structure exactly**:
-   - Same number of categories in menu
-   - Same subcategory configuration
-   - Same number of products in order
-   - Same user configuration
-   - Same order rules (general + company-specific)
-
-### Lesson 5: Don't Fix, Don't Investigate - Just Replicate
-
-**User's Expectation**:
-When asked to create a production replica test:
-- ❌ DO NOT investigate why production fails
-- ❌ DO NOT fix the failing test by adding missing data
-- ❌ DO NOT change assertions to match current behavior
-- ✅ DO replicate EXACT production structure
-- ✅ DO assert expected behavior (200 OK)
-- ✅ DO let the test FAIL if production currently fails
-
-**Example Scenario**:
-```
-User: "Create test for order 161, it should return 200"
-Production: Returns 422 "Missing POSTRES"
-
-WRONG Approach:
-- Investigate why it needs POSTRES
-- Add POSTRES product to make test pass
-- Change assertion to expect 422
-
-CORRECT Approach:
-- Replicate order 161 structure exactly (3 products, no POSTRES)
-- Assert 200 OK
-- Let test FAIL with same error as production
-- Document in test that this replicates production bug
-```
-
-### Lesson 6: Test Documentation is Critical
-
-**ALWAYS include in test docblock**:
-
-```php
-/**
- * Production Replica Test - [Description]
- *
- * PRODUCTION DATA (anonymized):
- * - User: TEST.USER (production user ID: X, nickname: PROD.NICKNAME)
- * - Company: TEST COMPANY S.A. (production company ID: Y)
- * - Menu: production menu ID Z (date: YYYY-MM-DD, N category menus)
- * - Order: production order ID W (M products, status: PENDING)
- *
- * EXACT PRODUCTION ORDER STRUCTURE:
- * [List each product with category and subcategories]
- *
- * COMPANY-SPECIFIC ORDER RULE (if applicable):
- * [List rules from production]
- *
- * EXPECTED BEHAVIOR:
- * [What SHOULD happen]
- *
- * CURRENT PRODUCTION BEHAVIOR (if different):
- * [What currently happens - the bug]
- *
- * API ENDPOINT:
- * [Endpoint and payload]
- */
-```
-
-### Lesson 7: When User Corrects You - STOP and LISTEN
-
-**Pattern Recognition**:
-When user says:
-- "por que creas test con datos reales?" → You're using real company names
-- "lo que te estoy pidiendo es que EMULES" → You're not replicating exact structure
-- "el test debe validar lo que valida, que la orden de 200" → You're changing assertions
-
-**Correct Response**:
-1. STOP what you're doing
-2. Re-read user's ORIGINAL request
-3. Review what you ACTUALLY did vs what was requested
-4. Fix ONLY the specific issue mentioned
-5. Don't make additional changes
-
-### Lesson 8: Sequential Process is Mandatory
-
-**NON-NEGOTIABLE ORDER**:
-
-```
-1. User requests production replica test
-   ↓
-2. Use tinker to gather ALL production data
-   ↓
-3. Review similar existing tests for patterns
-   ↓
-4. Create test with:
-   - Anonymized data
-   - EXACT structure from production
-   - Expected behavior assertions (200 OK)
-   - Comprehensive documentation
-   ↓
-5. Run test
-   ↓
-6. If test FAILS with same error as production → SUCCESS (perfect replica)
-   If test PASSES → Investigate if structure matches production
-```
-
-### Example: Perfect Production Replica Test
-
-See: `tests/Feature/API/V1/Agreement/Consolidated/OrderStatusUpdateSuccessReplicaTest.php`
-
-**What makes it perfect**:
-1. ✅ Comprehensive tinker investigation documented
-2. ✅ Anonymized data (TEST.CONSOLIDATED.USER.2, TEST CONSOLIDATED COMPANY 2 S.A.)
-3. ✅ Exact production structure (3 products, matching categories and subcategories)
-4. ✅ Company-specific rules replicated (Rule ID 5 with polymorphic exclusions)
-5. ✅ Menu structure includes all relevant categories (including POSTRES)
-6. ✅ Order has only production products (NO POSTRES, just like production)
-7. ✅ Asserts 200 OK (expected behavior)
-8. ✅ Test FAILS with exact production error message
-9. ✅ Detailed documentation of production IDs and structure
-
-**Test Result**:
-```
-❌ FAILING - Expected 200, got 422: "Tu menú necesita algunos elementos para estar completo: Postres."
-
-This is CORRECT - test successfully replicates production bug.
-Once bug is fixed, test will pass.
-```
-
----
-
-## Database Management with Laravel Sail
-
-### Creating a New Database and Importing Dumps
-
-This section covers how to create new databases and import SQL dumps using Laravel Sail and Docker.
-
-#### Prerequisites
-- Sail must be running: `./vendor/bin/sail up -d`
-- SQL dump file must be in the project root directory
-
-#### Step 1: Create the Database
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword << 'EOSQL'
-CREATE DATABASE IF NOT EXISTS database_name;
-EOSQL
-```
-
-#### Step 2: Grant Permissions to sail User
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword << 'EOSQL'
-GRANT ALL PRIVILEGES ON database_name.* TO 'sail'@'%';
-FLUSH PRIVILEGES;
-EOSQL
-```
-
-#### Step 3: Import the SQL Dump
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword database_name < dump_file.sql
-```
-
-#### Step 4: Update .env File
-Edit `.env` and comment out the previous database, add the new one:
-```env
-# DB_DATABASE=old_database
-DB_DATABASE=database_name
-```
-
-#### Step 5: Clear Configuration Cache
-```bash
-./vendor/bin/sail artisan config:clear
-./vendor/bin/sail artisan config:cache
-```
-
-#### Step 6: Verify Connection
-```bash
-./vendor/bin/sail artisan tinker --execute="
-echo 'Database: ' . config('database.connections.mysql.database') . PHP_EOL;
-echo 'Users: ' . \App\Models\User::count() . PHP_EOL;
-"
-```
-
-### Useful Database Commands
-
-#### List Existing Databases
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword -e "SHOW DATABASES;"
-```
-
-#### Connect to MySQL Directly
-```bash
-./vendor/bin/sail mysql
-```
-
-#### View Tables in a Database
-```bash
-./vendor/bin/sail mysql database_name -e "SHOW TABLES;"
-```
-
-#### Backup a Database
-```bash
-docker exec delicius-food-crm-mysql-1 mysqldump -u sail -ppassword database_name > backup_$(date +%d%m%Y).sql
-```
-
-### Complete Example
-
-```bash
-# 1. Create database
-docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "CREATE DATABASE IF NOT EXISTS delisoft_prod_13102025;"
-
-# 2. Grant permissions
-docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "GRANT ALL PRIVILEGES ON delisoft_prod_13102025.* TO 'sail'@'%'; FLUSH PRIVILEGES;"
-
-# 3. Import dump
-docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword delisoft_prod_13102025 < delisoft_prod_dump_13102025.sql
-
-# 4. Update .env (manual)
-# DB_DATABASE=delisoft_prod_13102025
-
-# 5. Clear cache
-./vendor/bin/sail artisan config:clear
-
-# 6. Verify
-./vendor/bin/sail artisan tinker --execute="echo \App\Models\User::count();"
-```
-
-### Important Notes
-
-- MySQL container name may vary. Verify with: `docker ps | grep mysql`
-- Default root password in Sail: `password`
-- sail user also uses password: `password`
-- Large SQL dumps may take several minutes to import
-- Always backup before switching databases
-- Do not commit `.sql` files to repository (see `.gitignore`)
-
-### Troubleshooting
-
-#### Error: "Access denied for user 'sail'"
-Grant permissions again:
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u root -ppassword -e "GRANT ALL PRIVILEGES ON database_name.* TO 'sail'@'%'; FLUSH PRIVILEGES;"
-```
-
-#### Error: "Unknown database"
-Verify database exists:
-```bash
-docker exec -i delicius-food-crm-mysql-1 mysql -u sail -ppassword -e "SHOW DATABASES;"
-```
-
-#### Application Not Connecting to New Database
-Clear configuration:
-```bash
-./vendor/bin/sail artisan config:clear
-./vendor/bin/sail down
-./vendor/bin/sail up -d
-```
+## PHPDoc Blocks
+
+- Add useful array shape type definitions when appropriate.
+
+=== sail rules ===
+
+# Laravel Sail
+
+- This project runs inside Laravel Sail's Docker containers. You MUST execute all commands through Sail.
+- Start services using `vendor/bin/sail up -d` and stop them with `vendor/bin/sail stop`.
+- Open the application in the browser by running `vendor/bin/sail open`.
+- Always prefix PHP, Artisan, Composer, and Node commands with `vendor/bin/sail`. Examples:
+    - Run Artisan Commands: `vendor/bin/sail artisan migrate`
+    - Install Composer packages: `vendor/bin/sail composer install`
+    - Execute Node commands: `vendor/bin/sail npm run dev`
+    - Execute PHP scripts: `vendor/bin/sail php [script]`
+- View all available Sail commands by running `vendor/bin/sail` without arguments.
+
+=== tests rules ===
+
+# Test Enforcement
+
+- Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
+- Run the minimum number of tests needed to ensure code quality and speed. Use `vendor/bin/sail artisan test --compact` with a specific filename or filter.
+
+=== laravel/core rules ===
+
+# Do Things the Laravel Way
+
+- Use `vendor/bin/sail artisan make:` commands to create new files (i.e. migrations, controllers, models, etc.). You can list available Artisan commands using the `list-artisan-commands` tool.
+- If you're creating a generic PHP class, use `vendor/bin/sail artisan make:class`.
+- Pass `--no-interaction` to all Artisan commands to ensure they work without user input. You should also pass the correct `--options` to ensure correct behavior.
+
+## Database
+
+- Always use proper Eloquent relationship methods with return type hints. Prefer relationship methods over raw queries or manual joins.
+- Use Eloquent models and relationships before suggesting raw database queries.
+- Avoid `DB::`; prefer `Model::query()`. Generate code that leverages Laravel's ORM capabilities rather than bypassing them.
+- Generate code that prevents N+1 query problems by using eager loading.
+- Use Laravel's query builder for very complex database operations.
+
+### Model Creation
+
+- When creating new models, create useful factories and seeders for them too. Ask the user if they need any other things, using `list-artisan-commands` to check the available options to `vendor/bin/sail artisan make:model`.
+
+### APIs & Eloquent Resources
+
+- For APIs, default to using Eloquent API Resources and API versioning unless existing API routes do not, then you should follow existing application convention.
+
+## Controllers & Validation
+
+- Always create Form Request classes for validation rather than inline validation in controllers. Include both validation rules and custom error messages.
+- Check sibling Form Requests to see if the application uses array or string based validation rules.
+
+## Authentication & Authorization
+
+- Use Laravel's built-in authentication and authorization features (gates, policies, Sanctum, etc.).
+
+## URL Generation
+
+- When generating links to other pages, prefer named routes and the `route()` function.
+
+## Queues
+
+- Use queued jobs for time-consuming operations with the `ShouldQueue` interface.
+
+## Configuration
+
+- Use environment variables only in configuration files - never use the `env()` function directly outside of config files. Always use `config('app.name')`, not `env('APP_NAME')`.
+
+## Testing
+
+- When creating models for tests, use the factories for the models. Check if the factory has custom states that can be used before manually setting up the model.
+- Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
+- When creating tests, make use of `vendor/bin/sail artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
+
+## Vite Error
+
+- If you receive an "Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest" error, you can run `vendor/bin/sail npm run build` or ask the user to run `vendor/bin/sail npm run dev` or `vendor/bin/sail composer run dev`.
+
+=== laravel/v12 rules ===
+
+# Laravel 12
+
+- CRITICAL: ALWAYS use `search-docs` tool for version-specific Laravel documentation and updated code examples.
+- Since Laravel 11, Laravel has a new streamlined file structure which this project uses.
+
+## Laravel 12 Structure
+
+- In Laravel 12, middleware are no longer registered in `app/Http/Kernel.php`.
+- Middleware are configured declaratively in `bootstrap/app.php` using `Application::configure()->withMiddleware()`.
+- `bootstrap/app.php` is the file to register middleware, exceptions, and routing files.
+- `bootstrap/providers.php` contains application specific service providers.
+- The `app\Console\Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console.php` for console configuration.
+- Console commands in `app/Console/Commands/` are automatically available and do not require manual registration.
+
+## Database
+
+- When modifying a column, the migration must include all of the attributes that were previously defined on the column. Otherwise, they will be dropped and lost.
+- Laravel 12 allows limiting eagerly loaded records natively, without external packages: `$query->latest()->limit(10);`.
+
+### Models
+
+- Casts can and likely should be set in a `casts()` method on a model rather than the `$casts` property. Follow existing conventions from other models.
+
+=== mcp/core rules ===
+
+# Laravel MCP
+
+- Laravel MCP allows you to rapidly build MCP servers for your Laravel applications.
+- IMPORTANT: laravel/mcp is very new. Always use the `search-docs` tool for authoritative documentation on writing and testing Laravel MCP servers, tools, resources, and prompts.
+- IMPORTANT: Activate `mcp-development` every time you're working with an MCP-related task.
+
+=== livewire/core rules ===
+
+# Livewire
+
+- Livewire allows you to build dynamic, reactive interfaces using only PHP — no JavaScript required.
+- Instead of writing frontend code in JavaScript frameworks, you use Alpine.js to build the UI when client-side interactions are required.
+- State lives on the server; the UI reflects it. Validate and authorize in actions (they're like HTTP requests).
+- IMPORTANT: Activate `livewire-development` every time you're working with Livewire-related tasks.
+
+=== boost/core rules ===
+
+# Laravel Boost
+
+- Laravel Boost is an MCP server that comes with powerful tools designed specifically for this application. Use them.
+
+## Artisan
+
+- Use the `list-artisan-commands` tool when you need to call an Artisan command to double-check the available parameters.
+
+## URLs
+
+- Whenever you share a project URL with the user, you should use the `get-absolute-url` tool to ensure you're using the correct scheme, domain/IP, and port.
+
+## Tinker / Debugging
+
+- You should use the `tinker` tool when you need to execute PHP to debug code or query Eloquent models directly.
+- Use the `database-query` tool when you only need to read from the database.
+- Use the `database-schema` tool to inspect table structure before writing migrations or models.
+
+## Reading Browser Logs With the `browser-logs` Tool
+
+- You can read browser logs, errors, and exceptions using the `browser-logs` tool from Boost.
+- Only recent browser logs will be useful - ignore old logs.
+
+## Searching Documentation (Critically Important)
+
+- Boost comes with a powerful `search-docs` tool you should use before trying other approaches when working with Laravel or Laravel ecosystem packages. This tool automatically passes a list of installed packages and their versions to the remote Boost API, so it returns only version-specific documentation for the user's circumstance. You should pass an array of packages to filter on if you know you need docs for particular packages.
+- Search the documentation before making code changes to ensure we are taking the correct approach.
+- Use multiple, broad, simple, topic-based queries at once. For example: `['rate limiting', 'routing rate limiting', 'routing']`. The most relevant results will be returned first.
+- Do not add package names to queries; package information is already shared. For example, use `test resource table`, not `filament 4 test resource table`.
+
+### Available Search Syntax
+
+1. Simple Word Searches with auto-stemming - query=authentication - finds 'authenticate' and 'auth'.
+2. Multiple Words (AND Logic) - query=rate limit - finds knowledge containing both "rate" AND "limit".
+3. Quoted Phrases (Exact Position) - query="infinite scroll" - words must be adjacent and in that order.
+4. Mixed Queries - query=middleware "rate limit" - "middleware" AND exact phrase "rate limit".
+5. Multiple Queries - queries=["authentication", "middleware"] - ANY of these terms.
+
+=== pint/core rules ===
+
+# Laravel Pint Code Formatter
+
+- You must run `vendor/bin/sail bin pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
+- Do not run `vendor/bin/sail bin pint --test --format agent`, simply run `vendor/bin/sail bin pint --format agent` to fix any formatting issues.
+
+=== phpunit/core rules ===
+
+# PHPUnit
+
+- This application uses PHPUnit for testing. All tests must be written as PHPUnit classes. Use `vendor/bin/sail artisan make:test --phpunit {name}` to create a new test.
+- If you see a test using "Pest", convert it to PHPUnit.
+- Every time a test has been updated, run that singular test.
+- When the tests relating to your feature are passing, ask the user if they would like to also run the entire test suite to make sure everything is still passing.
+- Tests should cover all happy paths, failure paths, and edge cases.
+- You must not remove any tests or test files from the tests directory without approval. These are not temporary or helper files; these are core to the application.
+
+## Running Tests
+
+- Run the minimal number of tests, using an appropriate filter, before finalizing.
+- To run all tests: `vendor/bin/sail artisan test --compact`.
+- To run all tests in a file: `vendor/bin/sail artisan test --compact tests/Feature/ExampleTest.php`.
+- To filter on a particular test name: `vendor/bin/sail artisan test --compact --filter=testName` (recommended after making a change to a related file).
+
+</laravel-boost-guidelines>
