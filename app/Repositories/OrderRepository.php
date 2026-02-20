@@ -2,16 +2,18 @@
 
 namespace App\Repositories;
 
-use App\Models\Order;
-use App\Models\AdvanceOrder;
-use App\Models\OrderLine;
 use App\Enums\OrderStatus;
+use App\Models\AdvanceOrder;
+use App\Models\Order;
+use App\Models\OrderLine;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class OrderRepository
 {
     protected AdvanceOrderRepository $advanceOrderRepository;
+
     protected AdvanceOrderProductRepository $advanceOrderProductRepository;
 
     public function __construct(
@@ -21,11 +23,12 @@ class OrderRepository
         $this->advanceOrderRepository = $advanceOrderRepository ?? app(AdvanceOrderRepository::class);
         $this->advanceOrderProductRepository = $advanceOrderProductRepository ?? app(AdvanceOrderProductRepository::class);
     }
+
     /**
      * Filter orders by roles, permissions, branches, and statuses
      *
-     * @param Collection $orders Collection of Order models or IDs
-     * @param array $filters Array with keys: user_roles, agreement_types, branch_ids, order_statuses
+     * @param  Collection  $orders  Collection of Order models or IDs
+     * @param  array  $filters  Array with keys: user_roles, agreement_types, branch_ids, order_statuses
      * @return array Filtered order IDs
      */
     public function filterOrdersByRolesAndStatuses(Collection $orders, array $filters): array
@@ -38,21 +41,21 @@ class OrderRepository
             ->whereIn('status', $filters['order_statuses'] ?? []);
 
         // Apply user role filter if provided
-        if (!empty($filters['user_roles'])) {
+        if (! empty($filters['user_roles'])) {
             $query->whereHas('user.roles', function (Builder $q) use ($filters) {
                 $q->whereIn('name', $filters['user_roles']);
             });
         }
 
         // Apply agreement type (permission) filter if provided
-        if (!empty($filters['agreement_types'])) {
+        if (! empty($filters['agreement_types'])) {
             $query->whereHas('user.permissions', function (Builder $q) use ($filters) {
                 $q->whereIn('name', $filters['agreement_types']);
             });
         }
 
         // Apply branch filter if provided
-        if (!empty($filters['branch_ids'])) {
+        if (! empty($filters['branch_ids'])) {
             $query->whereHas('user.branch', function (Builder $q) use ($filters) {
                 $q->whereIn('branches.id', $filters['branch_ids']);
             });
@@ -63,13 +66,10 @@ class OrderRepository
 
     /**
      * Check if filtered result is empty
-     *
-     * @param array $filteredOrderIds
-     * @return bool
      */
     public function hasFilteredOrders(array $filteredOrderIds): bool
     {
-        return !empty($filteredOrderIds);
+        return ! empty($filteredOrderIds);
     }
 
     /**
@@ -84,8 +84,6 @@ class OrderRepository
      * - CANCELED orders
      * - Order lines with partially_scheduled = false from PARTIALLY_SCHEDULED orders
      *
-     * @param string $startDate
-     * @param string $endDate
      * @return Collection Collection of arrays with 'product_id' and 'ordered_quantity'
      */
     public function getProductsFromOrdersInDateRange(string $startDate, string $endDate): Collection
@@ -102,6 +100,7 @@ class OrderRepository
                 // Include all order lines from PROCESSED orders
                 if ($order->status === \App\Enums\OrderStatus::PROCESSED->value) {
                     $filteredOrderLines->push($orderLine);
+
                     continue;
                 }
 
@@ -131,9 +130,9 @@ class OrderRepository
      * - PARTIALLY_SCHEDULED orders (only order lines with partially_scheduled = true)
      * - Order lines belonging to selected production areas
      *
-     * @param array $orderIds Array of order IDs
-     * @param string $preparationDatetime Preparation date and time
-     * @param array $productionAreaIds Array of production area IDs
+     * @param  array  $orderIds  Array of order IDs
+     * @param  string  $preparationDatetime  Preparation date and time
+     * @param  array  $productionAreaIds  Array of production area IDs
      * @return AdvanceOrder Created advance order
      */
     public function createAdvanceOrderFromOrders(
@@ -145,7 +144,7 @@ class OrderRepository
         $orders = Order::whereIn('id', $orderIds)
             ->whereIn('status', [
                 OrderStatus::PROCESSED->value,
-                OrderStatus::PARTIALLY_SCHEDULED->value
+                OrderStatus::PARTIALLY_SCHEDULED->value,
             ])
             ->with(['orderLines.product.productionAreas'])
             ->get();
@@ -188,6 +187,7 @@ class OrderRepository
                 // Include all order lines from PROCESSED orders
                 if ($order->status === OrderStatus::PROCESSED->value) {
                     $filteredOrderLines->push($orderLine);
+
                     continue;
                 }
 
@@ -264,8 +264,6 @@ class OrderRepository
      * the same OP and overlap occurs. The new approach sums ordered_quantity_new from
      * all executed OPs covering this order+product, capped by the order line quantity.
      *
-     * @param int $orderId
-     * @param int $productId
      * @return int Total quantity produced
      */
     public function getTotalProducedForProduct(int $orderId, int $productId): int
@@ -275,7 +273,7 @@ class OrderRepository
             ->join('advance_orders as ao', 'aool.advance_order_id', '=', 'ao.id')
             ->join('advance_order_products as aop', function ($join) use ($productId) {
                 $join->on('aop.advance_order_id', '=', 'ao.id')
-                     ->where('aop.product_id', '=', $productId);
+                    ->where('aop.product_id', '=', $productId);
             })
             ->where('aool.order_id', $orderId)
             ->where('aool.product_id', $productId)
@@ -321,7 +319,6 @@ class OrderRepository
      * Returns comprehensive analysis of which products are produced,
      * partially produced, or not produced, including quantities and percentages.
      *
-     * @param Order $order
      * @return array Production detail with summary and per-product breakdown
      */
     public function getProductionDetail(Order $order): array
@@ -406,9 +403,7 @@ class OrderRepository
     /**
      * Get the immediately previous order for a user before a given date.
      *
-     * @param int $userId
-     * @param string $date Date in Y-m-d format
-     * @return Order|null
+     * @param  string  $date  Date in Y-m-d format
      */
     public function getPreviousOrder(int $userId, string $date): ?Order
     {
@@ -425,8 +420,8 @@ class OrderRepository
      * Uses individual deletion (not bulk) to ensure observers are triggered,
      * which handles surplus creation for produced items.
      *
-     * @param array $orderIds Order IDs to check
-     * @param array $trackedOrderLineIds Order line IDs that should NOT be deleted
+     * @param  array  $orderIds  Order IDs to check
+     * @param  array  $trackedOrderLineIds  Order line IDs that should NOT be deleted
      * @return int Total number of lines deleted
      */
     public function deleteUnimportedOrderLines(array $orderIds, array $trackedOrderLineIds): int
@@ -456,5 +451,14 @@ class OrderRepository
         }
 
         return $totalDeleted;
+    }
+
+    public function getOldestOrderDateForUser(int $userId): ?Carbon
+    {
+        $date = Order::query()
+            ->where('user_id', $userId)
+            ->min('created_at');
+
+        return $date ? Carbon::parse($date) : null;
     }
 }

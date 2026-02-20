@@ -48,8 +48,8 @@ use Tests\Traits\ConfiguresImportTests;
  */
 class UserImportTest extends TestCase
 {
-    use RefreshDatabase;
     use ConfiguresImportTests;
+    use RefreshDatabase;
 
     protected string $testFile;
 
@@ -222,7 +222,7 @@ class UserImportTest extends TestCase
         $this->assertEquals(
             ImportProcess::STATUS_PROCESSED,
             $importProcess->status,
-            'Import should complete without errors. Errors: ' . json_encode($importProcess->error_log)
+            'Import should complete without errors. Errors: '.json_encode($importProcess->error_log)
         );
 
         $this->assertNull($importProcess->error_log, 'Error log should be null for successful import');
@@ -539,7 +539,7 @@ class UserImportTest extends TestCase
         $errorsByRow = [];
         foreach ($errors as $error) {
             $row = $error['row'];
-            if (!isset($errorsByRow[$row])) {
+            if (! isset($errorsByRow[$row])) {
                 $errorsByRow[$row] = [];
             }
             $messages = is_array($error['errors']) ? $error['errors'] : [$error['errors']];
@@ -637,7 +637,7 @@ class UserImportTest extends TestCase
         $this->assertEquals(
             ImportProcess::STATUS_PROCESSED,
             $importProcess->status,
-            'Import should complete without errors. Errors: ' . json_encode($importProcess->error_log)
+            'Import should complete without errors. Errors: '.json_encode($importProcess->error_log)
         );
 
         $this->assertEquals(3, User::count(), 'Should have created 3 users');
@@ -656,6 +656,81 @@ class UserImportTest extends TestCase
         $user3 = User::where('nickname', 'TEST.NOBILLING')->first();
         $this->assertNotNull($user3);
         $this->assertNull($user3->billing_code);
+    }
+
+    public function test_imports_user_with_seller_assigned(): void
+    {
+        $seller = User::factory()->create([
+            'nickname' => 'TEST.SELLER.IMPORT',
+            'is_seller' => true,
+        ]);
+
+        $tempFile = $this->createSellerImportFixture('TEST.SELLER.IMPORT');
+
+        $importProcess = $this->createImportProcess();
+
+        \Illuminate\Support\Facades\Storage::fake('s3');
+
+        Excel::import(new UserImport($importProcess->id), $tempFile);
+
+        unlink($tempFile);
+
+        $importProcess->refresh();
+
+        $this->assertEquals(
+            ImportProcess::STATUS_PROCESSED,
+            $importProcess->status,
+            'Import should complete without errors. Errors: '.json_encode($importProcess->error_log)
+        );
+
+        $user = User::where('nickname', 'TEST.WITH.SELLER')->first();
+        $this->assertNotNull($user, 'Imported user should exist');
+        $this->assertEquals($seller->id, $user->seller_id, 'Imported user should be assigned to the seller');
+    }
+
+    private function createSellerImportFixture(string $sellerNickname): string
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $headers = array_values(\App\Imports\Concerns\UserColumnDefinition::COLUMNS);
+
+        foreach ($headers as $index => $header) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($col.'1', $header);
+        }
+
+        $row = [
+            'Test With Seller',
+            '',
+            RoleName::AGREEMENT->value,
+            PermissionName::INDIVIDUAL->value,
+            '11.111.111-1',
+            '',
+            '11.111.111-1MAIN',
+            '',
+            '',
+            '1',
+            '1',
+            '1',
+            '0',
+            '1',
+            'TEST.WITH.SELLER',
+            'Password123',
+            '',
+            $sellerNickname,
+        ];
+
+        foreach ($row as $index => $value) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($col.'2', $value);
+        }
+
+        $tempPath = sys_get_temp_dir().'/test_seller_import_'.uniqid().'.xlsx';
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save($tempPath);
+
+        return $tempPath;
     }
 
     /**

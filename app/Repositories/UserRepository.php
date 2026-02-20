@@ -54,4 +54,13 @@ class UserRepository
             ->orderBy('nickname')
             ->get();
     }
+
+    public function getClientsForPortfolioSync(): Collection
+    {
+        return User::query()
+            ->whereNotNull('seller_id')
+            ->where('is_seller', false)
+            ->with(['seller.sellerPortfolios', 'activePortfolio.portfolio', 'branch'])
+            ->get();
+    }
 }

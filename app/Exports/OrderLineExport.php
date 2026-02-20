@@ -2,48 +2,39 @@
 
 namespace App\Exports;
 
-use App\Imports\Concerns\OrderLineColumnDefinition;
-use App\Models\OrderLine;
-use App\Models\Order;
-use App\Models\ExportProcess;
-use App\Repositories\MasterCategoryRepository;
 use App\Enums\OrderStatus;
+use App\Exports\Concerns\HasChunkAwareness;
+use App\Imports\Concerns\OrderLineColumnDefinition;
+use App\Models\ExportProcess;
+use App\Models\Order;
+use App\Models\OrderLine;
+use App\Repositories\MasterCategoryRepository;
+use Carbon\Carbon;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Carbon\Carbon;
-use Maatwebsite\Excel\Concerns\FromQuery;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\Exportable;
 // ShouldAutoSize removed - causes timeout on large exports due to calculateColumnWidths()
 // use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Concerns\WithColumnFormatting;
+use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Events\BeforeExport;
-use Maatwebsite\Excel\Events\AfterSheet;
-use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithCustomQuerySize;
-use App\Exports\Concerns\HasChunkAwareness;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Events\BeforeExport;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Throwable;
 
-class OrderLineExport implements
-    FromQuery,
-    WithHeadings,
-    WithMapping,
+class OrderLineExport implements FromQuery, ShouldQueue, SkipsEmptyRows, WithChunkReading, WithColumnFormatting, WithCustomQuerySize, WithEvents, WithHeadings, WithMapping,
     // ShouldAutoSize removed - causes timeout on large exports due to calculateColumnWidths()
-    WithStyles,
-    WithEvents,
-    WithColumnFormatting,
-    SkipsEmptyRows,
-    ShouldQueue,
-    WithChunkReading,
-    WithCustomQuerySize
+    WithStyles
 {
     use Exportable, HasChunkAwareness;
 
@@ -60,10 +51,15 @@ class OrderLineExport implements
     private $headers = OrderLineColumnDefinition::COLUMNS;
 
     private $exportProcessId;
+
     private $orderLineIdsS3BasePath;
+
     private $totalChunks;
+
     private $orderLineIds = null;
+
     private $totalRecords = 0;
+
     private MasterCategoryRepository $masterCategoryRepository;
 
     /**
@@ -72,11 +68,11 @@ class OrderLineExport implements
      * To avoid SQS 256KB message size limit and large whereIn queries,
      * IDs can be stored in S3 as chunked files.
      *
-     * @param Collection|null $orderLineIds Collection of order line IDs (used for tests, null for S3 mode)
-     * @param int $exportProcessId Export process ID for tracking
-     * @param string|null $orderLineIdsS3BasePath Optional S3 base path where chunked IDs are stored
-     * @param int|null $totalChunks Total number of chunks in S3 (required if using S3 mode)
-     * @param int|null $totalIds Total number of IDs (for querySize, optional)
+     * @param  Collection|null  $orderLineIds  Collection of order line IDs (used for tests, null for S3 mode)
+     * @param  int  $exportProcessId  Export process ID for tracking
+     * @param  string|null  $orderLineIdsS3BasePath  Optional S3 base path where chunked IDs are stored
+     * @param  int|null  $totalChunks  Total number of chunks in S3 (required if using S3 mode)
+     * @param  int|null  $totalIds  Total number of IDs (for querySize, optional)
      */
     public function __construct(
         ?Collection $orderLineIds,
@@ -117,8 +113,6 @@ class OrderLineExport implements
      *
      * This is used by ChunkAwareQueuedWriter to determine how many jobs to create
      * without calling query()->count() which would fail without IDs loaded.
-     *
-     * @return int
      */
     public function querySize(): int
     {
@@ -131,8 +125,6 @@ class OrderLineExport implements
      * Returns IDs from memory if available. If using S3 chunks and chunk awareness
      * is available (via HasChunkAwareness trait), loads only the current chunk.
      * Falls back to loading all chunks if chunk awareness is not available.
-     *
-     * @return array
      */
     private function loadOrderLineIds(): array
     {
@@ -157,8 +149,6 @@ class OrderLineExport implements
 
     /**
      * Clean up all temporary S3 chunk files after export completion.
-     *
-     * @return void
      */
     private function cleanupS3TempFiles(): void
     {
@@ -197,10 +187,10 @@ class OrderLineExport implements
         $ids = $this->loadOrderLineIds();
 
         return OrderLine::with([
-            'order.user',
+            'order.user.seller',
             'order.user.company',
             'order.user.branch',
-            'product.category.masterCategories'
+            'product.category.masterCategories',
         ])->whereIn('id', $ids);
     }
 
@@ -216,8 +206,6 @@ class OrderLineExport implements
      *
      * This middleware is used by AppendQueryToSheet jobs to set the timeout.
      * Without this, the jobs would use the default queue timeout which may be too short.
-     *
-     * @return array
      */
     public function middleware(): array
     {
@@ -228,8 +216,6 @@ class OrderLineExport implements
 
     /**
      * Determine the time at which the job should timeout.
-     *
-     * @return \DateTime
      */
     public function retryUntil(): \DateTime
     {
@@ -247,7 +233,7 @@ class OrderLineExport implements
             $category = $product->category ?? null;
 
             // Skip if essential data is missing
-            if (!$order || !$product) {
+            if (! $order || ! $product) {
                 return [];
             }
 
@@ -270,7 +256,7 @@ class OrderLineExport implements
                 } catch (\ValueError $e) {
                     Log::warning('Unknown order status', [
                         'order_id' => $order->id,
-                        'status' => $order->status
+                        'status' => $order->status,
                     ]);
                     $estadoOrden = $order->status;
                 }
@@ -280,7 +266,7 @@ class OrderLineExport implements
             $codigoPedido = ($order && $order->order_number) ? $order->order_number : null;
             // Product code without quotes (numeric format)
             $codigoProducto = ($product && $product->code) ? $product->code : null;
-            
+
             // Calculate total prices
             $precioTotalNeto = $orderLine->quantity * $orderLine->unit_price;
             $precioTotalConImpuesto = $orderLine->quantity * $orderLine->unit_price_with_tax;
@@ -297,7 +283,6 @@ class OrderLineExport implements
             // } else {
             //     $transportPriceValue = '0.00';
             // }
-
 
             // Map data using keys matching OrderLineColumnDefinition::COLUMNS
             return [
@@ -323,12 +308,13 @@ class OrderLineExport implements
                 'precio_total_neto' => $precioTotalNeto / 100,
                 'precio_total_con_impuesto' => $precioTotalConImpuesto / 100,
                 'parcialmente_programado' => $orderLine->partially_scheduled ? '1' : '0',
+                'vendedor' => $user?->seller?->nickname,
             ];
         } catch (\Exception $e) {
             Log::error('Error mapping order line for export', [
                 'export_process_id' => $this->exportProcessId,
                 'order_line_id' => $orderLine->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;
@@ -347,8 +333,8 @@ class OrderLineExport implements
                 'font' => ['bold' => true],
                 'fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'E2EFDA']
-                ]
+                    'startColor' => ['rgb' => 'E2EFDA'],
+                ],
             ],
         ];
     }
@@ -386,7 +372,7 @@ class OrderLineExport implements
                 for ($row = $lastRow; $row > 1; $row--) {
                     $hasData = false;
                     for ($col = 'A'; $col <= $lastColumn; $col++) {
-                        if (!empty(trim($sheet->getCell($col . $row)->getValue()))) {
+                        if (! empty(trim($sheet->getCell($col.$row)->getValue()))) {
                             $hasData = true;
                             break;
                         }
@@ -416,9 +402,6 @@ class OrderLineExport implements
      *
      * This method reads the exported order lines, identifies unique orders,
      * and adds a "TRANSPORTE" row after the last order line of each order.
-     *
-     * @param Worksheet $sheet
-     * @return void
      */
     protected function addTransportRows(Worksheet $sheet): void
     {
@@ -435,6 +418,7 @@ class OrderLineExport implements
         $colCodigoSucursal = OrderLineColumnDefinition::columnLetter('codigo_sucursal');
         $colNombreFantasia = OrderLineColumnDefinition::columnLetter('nombre_fantasia_sucursal');
         $colUsuario = OrderLineColumnDefinition::columnLetter('usuario');
+        $colVendedor = OrderLineColumnDefinition::columnLetter('vendedor');
         $colBillingUsuario = OrderLineColumnDefinition::columnLetter('codigo_de_facturacion_usuario');
         $colCategoria = OrderLineColumnDefinition::columnLetter('categoria');
         $colCodigoProducto = OrderLineColumnDefinition::columnLetter('codigo_de_producto');
@@ -453,21 +437,22 @@ class OrderLineExport implements
 
         // Read all rows and group by order_id
         while ($currentRow <= $lastRow) {
-            $orderId = $sheet->getCell($colIdOrden . $currentRow)->getValue();
+            $orderId = $sheet->getCell($colIdOrden.$currentRow)->getValue();
 
             if ($orderId) {
-                if (!isset($ordersData[$orderId])) {
+                if (! isset($ordersData[$orderId])) {
                     $ordersData[$orderId] = [
                         'last_row' => $currentRow,
-                        'codigo_pedido' => $sheet->getCell($colCodigoPedido . $currentRow)->getValue(),
-                        'estado' => $sheet->getCell($colEstado . $currentRow)->getValue(),
-                        'fecha_orden' => $sheet->getCell($colFechaOrden . $currentRow)->getValue(),
-                        'fecha_despacho' => $sheet->getCell($colFechaDespacho . $currentRow)->getValue(),
-                        'codigo_empresa' => $sheet->getCell($colCodigoEmpresa . $currentRow)->getValue(),
-                        'empresa' => $sheet->getCell($colEmpresa . $currentRow)->getValue(),
-                        'codigo_sucursal' => $sheet->getCell($colCodigoSucursal . $currentRow)->getValue(),
-                        'nombre_fantasia_sucursal' => $sheet->getCell($colNombreFantasia . $currentRow)->getValue(),
-                        'usuario' => $sheet->getCell($colUsuario . $currentRow)->getValue(),
+                        'codigo_pedido' => $sheet->getCell($colCodigoPedido.$currentRow)->getValue(),
+                        'estado' => $sheet->getCell($colEstado.$currentRow)->getValue(),
+                        'fecha_orden' => $sheet->getCell($colFechaOrden.$currentRow)->getValue(),
+                        'fecha_despacho' => $sheet->getCell($colFechaDespacho.$currentRow)->getValue(),
+                        'codigo_empresa' => $sheet->getCell($colCodigoEmpresa.$currentRow)->getValue(),
+                        'empresa' => $sheet->getCell($colEmpresa.$currentRow)->getValue(),
+                        'codigo_sucursal' => $sheet->getCell($colCodigoSucursal.$currentRow)->getValue(),
+                        'nombre_fantasia_sucursal' => $sheet->getCell($colNombreFantasia.$currentRow)->getValue(),
+                        'usuario' => $sheet->getCell($colUsuario.$currentRow)->getValue(),
+                        'vendedor' => $sheet->getCell($colVendedor.$currentRow)->getValue(),
                     ];
                 } else {
                     $ordersData[$orderId]['last_row'] = $currentRow;
@@ -491,27 +476,28 @@ class OrderLineExport implements
                 $sheet->insertNewRowBefore($insertAfterRow + 1, 1);
                 $r = $insertAfterRow + 1;
 
-                $sheet->setCellValue($colIdOrden . $r, $orderId);
-                $sheet->setCellValue($colCodigoPedido . $r, $orderData['codigo_pedido']);
-                $sheet->setCellValue($colEstado . $r, $orderData['estado']);
-                $sheet->setCellValue($colFechaOrden . $r, $orderData['fecha_orden']);
-                $sheet->setCellValue($colFechaDespacho . $r, $orderData['fecha_despacho']);
-                $sheet->setCellValue($colCodigoEmpresa . $r, $orderData['codigo_empresa']);
-                $sheet->setCellValue($colEmpresa . $r, $orderData['empresa']);
-                $sheet->setCellValue($colCodigoSucursal . $r, $orderData['codigo_sucursal']);
-                $sheet->setCellValue($colNombreFantasia . $r, $orderData['nombre_fantasia_sucursal']);
-                $sheet->setCellValue($colUsuario . $r, $orderData['usuario']);
-                $sheet->setCellValue($colBillingUsuario . $r, '');
-                $sheet->setCellValue($colCategoria . $r, '');
-                $sheet->setCellValue($colCodigoProducto . $r, '');
-                $sheet->setCellValue($colBillingProducto . $r, '');
-                $sheet->setCellValue($colNombreProducto . $r, 'TRANSPORTE');
-                $sheet->setCellValue($colCantidad . $r, 1);
-                $sheet->setCellValue($colPrecioNeto . $r, $order->dispatch_cost / 100);
-                $sheet->setCellValue($colPrecioImpuesto . $r, $order->dispatch_cost / 100);
-                $sheet->setCellValue($colTotalNeto . $r, $order->dispatch_cost / 100);
-                $sheet->setCellValue($colTotalImpuesto . $r, $order->dispatch_cost / 100);
-                $sheet->setCellValue($colParcial . $r, '');
+                $sheet->setCellValue($colIdOrden.$r, $orderId);
+                $sheet->setCellValue($colCodigoPedido.$r, $orderData['codigo_pedido']);
+                $sheet->setCellValue($colEstado.$r, $orderData['estado']);
+                $sheet->setCellValue($colFechaOrden.$r, $orderData['fecha_orden']);
+                $sheet->setCellValue($colFechaDespacho.$r, $orderData['fecha_despacho']);
+                $sheet->setCellValue($colCodigoEmpresa.$r, $orderData['codigo_empresa']);
+                $sheet->setCellValue($colEmpresa.$r, $orderData['empresa']);
+                $sheet->setCellValue($colCodigoSucursal.$r, $orderData['codigo_sucursal']);
+                $sheet->setCellValue($colNombreFantasia.$r, $orderData['nombre_fantasia_sucursal']);
+                $sheet->setCellValue($colUsuario.$r, $orderData['usuario']);
+                $sheet->setCellValue($colVendedor.$r, $orderData['vendedor']);
+                $sheet->setCellValue($colBillingUsuario.$r, '');
+                $sheet->setCellValue($colCategoria.$r, '');
+                $sheet->setCellValue($colCodigoProducto.$r, '');
+                $sheet->setCellValue($colBillingProducto.$r, '');
+                $sheet->setCellValue($colNombreProducto.$r, 'TRANSPORTE');
+                $sheet->setCellValue($colCantidad.$r, 1);
+                $sheet->setCellValue($colPrecioNeto.$r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colPrecioImpuesto.$r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colTotalNeto.$r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colTotalImpuesto.$r, $order->dispatch_cost / 100);
+                $sheet->setCellValue($colParcial.$r, '');
             }
         }
     }
@@ -519,8 +505,7 @@ class OrderLineExport implements
     /**
      * Handle a failed export
      *
-     * @param Throwable $exception
-     * @return void
+     * @param  Throwable  $exception
      */
     public function failed(Throwable $e): void
     {
@@ -533,7 +518,7 @@ class OrderLineExport implements
             'values' => [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'user' => $currentUser
+                'user' => $currentUser,
             ],
         ];
 
@@ -547,7 +532,7 @@ class OrderLineExport implements
         // Actualizar el error_log en el ExportProcess
         $exportProcess->update([
             'error_log' => $existingErrors,
-            'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS
+            'status' => ExportProcess::STATUS_PROCESSED_WITH_ERRORS,
         ]);
 
         Log::error('Error in Order Lines export', [
@@ -555,7 +540,7 @@ class OrderLineExport implements
             'error' => $e->getMessage(),
             'file' => $e->getFile(),
             'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
         ]);
 
         // Clean up temporary S3 files even on failure

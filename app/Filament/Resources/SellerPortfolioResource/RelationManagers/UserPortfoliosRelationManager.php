@@ -36,14 +36,14 @@ class UserPortfoliosRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('first_order_at')
                     ->label(__('Primer pedido'))
                     ->dateTime('d/m/Y H:i')
-                    ->default('—'),
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('month_closed_at')
                     ->label(__('Cierre de mes'))
                     ->date('d/m/Y')
-                    ->default('—'),
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('previousPortfolio.name')
                     ->label(__('Cartera anterior'))
-                    ->default('—'),
+                    ->placeholder('—'),
             ])
             ->defaultSort('assigned_at', 'desc')
             ->actions([

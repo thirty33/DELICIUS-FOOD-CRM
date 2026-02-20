@@ -43,6 +43,7 @@ class OrderLineColumnDefinition
         'precio_total_neto' => 'Precio Total Neto',
         'precio_total_con_impuesto' => 'Precio Total con Impuesto',
         'parcialmente_programado' => 'Parcialmente Programado',
+        'vendedor' => 'Vendedor',
     ];
 
     /**
@@ -73,6 +74,7 @@ class OrderLineColumnDefinition
         'precio_total_neto' => 'total_price_net',
         'precio_total_con_impuesto' => 'total_price_with_tax',
         'parcialmente_programado' => 'partially_scheduled',
+        'vendedor' => '_vendedor',
     ];
 
     /**
@@ -103,7 +105,7 @@ class OrderLineColumnDefinition
      */
     public static function cell(string $key, int $row): string
     {
-        return self::columnLetter($key) . $row;
+        return self::columnLetter($key).$row;
     }
 
     /**

@@ -36,13 +36,21 @@ class UserExportTest extends TestCase
     use RefreshDatabase;
 
     protected Role $roleAdmin;
+
     protected Role $roleCafe;
+
     protected Role $roleAgreement;
+
     protected Permission $permConsolidado;
+
     protected Permission $permIndividual;
+
     protected PriceList $priceList;
+
     protected Company $company;
+
     protected Branch $branch;
+
     protected User $user;
 
     protected function setUp(): void
@@ -329,6 +337,33 @@ class UserExportTest extends TestCase
         $this->cleanupTestFile($filePath);
     }
 
+    public function test_exports_seller_nickname_when_user_has_seller_assigned(): void
+    {
+        $seller = User::factory()->create([
+            'nickname' => 'TEST.SELLER.EXPORT',
+            'is_seller' => true,
+        ]);
+
+        $this->user->update(['seller_id' => $seller->id]);
+
+        $filePath = $this->generateUserExport(collect([$this->user->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $this->assertCellEquals($sheet, 'codigo_vendedor', 2, 'TEST.SELLER.EXPORT');
+
+        $this->cleanupTestFile($filePath);
+    }
+
+    public function test_exports_empty_seller_when_no_seller_assigned(): void
+    {
+        $filePath = $this->generateUserExport(collect([$this->user->id]));
+        $sheet = $this->loadExcelFile($filePath)->getActiveSheet();
+
+        $this->assertCellEmpty($sheet, 'codigo_vendedor', 2, 'codigo_vendedor should be empty when no seller assigned');
+
+        $this->cleanupTestFile($filePath);
+    }
+
     public function test_export_process_status_transitions(): void
     {
         $exportProcess = ExportProcess::create([
@@ -379,7 +414,7 @@ class UserExportTest extends TestCase
     protected function generateUserExport(Collection $userIds): string
     {
         $testExportsDir = storage_path('app/test-exports');
-        if (!is_dir($testExportsDir)) {
+        if (! is_dir($testExportsDir)) {
             mkdir($testExportsDir, 0755, true);
         }
 
@@ -389,8 +424,8 @@ class UserExportTest extends TestCase
             'file_url' => '-',
         ]);
 
-        $fileName = 'test-exports/users-export-' . now()->format('Y-m-d-His') . '.xlsx';
-        $fullPath = storage_path('app/' . $fileName);
+        $fileName = 'test-exports/users-export-'.now()->format('Y-m-d-His').'.xlsx';
+        $fullPath = storage_path('app/'.$fileName);
 
         $export = new UserDataExport($userIds, $exportProcess->id);
         $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
@@ -404,14 +439,14 @@ class UserExportTest extends TestCase
     protected function generateTemplate(): string
     {
         $testExportsDir = storage_path('app/test-exports');
-        if (!is_dir($testExportsDir)) {
+        if (! is_dir($testExportsDir)) {
             mkdir($testExportsDir, 0755, true);
         }
 
-        $fileName = 'test-exports/users-template-' . now()->format('Y-m-d-His') . '.xlsx';
-        $fullPath = storage_path('app/' . $fileName);
+        $fileName = 'test-exports/users-template-'.now()->format('Y-m-d-His').'.xlsx';
+        $fullPath = storage_path('app/'.$fileName);
 
-        $export = new UserTemplateExport();
+        $export = new UserTemplateExport;
         $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
         file_put_contents($fullPath, $content);
 
@@ -433,7 +468,7 @@ class UserExportTest extends TestCase
         $highestColumn = $sheet->getHighestColumn();
 
         for ($col = 'A'; $col <= $highestColumn; $col++) {
-            $value = $sheet->getCell($col . '1')->getValue();
+            $value = $sheet->getCell($col.'1')->getValue();
             if ($value) {
                 $headers[] = $value;
             }

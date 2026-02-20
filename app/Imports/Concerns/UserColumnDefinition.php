@@ -38,6 +38,7 @@ class UserColumnDefinition
         'nombre_de_usuario' => 'Nombre de Usuario',
         'contrasena' => 'Contraseña',
         'codigo_de_facturacion' => 'Codigo de Facturacion',
+        'codigo_vendedor' => 'Código Vendedor',
     ];
 
     /**
@@ -63,6 +64,7 @@ class UserColumnDefinition
         'nombre_de_usuario' => 'nickname',
         'contrasena' => 'plain_password',
         'codigo_de_facturacion' => 'billing_code',
+        'codigo_vendedor' => 'seller_nickname',
     ];
 
     /**
@@ -93,7 +95,7 @@ class UserColumnDefinition
      */
     public static function cell(string $key, int $row): string
     {
-        return self::columnLetter($key) . $row;
+        return self::columnLetter($key).$row;
     }
 
     /**

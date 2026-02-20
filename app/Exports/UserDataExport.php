@@ -3,38 +3,31 @@
 namespace App\Exports;
 
 use App\Imports\Concerns\UserColumnDefinition;
-use App\Models\User;
 use App\Models\ExportProcess;
+use App\Models\User;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\BeforeExport;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Events\BeforeExport;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
 
-class UserDataExport implements
-    FromQuery,
-    WithHeadings,
-    WithMapping,
-    ShouldAutoSize,
-    WithStyles,
-    WithEvents,
-    ShouldQueue,
-    WithChunkReading
+class UserDataExport implements FromQuery, ShouldAutoSize, ShouldQueue, WithChunkReading, WithEvents, WithHeadings, WithMapping, WithStyles
 {
     use Exportable;
 
     private $headers = UserColumnDefinition::COLUMNS;
 
     private $exportProcessId;
+
     private $userIds;
 
     public function __construct(Collection $userIds, int $exportProcessId)
@@ -45,10 +38,10 @@ class UserDataExport implements
 
     public function query()
     {
-        return User::with(['company.priceList', 'branch', 'roles', 'permissions'])
+        return User::with(['company.priceList', 'branch', 'roles', 'permissions', 'seller'])
             ->whereIn('id', $this->userIds);
     }
-    
+
     public function chunkSize(): int
     {
         return 100;
@@ -78,12 +71,13 @@ class UserDataExport implements
                 'nombre_de_usuario' => $user->nickname ?? '',
                 'contrasena' => $user->plain_password ?? '',
                 'codigo_de_facturacion' => $user->billing_code ?? '',
+                'codigo_vendedor' => $user->seller?->nickname ?? '',
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando usuario para exportación', [
                 'export_process_id' => $this->exportProcessId,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;
@@ -111,8 +105,8 @@ class UserDataExport implements
                 'font' => ['bold' => true],
                 'fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'E2EFDA']
-                ]
+                    'startColor' => ['rgb' => 'E2EFDA'],
+                ],
             ],
         ];
     }

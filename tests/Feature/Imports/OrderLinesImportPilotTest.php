@@ -2,23 +2,22 @@
 
 namespace Tests\Feature\Imports;
 
+use App\Enums\OrderStatus;
 use App\Imports\Concerns\OrderLineColumnDefinition;
 use App\Imports\OrderLinesImport;
+use App\Models\Category;
 use App\Models\ImportProcess;
 use App\Models\Order;
 use App\Models\OrderLine;
-use App\Models\User;
-use App\Models\Product;
-use App\Models\Category;
 use App\Models\PriceList;
 use App\Models\PriceListLine;
-use App\Enums\OrderStatus;
+use App\Models\Product;
+use App\Models\User;
 use Database\Seeders\OrderLinesImportTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Maatwebsite\Excel\Facades\Excel;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Tests\TestCase;
 use Tests\Traits\ConfiguresImportTests;
 
@@ -37,8 +36,8 @@ use Tests\Traits\ConfiguresImportTests;
  */
 class OrderLinesImportPilotTest extends TestCase
 {
-    use RefreshDatabase;
     use ConfiguresImportTests;
+    use RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -970,7 +969,7 @@ class OrderLinesImportPilotTest extends TestCase
      */
     private function generate21ColumnFixture(): string
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
         $headers = OrderLineColumnDefinition::headers();
@@ -981,10 +980,10 @@ class OrderLinesImportPilotTest extends TestCase
         // Data matching OrderLineColumnDefinition columns
         // (billing code and master category columns are empty)
         $rows = [
-            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'MINI ENSALADAS DE ACOMPAÑAMIENTO', 'ACM00000043', '', 'ACM - MINI ENSALADA ACEITUNAS Y HUEVO DURO', 1, 4, 4.76, 4, 4.76, 0],
-            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'ACOMPAÑAMIENTOS', 'EXT00000001', '', 'EXT - AMASADO DELICIUS MINI', 1, 1, 1.19, 1, 1.19, 0],
-            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'PLATOS VARIABLES PARA CALENTAR HORECA', 'PCH00000003', '', 'PCH - HORECA ALBONDIGAS ATOMATADAS CON ARROZ PRIMAVERA', 1, 46, 54.74, 46, 54.74, 0],
-            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'POSTRES', 'PTR00000005', '', 'PTR - FRUTA ESTACION 150 GR.', 1, 8.50, 10.12, 8.50, 10.12, 0],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'MINI ENSALADAS DE ACOMPAÑAMIENTO', 'ACM00000043', '', 'ACM - MINI ENSALADA ACEITUNAS Y HUEVO DURO', 1, 4, 4.76, 4, 4.76, 0, ''],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'ACOMPAÑAMIENTOS', 'EXT00000001', '', 'EXT - AMASADO DELICIUS MINI', 1, 1, 1.19, 1, 1.19, 0, ''],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'PLATOS VARIABLES PARA CALENTAR HORECA', 'PCH00000003', '', 'PCH - HORECA ALBONDIGAS ATOMATADAS CON ARROZ PRIMAVERA', 1, 46, 54.74, 46, 54.74, 0, ''],
+            [null, '20251103510024', 'Procesado', '03/11/2025', '12/11/2025', '76.505.808-2', 'ALIMENTOS Y ACEITES SPA', '76.505.808-2', 'CONVENIO ALIACE', 'RECEPCION@ALIACE.CL', '', '', 'POSTRES', 'PTR00000005', '', 'PTR - FRUTA ESTACION 150 GR.', 1, 8.50, 10.12, 8.50, 10.12, 0, ''],
         ];
 
         foreach ($rows as $rowIndex => $rowData) {

@@ -15,6 +15,7 @@ use App\Models\ExportProcess;
 use App\Models\ImportProcess;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Sellers\SellerPortfolioService;
 use Filament\Forms;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -203,6 +204,15 @@ class UserResource extends Resource
                     ->label(__('Usuario Maestro Superior'))
                     ->inline(false)
                     ->helperText(__('Puede acceder a todas las sucursales del sistema desde el frontis')),
+                Forms\Components\Select::make('seller_id')
+                    ->label(__('Vendedor asignado'))
+                    ->placeholder(__('Sin vendedor'))
+                    ->searchable()
+                    ->options(fn (SellerPortfolioService $service) => $service
+                        ->getSellersForSelect()
+                        ->mapWithKeys(fn (User $u) => [$u->id => $u->nickname])
+                    )
+                    ->nullable(),
                 Toggle::make('is_seller')
                     ->label(__('Es vendedor'))
                     ->inline(false)
@@ -276,6 +286,11 @@ class UserResource extends Resource
                     })
                     ->searchable(false)
                     ->sortable(false),
+                Tables\Columns\TextColumn::make('seller.nickname')
+                    ->label(__('Vendedor'))
+                    ->default('—')
+                    ->searchable(false)
+                    ->sortable(false),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')
@@ -313,6 +328,13 @@ class UserResource extends Resource
                         blank: fn (Builder $query) => $query,
                     )
                     ->native(false),
+                Tables\Filters\SelectFilter::make('seller_id')
+                    ->label(__('Vendedor'))
+                    ->placeholder(__('Todos'))
+                    ->options(fn (SellerPortfolioService $service) => $service
+                        ->getSellersForSelect()
+                        ->mapWithKeys(fn (User $u) => [$u->id => $u->nickname])
+                    ),
                 DateRangeFilter::make('created_at')
                     ->label(__('Fecha de creación')),
             ])
