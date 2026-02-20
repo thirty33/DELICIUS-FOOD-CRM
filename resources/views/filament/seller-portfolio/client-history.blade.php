@@ -10,6 +10,7 @@
                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vendedor</th>
                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cartera anterior</th>
                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Asignado</th>
+                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Primer pedido</th>
                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cierre de mes</th>
                         <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Activo</th>
                     </tr>
@@ -28,6 +29,9 @@
                             </td>
                             <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                                 {{ $entry->assigned_at->format('d/m/Y H:i') }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                {{ $entry->first_order_at?->format('d/m/Y') ?? '—' }}
                             </td>
                             <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                                 {{ $entry->month_closed_at?->format('d/m/Y') ?? '—' }}
