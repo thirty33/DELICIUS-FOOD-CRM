@@ -53,10 +53,48 @@ class MenuCreatedStrategy implements ReminderEventStrategy
     {
         $templateConfig = config('reminders.templates.menu_created');
 
+        $fechaInicio = $this->formatMenuDate($entities->min('publication_date'));
+        $fechaFin = $this->formatMenuDate($entities->max('publication_date'));
+        $paginaWeb = config('reminders.shop_url');
+
         return [
             'name' => $templateConfig['name'],
             'language' => $templateConfig['language'],
-            'components' => [],
+            'body' => "¡Nuevos menús disponibles!\n\n"
+                ."Hola, se han creado menús nuevos para la semana del {$fechaInicio} al {$fechaFin}. "
+                ."Ve a {$paginaWeb} y realiza tu pedido \xF0\x9F\x9B\x92\n\n"
+                .'Responde AYUDA para consultas o SALIR para no recibir más.',
+            'components' => [
+                [
+                    'type' => 'body',
+                    'parameters' => [
+                        [
+                            'type' => 'text',
+                            'parameter_name' => 'fecha_inicio',
+                            'text' => $fechaInicio,
+                        ],
+                        [
+                            'type' => 'text',
+                            'parameter_name' => 'fecha_fin',
+                            'text' => $fechaFin,
+                        ],
+                        [
+                            'type' => 'text',
+                            'parameter_name' => 'pagina_web',
+                            'text' => $paginaWeb,
+                        ],
+                    ],
+                ],
+            ],
         ];
+    }
+
+    private function formatMenuDate(?string $date): string
+    {
+        if (! $date) {
+            return '';
+        }
+
+        return \Carbon\Carbon::parse($date)->translatedFormat('l j \\d\\e F');
     }
 }

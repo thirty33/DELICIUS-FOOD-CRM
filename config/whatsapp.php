@@ -6,5 +6,6 @@ return [
     'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
     'test_phone_number' => env('WHATSAPP_TEST_PHONE_NUMBER'),
     'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
-    'initial_template_name' => env('WHATSAPP_INITIAL_TEMPLATE_NAME', 'hello_world'),
+    'initial_template_name' => env('WHATSAPP_INITIAL_TEMPLATE_NAME', 'retomar_conversacion'),
+    'initial_template_language' => env('WHATSAPP_INITIAL_TEMPLATE_LANG', 'en'),
 ];

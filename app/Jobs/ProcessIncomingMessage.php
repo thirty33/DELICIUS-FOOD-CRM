@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Conversations\CreateConversationMessageAction;
 use App\Actions\Conversations\UpdateConversationStatusAction;
+use App\Actions\Conversations\UpdateConversationWindowAction;
 use App\Enums\ConversationStatus;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -33,6 +34,10 @@ class ProcessIncomingMessage implements ShouldQueue
         UpdateConversationStatusAction::execute([
             'conversation_id' => $this->conversationId,
             'status' => ConversationStatus::RECEIVED,
+        ]);
+
+        UpdateConversationWindowAction::execute([
+            'conversation_id' => $this->conversationId,
         ]);
     }
 }

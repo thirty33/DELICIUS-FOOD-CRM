@@ -144,11 +144,12 @@ class ProcessRemindersService
             }
 
             // Record the message in the conversation
-            CreateConversationMessageAction::execute([
+            $message = CreateConversationMessageAction::execute([
                 'conversation_id' => $conversation->id,
                 'direction' => 'outbound',
                 'type' => 'template',
-                'body' => "Template: {$templateConfig['name']}",
+                'body' => $templateConfig['body'] ?? $templateConfig['name'],
+                'metadata' => ['template_name' => $templateConfig['name']],
             ]);
 
             // Send the WhatsApp template notification via the notifiable
@@ -157,6 +158,7 @@ class ProcessRemindersService
                 $templateConfig['name'],
                 $templateConfig['language'],
                 $templateConfig['components'],
+                $message->id,
             ));
 
             foreach ($menus as $menu) {

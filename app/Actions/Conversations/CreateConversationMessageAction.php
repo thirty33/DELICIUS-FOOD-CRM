@@ -18,6 +18,7 @@ final class CreateConversationMessageAction implements CreateAction
             'type' => data_get($data, 'type', 'text'),
             'body' => data_get($data, 'body'),
             'media_url' => data_get($data, 'media_url'),
+            'metadata' => data_get($data, 'metadata'),
             'status' => $direction === 'inbound' ? 'received' : 'sent',
         ]);
     }

@@ -50,10 +50,12 @@ return [
     | Templates are configured per event type with name and language.
     |
     */
+    'shop_url' => env('REMINDERS_SHOP_URL'),
+
     'templates' => [
         'menu_created' => [
-            'name' => env('REMINDERS_TEMPLATE_MENU_CREATED', 'hello_world'),
-            'language' => env('REMINDERS_TEMPLATE_MENU_CREATED_LANG', 'es'),
+            'name' => env('REMINDERS_TEMPLATE_MENU_CREATED', 'recordatorio_de_menu_creado'),
+            'language' => env('REMINDERS_TEMPLATE_MENU_CREATED_LANG', 'es_CL'),
         ],
     ],
 

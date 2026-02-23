@@ -2,6 +2,7 @@
 
 namespace App\Channels;
 
+use App\Actions\Conversations\UpdateMessageApiDataAction;
 use App\Enums\IntegrationName;
 use App\Models\Integration;
 use Illuminate\Notifications\Notification;
@@ -13,7 +14,7 @@ final class WhatsAppChannel
     public function send(object $notifiable, Notification $notification)
     {
         Log::info('WhatsAppChannel: send() called', [
-            'notifiable' => get_class($notifiable) . '#' . $notifiable->getKey(),
+            'notifiable' => get_class($notifiable).'#'.$notifiable->getKey(),
             'notification' => get_class($notification),
         ]);
 
@@ -28,8 +29,9 @@ final class WhatsAppChannel
             ->where('active', true)
             ->first();
 
-        if (!$integration) {
+        if (! $integration) {
             Log::warning('WhatsAppChannel: no active WhatsApp integration found');
+
             return null;
         }
 
@@ -63,6 +65,16 @@ final class WhatsAppChannel
             'status' => $request->status(),
             'body' => $response,
         ]);
+
+        $messageId = $notification->messageId ?? null;
+
+        if ($messageId) {
+            UpdateMessageApiDataAction::execute([
+                'message_id' => $messageId,
+                'api_request' => json_encode($data),
+                'api_response' => json_encode($response),
+            ]);
+        }
 
         return $response;
     }

@@ -12,6 +12,7 @@ class MessageObserver
     {
         if ($message->direction === 'inbound') {
             NotifyAdminsOfIncomingMessage::dispatch($message);
+
             return;
         }
 
@@ -19,11 +20,11 @@ class MessageObserver
             $conversation = $message->conversation;
             $notifiable = $conversation->company ?? $conversation->branch;
 
-            if (!$notifiable) {
+            if (! $notifiable) {
                 return;
             }
 
-            $notifiable->notify(new TextNotification(false, $message->body));
+            $notifiable->notify(new TextNotification(false, $message->body, $message->id));
         }
     }
 }

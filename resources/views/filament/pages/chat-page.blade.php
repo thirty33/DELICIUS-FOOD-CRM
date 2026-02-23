@@ -32,6 +32,9 @@
                         {{ $message['direction'] === 'outbound'
                             ? 'bg-primary-500 text-white rounded-br-md'
                             : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-md shadow-sm' }}">
+                        @if ($message['type'] === 'template')
+                            <p class="text-[10px] opacity-70 italic mb-1">Plantilla enviada</p>
+                        @endif
                         <p>{{ $message['body'] }}</p>
                         <p class="text-[10px] mt-1 opacity-70">
                             {{ \Carbon\Carbon::parse($message['created_at'])->format('H:i') }}
@@ -45,24 +48,71 @@
             @endforelse
         </div>
 
-        {{-- Send input --}}
-        <form wire:submit="sendMessage"
-              class="bg-white dark:bg-gray-800 rounded-b-xl p-4 border-t flex gap-2">
-            <input
-                wire:model="newMessage"
-                type="text"
-                placeholder="Escribe un mensaje..."
-                class="flex-1 rounded-full border-gray-300 dark:border-gray-600
-                       dark:bg-gray-700 dark:text-white px-4 py-2 text-sm
-                       focus:ring-primary-500 focus:border-primary-500"
-            />
-            <button type="submit"
-                    class="bg-primary-500 hover:bg-primary-600 text-white
-                           rounded-full px-4 py-2 text-sm font-medium
-                           transition-colors">
-                Enviar
-            </button>
-        </form>
+        {{-- Send input (conditional on window status) --}}
+        <div class="bg-white dark:bg-gray-800 rounded-b-xl p-4 border-t">
+            @if ($this->windowStatus === \App\Enums\WindowStatus::Active)
+                <form wire:submit="sendMessage" class="flex gap-2">
+                    <input
+                        wire:model="newMessage"
+                        type="text"
+                        placeholder="Escribe un mensaje..."
+                        class="flex-1 rounded-full border-gray-300 dark:border-gray-600
+                               dark:bg-gray-700 dark:text-white px-4 py-2 text-sm
+                               focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <button type="submit"
+                            wire:loading.attr="disabled"
+                            wire:loading.class="opacity-50 cursor-not-allowed"
+                            wire:target="sendMessage"
+                            class="bg-primary-500 hover:bg-primary-600 text-white
+                                   rounded-full px-4 py-2 text-sm font-medium
+                                   transition-colors">
+                        <span wire:loading.remove wire:target="sendMessage">Enviar</span>
+                        <span wire:loading wire:target="sendMessage">Enviando...</span>
+                    </button>
+                </form>
+                @if ($this->windowExpiresAt)
+                    <p class="text-[10px] text-gray-400 mt-1 text-right">
+                        Ventana activa hasta: {{ $this->windowExpiresAt }}
+                    </p>
+                @endif
+            @elseif ($this->windowStatus === \App\Enums\WindowStatus::AwaitingResponse)
+                <div class="flex flex-col items-center gap-2 py-2">
+                    <div class="flex items-center text-sm text-gray-500">
+                        <svg class="animate-spin h-4 w-4 mr-2 text-warning-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Esperando respuesta del cliente...
+                    </div>
+                    <button wire:click="resendTemplate"
+                            wire:loading.attr="disabled"
+                            wire:loading.class="opacity-50 cursor-not-allowed"
+                            wire:target="resendTemplate"
+                            class="text-primary-500 hover:text-primary-600 text-sm font-medium
+                                   transition-colors underline">
+                        <span wire:loading.remove wire:target="resendTemplate">Reenviar plantilla</span>
+                        <span wire:loading wire:target="resendTemplate">Enviando...</span>
+                    </button>
+                </div>
+            @else
+                <div class="flex flex-col items-center gap-2 py-2">
+                    <p class="text-sm text-danger-600 dark:text-danger-400">
+                        Ventana de 24h expirada
+                    </p>
+                    <button wire:click="resendTemplate"
+                            wire:loading.attr="disabled"
+                            wire:loading.class="opacity-50 cursor-not-allowed"
+                            wire:target="resendTemplate"
+                            class="bg-primary-500 hover:bg-primary-600 text-white
+                                   rounded-full px-6 py-2 text-sm font-medium
+                                   transition-colors">
+                        <span wire:loading.remove wire:target="resendTemplate">Reenviar plantilla</span>
+                        <span wire:loading wire:target="resendTemplate">Enviando...</span>
+                    </button>
+                </div>
+            @endif
+        </div>
     </div>
 
     {{-- Auto-scroll to bottom --}}

@@ -31,8 +31,11 @@ class WhatsAppConversationFlowTest extends TestCase
     use RefreshDatabase;
 
     private Company $company;
+
     private User $adminUser;
+
     private Integration $whatsappIntegration;
+
     private string $clientPhoneNumber = '573227632472';
 
     protected function setUp(): void
@@ -46,7 +49,7 @@ class WhatsAppConversationFlowTest extends TestCase
         Http::fake([
             '*/messages' => Http::response([
                 'messaging_product' => 'whatsapp',
-                'contacts' => [['input' => '+' . $this->clientPhoneNumber, 'wa_id' => $this->clientPhoneNumber]],
+                'contacts' => [['input' => '+'.$this->clientPhoneNumber, 'wa_id' => $this->clientPhoneNumber]],
                 'messages' => [['id' => 'wamid.test123']],
             ], 200),
         ]);
@@ -119,7 +122,7 @@ class WhatsAppConversationFlowTest extends TestCase
                         'messages' => [
                             array_merge([
                                 'from' => $this->clientPhoneNumber,
-                                'id' => 'wamid.' . uniqid(),
+                                'id' => 'wamid.'.uniqid(),
                                 'timestamp' => (string) time(),
                                 'type' => $messageType,
                             ], $messageContent),
@@ -137,7 +140,8 @@ class WhatsAppConversationFlowTest extends TestCase
         config(['whatsapp.test_phone_number' => $this->clientPhoneNumber]);
         config(['whatsapp.phone_number_id' => 'TEST_PHONE_ID']);
         config(['whatsapp.api_token' => 'test_token']);
-        config(['whatsapp.initial_template_name' => 'hello_world']);
+        config(['whatsapp.initial_template_name' => 'retomar_conversacion']);
+        config(['whatsapp.initial_template_language' => 'en']);
 
         // ============================================
         // STEP 1: Create conversation (triggers template send)
@@ -149,19 +153,24 @@ class WhatsAppConversationFlowTest extends TestCase
             'status' => ConversationStatus::NEW_CONVERSATION,
         ]);
 
-        // Verify template message was created
-        $this->assertDatabaseHas('messages', [
-            'conversation_id' => $conversation->id,
-            'direction' => 'outbound',
-            'type' => 'template',
-            'body' => 'hello_world',
-        ]);
+        // Verify template message was created with reconstructed body
+        $templateMessage = \App\Models\Message::where('conversation_id', $conversation->id)
+            ->where('direction', 'outbound')
+            ->where('type', 'template')
+            ->first();
+
+        $this->assertNotNull($templateMessage);
+        $this->assertStringContainsString('Tenemos un mensaje para ti', $templateMessage->body);
+        $this->assertEquals('retomar_conversacion', $templateMessage->metadata['template_name'] ?? null);
 
         // Verify HTTP request was sent to WhatsApp for template
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/messages')
                 && $request['type'] === 'template'
-                && $request['template']['name'] === 'hello_world';
+                && $request['template']['name'] === 'retomar_conversacion'
+                && $request['template']['language']['code'] === 'en'
+                && $request['template']['components'][0]['type'] === 'body'
+                && $request['template']['components'][0]['parameters'][0]['text'] === 'Queremos ponernos en contacto contigo.';
         });
 
         // ============================================

@@ -1,27 +1,19 @@
 <?php
 
+use App\Enums\RoleName;
 use App\Facades\ImageSigner;
+use App\Http\Controllers\API\V1\Auth\LoginController;
+use App\Http\Controllers\API\V1\Auth\LogoutController;
+use App\Http\Controllers\API\V1\CategoryController;
+use App\Http\Controllers\API\V1\MenuController;
+use App\Http\Controllers\API\V1\OrderController;
+use App\Http\Controllers\API\V1\UsersController;
+use App\Http\Controllers\API\V1\WebRegistrationController;
+use App\Http\Middleware\VerifyPublicApiKey;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
-use Dreamonkey\CloudFrontUrlSigner\Facades\CloudFrontUrlSigner;
-use App\Enums\RoleName;
-use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-
-use App\Http\Controllers\API\V1\Auth\{
-    LoginController,
-    LogoutController
-};
-
-use App\Http\Controllers\API\V1\{
-    MenuController,
-    CategoryController,
-    OrderController,
-    UsersController,
-    WebRegistrationController
-};
-
-use App\Http\Middleware\VerifyPublicApiKey;
 
 Route::prefix('auth')->group(function () {
 
@@ -78,17 +70,17 @@ Route::prefix('signed-urls')->middleware([
 ])->group(function () {
 
     Route::post('generate', function (Request $request) {
-        if (!$request->user()->hasRole(RoleName::ADMIN->value)) {
+        if (! $request->user()->hasRole(RoleName::ADMIN->value)) {
             return response()->json([
                 'message' => 'Unauthorized. Admin access required.',
-                'error' => 'insufficient_privileges'
+                'error' => 'insufficient_privileges',
             ], 403);
         }
 
         try {
             $validated = $request->validate([
                 'file_path' => 'required|string|max:500',
-                'expiry_days' => 'sometimes|integer|min:1|max:100000'
+                'expiry_days' => 'sometimes|integer|min:1|max:100000',
             ]);
 
             $filePath = $validated['file_path'];
@@ -99,20 +91,20 @@ Route::prefix('signed-urls')->middleware([
             return response()->json([
                 'success' => true,
                 'data' => $signedUrlData,
-                'message' => 'Signed URL generated successfully'
+                'message' => 'Signed URL generated successfully',
             ], 200);
 
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while generating the signed URL',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     })->name('signed-urls.generate');
@@ -136,27 +128,10 @@ Route::prefix('whatsapp')->group(function () {
         return response('Forbidden', 403);
     })->name('whatsapp.webhook.verify');
 
-    Route::post('webhook', function (Request $request) {
-        \Illuminate\Support\Facades\Log::info('WhatsApp Webhook POST: ' . json_encode($request->all()));
+    Route::post('webhook', function (Request $request, \App\Services\Chat\ProcessWebhookService $service) {
+        \Illuminate\Support\Facades\Log::info('WhatsApp Webhook POST: '.json_encode($request->all()));
 
-        $parser = new \App\Services\Chat\WebhookPayloadParserV24();
-        $messages = $parser->parse($request->all());
-        $incomingService = new \App\Services\Chat\IncomingMessageService();
-
-        foreach ($messages as $msg) {
-            $conversation = \App\Models\Conversation::where('phone_number', $msg['from'])->first();
-
-            if (!$conversation) {
-                continue;
-            }
-
-            \App\Actions\Conversations\UpdateConversationStatusAction::execute([
-                'conversation_id' => $conversation->id,
-                'status' => \App\Enums\ConversationStatus::RECEIVED,
-            ]);
-
-            $incomingService->handle($conversation->id, $msg['body'] ?? '', $msg['type']);
-        }
+        $service->process($request->all());
 
         return response()->json(['status' => 'received']);
     })->name('whatsapp.webhook');
@@ -165,9 +140,8 @@ Route::prefix('whatsapp')->group(function () {
 // Web Registration - Public endpoint (API key required, no user auth)
 Route::prefix('web-registration')->middleware([
     VerifyPublicApiKey::class,
-    ThrottleRequests::with(1, 1)
+    ThrottleRequests::with(1, 1),
 ])->group(function () {
     Route::post('/', [WebRegistrationController::class, 'store'])
         ->name('web-registration.store');
 });
-

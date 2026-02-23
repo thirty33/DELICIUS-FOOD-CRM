@@ -16,6 +16,8 @@ class Message extends Model
         'whatsapp_message_id',
         'status',
         'metadata',
+        'api_request',
+        'api_response',
     ];
 
     protected $casts = [

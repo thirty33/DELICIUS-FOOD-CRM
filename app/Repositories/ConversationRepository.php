@@ -4,7 +4,6 @@ namespace App\Repositories;
 
 use App\Enums\ConversationStatus;
 use App\Models\Conversation;
-use Illuminate\Support\Collection;
 
 class ConversationRepository
 {
@@ -27,5 +26,12 @@ class ConversationRepository
             ->exists();
 
         return $hasInbound && $hasOutbound;
+    }
+
+    public function hasInboundMessages(Conversation $conversation): bool
+    {
+        return $conversation->messages()
+            ->where('direction', 'inbound')
+            ->exists();
     }
 }

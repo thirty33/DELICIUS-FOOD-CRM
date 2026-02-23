@@ -16,11 +16,13 @@ class Conversation extends Model
         'client_name',
         'status',
         'last_message_at',
+        'window_expires_at',
     ];
 
     protected $casts = [
         'status' => ConversationStatus::class,
         'last_message_at' => 'datetime',
+        'window_expires_at' => 'datetime',
     ];
 
     public function company(): BelongsTo

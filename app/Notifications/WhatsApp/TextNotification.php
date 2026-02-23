@@ -16,9 +16,9 @@ class TextNotification extends Notification implements ShouldQueue
 
     public function __construct(
         private readonly bool $previewUrl,
-        private readonly string $body
-    )
-    {}
+        private readonly string $body,
+        public readonly ?int $messageId = null,
+    ) {}
 
     public function via(object $notifiable): array
     {
@@ -32,7 +32,7 @@ class TextNotification extends Notification implements ShouldQueue
             $this->body,
         );
 
-        return (new TextMessage($text));
+        return new TextMessage($text);
     }
 
     public function toArray(object $notifiable): array

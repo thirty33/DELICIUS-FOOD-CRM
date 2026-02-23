@@ -5,26 +5,35 @@ namespace App\Observers;
 use App\Actions\Conversations\CreateConversationMessageAction;
 use App\Models\Conversation;
 use App\Notifications\WhatsApp\TemplateNotification;
+use App\Services\Reminders\Strategies\InitialTemplateStrategy;
 
 class ConversationObserver
 {
+    public function __construct(private InitialTemplateStrategy $strategy) {}
+
     public function created(Conversation $conversation): void
     {
         $notifiable = $conversation->company ?? $conversation->branch;
 
-        if (!$notifiable) {
+        if (! $notifiable) {
             return;
         }
 
-        $templateName = config('whatsapp.initial_template_name');
+        $templateConfig = $this->strategy->getTemplateConfig();
 
-        $notifiable->notify(new TemplateNotification($templateName));
-
-        CreateConversationMessageAction::execute([
+        $message = CreateConversationMessageAction::execute([
             'conversation_id' => $conversation->id,
             'direction' => 'outbound',
             'type' => 'template',
-            'body' => $templateName,
+            'body' => $templateConfig['body'],
+            'metadata' => ['template_name' => $templateConfig['name']],
         ]);
+
+        $notifiable->notify(new TemplateNotification(
+            $templateConfig['name'],
+            $templateConfig['language'],
+            $templateConfig['components'],
+            $message->id,
+        ));
     }
 }

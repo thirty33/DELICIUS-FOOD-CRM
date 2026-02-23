@@ -18,6 +18,7 @@ class TemplateNotification extends Notification implements ShouldQueue
         private readonly string $template,
         private readonly string $language = 'en_US',
         private readonly array $components = [],
+        public readonly ?int $messageId = null,
     ) {}
 
     public function via(object $notifiable): array
@@ -29,7 +30,7 @@ class TemplateNotification extends Notification implements ShouldQueue
     {
         $template = new Template($this->template, $this->language, $this->components);
 
-        return (new TemplateMessage($template));
+        return new TemplateMessage($template);
     }
 
     public function toArray(object $notifiable): array
