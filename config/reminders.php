@@ -57,6 +57,10 @@ return [
             'name' => env('REMINDERS_TEMPLATE_MENU_CREATED', 'recordatorio_de_menu_creado'),
             'language' => env('REMINDERS_TEMPLATE_MENU_CREATED_LANG', 'es_CL'),
         ],
+        'menu_closing' => [
+            'name' => env('REMINDERS_TEMPLATE_MENU_CLOSING', 'recordatorio_pedido_pendiente'),
+            'language' => env('REMINDERS_TEMPLATE_MENU_CLOSING_LANG', 'es_CL'),
+        ],
     ],
 
 ];

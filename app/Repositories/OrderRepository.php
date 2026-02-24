@@ -461,4 +461,61 @@ class OrderRepository
 
         return $date ? Carbon::parse($date) : null;
     }
+
+    /**
+     * Check if a branch has any active order for menus on the given publication dates.
+     *
+     * The relationship between Order and Menu is by date:
+     * DATE(orders.dispatch_date) = DATE(menus.publication_date)
+     *
+     * This mirrors the has_order flag logic in MenuResource/MenuRepository.
+     */
+    public function hasOrderForMenuDates(?int $branchId, array $publicationDates): bool
+    {
+        if (! $branchId || empty($publicationDates)) {
+            return false;
+        }
+
+        return Order::query()
+            ->where('branch_id', $branchId)
+            ->where(function ($query) use ($publicationDates) {
+                foreach ($publicationDates as $date) {
+                    $query->orWhereRaw('DATE(dispatch_date) = ?', [$date]);
+                }
+            })
+            ->whereIn('status', [
+                OrderStatus::PROCESSED->value,
+                OrderStatus::PARTIALLY_SCHEDULED->value,
+            ])
+            ->exists();
+    }
+
+    /**
+     * Check if any branch of a company has an active order for menus on the given dates.
+     */
+    public function hasOrderForCompanyOnDates(int $companyId, array $publicationDates): bool
+    {
+        if (empty($publicationDates)) {
+            return false;
+        }
+
+        $branchIds = \App\Models\Branch::where('company_id', $companyId)->pluck('id');
+
+        if ($branchIds->isEmpty()) {
+            return false;
+        }
+
+        return Order::query()
+            ->whereIn('branch_id', $branchIds)
+            ->where(function ($query) use ($publicationDates) {
+                foreach ($publicationDates as $date) {
+                    $query->orWhereRaw('DATE(dispatch_date) = ?', [$date]);
+                }
+            })
+            ->whereIn('status', [
+                OrderStatus::PROCESSED->value,
+                OrderStatus::PARTIALLY_SCHEDULED->value,
+            ])
+            ->exists();
+    }
 }

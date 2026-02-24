@@ -120,6 +120,10 @@ class ProcessRemindersService
             return 'skipped';
         }
 
+        if (! $strategy->shouldNotifyRecipient($recipient, $pendingEntities)) {
+            return 'skipped';
+        }
+
         $templateConfig = $strategy->getTemplateConfig($campaign, $pendingEntities);
 
         return $this->sendTemplateNotification($trigger, $recipient, $pendingEntities, $templateConfig);

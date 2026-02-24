@@ -47,7 +47,7 @@ class Company extends Model
         'price_list_id',
         'company_code',
         'payment_condition',
-        'exclude_from_consolidated_report'
+        'exclude_from_consolidated_report',
     ];
 
     public function branches(): HasMany
@@ -64,7 +64,7 @@ class Company extends Model
     {
         return $this->belongsTo(PriceList::class, 'price_list_id', 'id');
     }
-    
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
@@ -88,11 +88,11 @@ class Company extends Model
 
     public function routeNotificationForWhatsApp(): ?string
     {
-        $integration = Integration::where('name', \App\Enums\IntegrationName::WHATSAPP)
+        $isProduction = once(fn () => Integration::where('name', \App\Enums\IntegrationName::WHATSAPP)
             ->where('active', true)
-            ->first();
+            ->value('production') ?? false);
 
-        if ($integration && !$integration->production) {
+        if (! $isProduction) {
             return config('whatsapp.test_phone_number');
         }
 

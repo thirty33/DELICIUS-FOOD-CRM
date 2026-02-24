@@ -33,4 +33,10 @@ interface ReminderEventStrategy
      * @return array{name: string, language: string, components: array}
      */
     public function getTemplateConfig(Campaign $campaign, Collection $entities): array;
+
+    /**
+     * Determine if a specific recipient should receive the notification.
+     * Allows strategies to apply recipient-level filters (e.g., skip if already ordered).
+     */
+    public function shouldNotifyRecipient(array $recipient, Collection $entities): bool;
 }

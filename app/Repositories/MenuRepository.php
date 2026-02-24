@@ -2,22 +2,19 @@
 
 namespace App\Repositories;
 
-use App\Models\Menu;
-use App\Models\User;
-use App\Models\Order;
-use Carbon\Carbon;
-use Illuminate\Support\Collection;
-use Illuminate\Pipeline\Pipeline;
-use App\Filters\FilterValue;
 use App\Enums\Filters\MenuFilters;
+use App\Filters\FilterValue;
+use App\Models\Menu;
+use App\Models\Order;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Pipeline\Pipeline;
+use Illuminate\Support\Collection;
 
 class MenuRepository
 {
     /**
      * Find a menu by ID with its role relationship.
-     *
-     * @param int $menuId
-     * @return Menu|null
      */
     public function findWithRole(int $menuId): ?Menu
     {
@@ -27,14 +24,12 @@ class MenuRepository
     /**
      * Get available menus for a specific user with all business logic filters applied.
      *
-     * @param User $user The effective user (delegate user if delegating)
-     * @param int|null $limit
-     * @param User|null $userForValidations The user for validations (super_master_user if delegating)
-     * @param array $searchFilters Additional search filters:
-     *   - 'start_date': Start date for date range filter
-     *   - 'end_date': End date for date range filter
-     *   - 'order_status': Filter menus where user has orders with this status
-     * @return Collection
+     * @param  User  $user  The effective user (delegate user if delegating)
+     * @param  User|null  $userForValidations  The user for validations (super_master_user if delegating)
+     * @param  array  $searchFilters  Additional search filters:
+     *                                - 'start_date': Start date for date range filter
+     *                                - 'end_date': End date for date range filter
+     *                                - 'order_status': Filter menus where user has orders with this status
      */
     public function getAvailableMenusForUser(User $user, ?int $limit = null, ?User $userForValidations = null, array $searchFilters = []): Collection
     {
@@ -89,6 +84,27 @@ class MenuRepository
         }
 
         return $menus->get();
+    }
+
+    /**
+     * Get active menus closing within the given time window, excluding weekend publication dates.
+     */
+    public function getMenusClosingSoon(Carbon $closingBefore, array $roleIds, array $permissionIds): Collection
+    {
+        return Menu::query()
+            ->where('active', true)
+            ->where('max_order_date', '>', now())
+            ->where('max_order_date', '<=', $closingBefore)
+            ->whereRaw('DAYOFWEEK(publication_date) NOT IN (1, 7)')
+            ->where(function ($query) use ($roleIds) {
+                $query->whereIn('role_id', $roleIds)
+                    ->orWhereNull('role_id');
+            })
+            ->where(function ($query) use ($permissionIds) {
+                $query->whereIn('permissions_id', $permissionIds)
+                    ->orWhereNull('permissions_id');
+            })
+            ->get();
     }
 
     /**

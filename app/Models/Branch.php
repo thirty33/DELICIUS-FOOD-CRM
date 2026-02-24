@@ -26,7 +26,7 @@ class Branch extends Model
         'contact_phone_number',
         'branch_code',
         'fantasy_name',
-        'min_price_order'
+        'min_price_order',
     ];
 
     public function company(): BelongsTo
@@ -42,11 +42,11 @@ class Branch extends Model
 
     public function routeNotificationForWhatsApp(): ?string
     {
-        $integration = Integration::where('name', \App\Enums\IntegrationName::WHATSAPP)
+        $isProduction = once(fn () => Integration::where('name', \App\Enums\IntegrationName::WHATSAPP)
             ->where('active', true)
-            ->first();
+            ->value('production') ?? false);
 
-        if ($integration && !$integration->production) {
+        if (! $isProduction) {
             return config('whatsapp.test_phone_number');
         }
 

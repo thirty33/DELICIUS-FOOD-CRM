@@ -66,6 +66,11 @@ Schedule::command('reminders:process --event=menu_created')
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
+// Schedule: Process reminder notifications for menu_closing event every 15 minutes
+Schedule::command('reminders:process --event=menu_closing')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
+
 // // Schedule: Check pending reminder notifications every 5 minutes
 // Schedule::command('reminders:check-pending')
 //     ->everyFiveMinutes()

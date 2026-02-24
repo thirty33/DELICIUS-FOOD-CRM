@@ -130,11 +130,11 @@ class ReminderResource extends Resource
                                 ]);
 
                                 return $companies->mapWithKeys(fn (Company $company) => [
-                                    $company->id => $company->name . ' - ' . $company->registration_number
+                                    $company->id => $company->name.' - '.$company->registration_number.' | Tel: '.($company->routeNotificationForWhatsApp() ?? 'Sin teléfono'),
                                 ])->toArray();
                             })
                             ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get, ?array $state) {
-                                if (!empty($state)) {
+                                if (! empty($state)) {
                                     $branchIds = Branch::whereIn('company_id', $state)
                                         ->pluck('id')
                                         ->toArray();
@@ -157,11 +157,12 @@ class ReminderResource extends Resource
                                 if (empty($selectedCompanies)) {
                                     return [];
                                 }
+
                                 return Branch::whereIn('company_id', $selectedCompanies)
                                     ->with('company')
                                     ->get()
                                     ->mapWithKeys(fn (Branch $branch) => [
-                                        $branch->id => $branch->company->name . ' - ' . $branch->company->registration_number
+                                        $branch->id => $branch->company->name.' - '.$branch->company->registration_number,
                                     ])
                                     ->toArray();
                             })
@@ -170,10 +171,11 @@ class ReminderResource extends Resource
                                 if (empty($selectedCompanies)) {
                                     return [];
                                 }
+
                                 return Branch::whereIn('company_id', $selectedCompanies)
                                     ->get()
                                     ->mapWithKeys(fn (Branch $branch) => [
-                                        $branch->id => $branch->branch_code . ' - ' . $branch->fantasy_name . ' - ' . $branch->address
+                                        $branch->id => $branch->branch_code.' - '.$branch->fantasy_name.' - '.$branch->address.' | Tel: '.($branch->routeNotificationForWhatsApp() ?? 'Sin teléfono'),
                                     ])
                                     ->toArray();
                             })
@@ -270,7 +272,7 @@ class ReminderResource extends Resource
                     ->label('Cancelar')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn (Campaign $record) => !in_array($record->status, [CampaignStatus::CANCELLED, CampaignStatus::EXECUTED]))
+                    ->visible(fn (Campaign $record) => ! in_array($record->status, [CampaignStatus::CANCELLED, CampaignStatus::EXECUTED]))
                     ->requiresConfirmation()
                     ->modalHeading('Cancelar recordatorio')
                     ->modalDescription('¿Está seguro de cancelar este recordatorio? Esta acción no se puede deshacer.')
