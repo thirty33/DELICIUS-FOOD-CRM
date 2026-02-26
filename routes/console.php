@@ -61,6 +61,11 @@ Schedule::command('menus:order-category-products')
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
+// Schedule: Apply product display_order to category_menu_product for Cafe menus every 5 minutes
+Schedule::command('menus:apply-product-display-order')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 // Schedule: Process reminder notifications for menu_created event every 5 minutes
 Schedule::command('reminders:process --event=menu_created')
     ->everyFiveMinutes()
@@ -83,5 +88,10 @@ Schedule::command('portfolios:sync')
 
 // Schedule: Close expired portfolio cycles every 10 minutes
 Schedule::command('portfolios:close-cycle')
+    ->everyTenMinutes()
+    ->withoutOverlapping();
+
+// Schedule: Migrate unassigned users to default portfolios every 10 minutes
+Schedule::command('portfolios:migrate-unassigned --limit=50')
     ->everyTenMinutes()
     ->withoutOverlapping();

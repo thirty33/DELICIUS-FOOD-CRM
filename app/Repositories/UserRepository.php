@@ -63,4 +63,15 @@ class UserRepository
             ->with(['seller.sellerPortfolios', 'activePortfolio.portfolio', 'branch'])
             ->get();
     }
+
+    public function getUnassignedClientsForMigration(int $limit): Collection
+    {
+        return User::query()
+            ->whereNull('seller_id')
+            ->where('is_seller', false)
+            ->whereDoesntHave('activePortfolio')
+            ->with('branch')
+            ->limit($limit)
+            ->get();
+    }
 }
