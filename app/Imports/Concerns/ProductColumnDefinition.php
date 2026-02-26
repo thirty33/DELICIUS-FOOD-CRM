@@ -37,6 +37,7 @@ class ProductColumnDefinition
         'ingredientes' => 'Ingredientes',
         'areas_de_produccion' => 'Áreas de Producción',
         'codigo_de_facturacion' => 'Codigo de Facturacion',
+        'orden' => 'Orden',
     ];
 
     /**
@@ -61,6 +62,7 @@ class ProductColumnDefinition
         'ingredientes' => '_ingredients',
         'areas_de_produccion' => '_production_areas',
         'codigo_de_facturacion' => 'billing_code',
+        'orden' => 'display_order',
     ];
 
     /**
@@ -91,7 +93,7 @@ class ProductColumnDefinition
      */
     public static function cell(string $key, int $row): string
     {
-        return self::columnLetter($key) . $row;
+        return self::columnLetter($key).$row;
     }
 
     /**

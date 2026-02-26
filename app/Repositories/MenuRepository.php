@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Enums\Filters\MenuFilters;
+use App\Enums\RoleName;
 use App\Filters\FilterValue;
 use App\Models\Menu;
 use App\Models\Order;
@@ -104,6 +105,19 @@ class MenuRepository
                 $query->whereIn('permissions_id', $permissionIds)
                     ->orWhereNull('permissions_id');
             })
+            ->get();
+    }
+
+    /**
+     * Get Cafe menus pending display_order application, ordered by most recent first.
+     */
+    public function getPendingCafeMenusForDisplayOrder(int $limit): Collection
+    {
+        return Menu::query()
+            ->whereHas('rol', fn ($q) => $q->where('name', RoleName::CAFE->value))
+            ->where('products_ordered', false)
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
             ->get();
     }
 

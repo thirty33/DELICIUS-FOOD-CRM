@@ -2,39 +2,30 @@
 
 namespace App\Imports;
 
-use App\Imports\Concerns\ProductColumnDefinition;
 use App\Actions\Products\SyncMasterCategoriesAction;
-use App\Models\Product;
+use App\Imports\Concerns\ProductColumnDefinition;
 use App\Models\Category;
-use App\Models\ProductionArea;
 use App\Models\ImportProcess;
+use App\Models\Product;
+use App\Models\ProductionArea;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Maatwebsite\Excel\Concerns\ToCollection;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\BeforeImport;
-use Maatwebsite\Excel\Events\AfterImport;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\SkipsOnError;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
+use Maatwebsite\Excel\Concerns\ToCollection;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\WithValidation;
+use Maatwebsite\Excel\Events\AfterImport;
+use Maatwebsite\Excel\Events\BeforeImport;
 use Maatwebsite\Excel\Validators\Failure;
 use Throwable;
 
-class ProductsImport implements
-    ToCollection,
-    WithHeadingRow,
-    SkipsEmptyRows,
-    WithEvents,
-    ShouldQueue,
-    WithChunkReading,
-    WithValidation,
-    SkipsOnError,
-    SkipsOnFailure
+class ProductsImport implements ShouldQueue, SkipsEmptyRows, SkipsOnError, SkipsOnFailure, ToCollection, WithChunkReading, WithEvents, WithHeadingRow, WithValidation
 {
     private $importProcessId;
 
@@ -51,7 +42,7 @@ class ProductsImport implements
     public function collection(Collection $rows)
     {
         try {
-            
+
             Validator::make($rows->toArray(), $this->rules(), $this->getValidationMessages())->validate();
 
             foreach ($rows as $index => $row) {
@@ -59,7 +50,7 @@ class ProductsImport implements
                     // Find category by name
                     $category = Category::where('name', $row['categoria'])->first();
 
-                    if (!$category) {
+                    if (! $category) {
                         throw new \Exception("No se encontró la categoría: {$row['categoria']}");
                     }
 
@@ -73,26 +64,26 @@ class ProductsImport implements
 
                     $product = Product::updateOrCreate(
                         [
-                            'code' => $productData['code']
+                            'code' => $productData['code'],
                         ],
                         $productData
                     );
 
-                    if (!empty($ingredients)) {
+                    if (! empty($ingredients)) {
                         $product->ingredients()->delete();
                         foreach ($ingredients as $ingredient) {
                             $product->ingredients()->create([
-                                'descriptive_text' => trim($ingredient)
+                                'descriptive_text' => trim($ingredient),
                             ]);
                         }
                     }
 
                     // Handle production areas
-                    if (!empty($productionAreas)) {
+                    if (! empty($productionAreas)) {
                         $productionAreaIds = [];
                         foreach ($productionAreas as $areaName) {
                             $areaName = trim($areaName);
-                            if (!empty($areaName)) {
+                            if (! empty($areaName)) {
                                 // Find or create production area
                                 $productionArea = ProductionArea::firstOrCreate(
                                     ['name' => $areaName]
@@ -102,13 +93,13 @@ class ProductsImport implements
                         }
 
                         // Sync production areas (removes old, adds new)
-                        if (!empty($productionAreaIds)) {
+                        if (! empty($productionAreaIds)) {
                             $product->productionAreas()->sync($productionAreaIds);
                         }
                     }
 
                     // Handle master categories
-                    if (!empty($masterCategories)) {
+                    if (! empty($masterCategories)) {
                         $this->syncMasterCategoriesAction->execute($category, $masterCategories);
                     }
 
@@ -135,22 +126,26 @@ class ProductsImport implements
             'stock' => $this->handleStockField($row['stock'] ?? null),
             'weight' => $this->handleWeightField($row['peso'] ?? null),
             'allow_sales_without_stock' => $this->convertToBoolean($row['permitir_ventas_sin_stock'] ?? false),
-            'active' => $this->convertToBoolean($row['activo'] ?? false)
+            'active' => $this->convertToBoolean($row['activo'] ?? false),
         ];
 
-        if (!empty($row['codigo_de_facturacion'])) {
+        if (! empty($row['codigo_de_facturacion'])) {
             $data['billing_code'] = $row['codigo_de_facturacion'];
         }
 
-        if (isset($row['ingredientes']) && !empty($row['ingredientes'])) {
+        if (isset($row['orden']) && $row['orden'] !== null && $row['orden'] !== '') {
+            $data['display_order'] = (int) $row['orden'];
+        }
+
+        if (isset($row['ingredientes']) && ! empty($row['ingredientes'])) {
             $data['_ingredients'] = explode(',', $row['ingredientes']);
         }
 
-        if (isset($row['areas_de_produccion']) && !empty($row['areas_de_produccion']) && $row['areas_de_produccion'] !== '-') {
+        if (isset($row['areas_de_produccion']) && ! empty($row['areas_de_produccion']) && $row['areas_de_produccion'] !== '-') {
             $data['_production_areas'] = explode(',', $row['areas_de_produccion']);
         }
 
-        if (isset($row['categoria_maestra']) && !empty($row['categoria_maestra']) && $row['categoria_maestra'] !== '-') {
+        if (isset($row['categoria_maestra']) && ! empty($row['categoria_maestra']) && $row['categoria_maestra'] !== '-') {
             $data['_master_categories'] = $row['categoria_maestra'];
         }
 
@@ -171,10 +166,10 @@ class ProductsImport implements
 
         // If there's decimal point, multiply by 100 to convert to cents
         if (strpos($price, '.') !== false) {
-            return (int)(floatval($price) * 100);
+            return (int) (floatval($price) * 100);
         }
 
-        return (int)$price;
+        return (int) $price;
     }
 
     private function handleEmptyField($value, $default = null): ?string
@@ -182,6 +177,7 @@ class ProductsImport implements
         if (empty($value) || $value === '-') {
             return $default;
         }
+
         return $value;
     }
 
@@ -190,6 +186,7 @@ class ProductsImport implements
         if (empty($value) || $value === '-') {
             return null;
         }
+
         return $this->transformPrice($value);
     }
 
@@ -198,7 +195,8 @@ class ProductsImport implements
         if (empty($value) || $value === '-') {
             return null;
         }
-        return is_numeric($value) ? (int)$value : null;
+
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private function handleEmptyNumericField($value): ?float
@@ -206,7 +204,8 @@ class ProductsImport implements
         if (empty($value) || $value === '-') {
             return null;
         }
-        return is_numeric($value) ? (float)$value : null;
+
+        return is_numeric($value) ? (float) $value : null;
     }
 
     private function handleStockField($value): int
@@ -225,7 +224,7 @@ class ProductsImport implements
         }
 
         // Convert to integer (already validated in withValidator)
-        return (int)$cleanValue;
+        return (int) $cleanValue;
     }
 
     private function handleWeightField($value): float
@@ -244,7 +243,7 @@ class ProductsImport implements
         }
 
         // Convert to decimal number (already validated in withValidator)
-        return (float)$cleanValue;
+        return (float) $cleanValue;
     }
 
     private function convertToBoolean($value): bool
@@ -255,6 +254,7 @@ class ProductsImport implements
 
         if (is_string($value)) {
             $value = strtolower(trim($value));
+
             return in_array($value, ['true', 'verdadero', 'si', 'yes', '1', 'activo']);
         }
 
@@ -281,7 +281,7 @@ class ProductsImport implements
             '*.permitir_ventas_sin_stock' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.activo' => ['nullable', 'in:VERDADERO,FALSO,true,false,1,0'],
             '*.ingredientes' => ['nullable', 'string'],
-            '*.areas_de_produccion' => ['nullable', 'string']
+            '*.areas_de_produccion' => ['nullable', 'string'],
         ];
     }
 
@@ -329,16 +329,16 @@ class ProductsImport implements
     {
         $validator->after(function ($validator) {
             $data = $validator->getData();
-            
+
             foreach ($data as $index => $row) {
                 // Validate stock
-                if (isset($row['stock']) && !empty($row['stock']) && $row['stock'] !== '-') {
+                if (isset($row['stock']) && ! empty($row['stock']) && $row['stock'] !== '-') {
                     $cleanStock = trim($row['stock']);
                     // Remove leading apostrophe if present (from Excel text formatting)
                     if (str_starts_with($cleanStock, "'")) {
                         $cleanStock = substr($cleanStock, 1);
                     }
-                    if (!is_numeric($cleanStock)) {
+                    if (! is_numeric($cleanStock)) {
                         $validator->errors()->add(
                             "{$index}.stock",
                             "El campo stock debe ser un número entero válido. Valor recibido: '{$row['stock']}'"
@@ -347,13 +347,13 @@ class ProductsImport implements
                 }
 
                 // Validate weight
-                if (isset($row['peso']) && !empty($row['peso']) && $row['peso'] !== '-') {
+                if (isset($row['peso']) && ! empty($row['peso']) && $row['peso'] !== '-') {
                     $cleanPeso = trim($row['peso']);
                     // Remove leading apostrophe if present (from Excel text formatting)
                     if (str_starts_with($cleanPeso, "'")) {
                         $cleanPeso = substr($cleanPeso, 1);
                     }
-                    if (!is_numeric($cleanPeso)) {
+                    if (! is_numeric($cleanPeso)) {
                         $validator->errors()->add(
                             "{$index}.peso",
                             "El campo peso debe ser un número válido. Valor recibido: '{$row['peso']}'"
@@ -390,7 +390,7 @@ class ProductsImport implements
         $error = [
             'row' => $index + 2,
             'data' => $row->toArray(),
-            'error' => $e->getMessage()
+            'error' => $e->getMessage(),
         ];
 
         $this->updateImportProcessError($error);
@@ -400,11 +400,11 @@ class ProductsImport implements
     {
         $error = [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
         ];
 
         $this->updateImportProcessError($error);
-        
+
     }
 
     private function updateImportProcessError(array $error)
@@ -415,7 +415,7 @@ class ProductsImport implements
 
         $importProcess->update([
             'error_log' => $existingErrors,
-            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
         ]);
     }
 
@@ -437,7 +437,7 @@ class ProductsImport implements
     {
         $error = [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
         ];
 
         $this->updateImportProcessError($error);

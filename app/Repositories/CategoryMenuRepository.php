@@ -2,17 +2,17 @@
 
 namespace App\Repositories;
 
+use App\Classes\UserPermissions;
+use App\Enums\Filters\CategoryFilters;
+use App\Enums\Weekday;
+use App\Filters\FilterValue;
 use App\Models\CategoryMenu;
 use App\Models\Menu;
 use App\Models\Product;
 use App\Models\User;
-use App\Enums\Weekday;
-use App\Classes\UserPermissions;
 use Carbon\Carbon;
-use Illuminate\Pipeline\Pipeline;
-use App\Filters\FilterValue;
-use App\Enums\Filters\CategoryFilters;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pipeline\Pipeline;
 use Illuminate\Support\Collection;
 
 class CategoryMenuRepository
@@ -20,11 +20,7 @@ class CategoryMenuRepository
     /**
      * Get category menus for a specific menu with all relationships and filters applied.
      *
-     * @param Menu $menu
-     * @param User $user
-     * @param string|null $priorityGroup The category group name (e.g., "ensaladas", "gohan")
-     * @param int $perPage
-     * @return LengthAwarePaginator
+     * @param  string|null  $priorityGroup  The category group name (e.g., "ensaladas", "gohan")
      */
     public function getCategoryMenusForUser(Menu $menu, User $user, ?string $priorityGroup = null, int $perPage = 15): LengthAwarePaginator
     {
@@ -125,7 +121,7 @@ class CategoryMenuRepository
                         $clQuery->where('weekday', $weekdayInEnglish->value)->where('active', 1);
                     }]);
                 }
-            }
+            },
         ]);
 
         // Apply filters using pipeline pattern
@@ -148,10 +144,6 @@ class CategoryMenuRepository
      * Get category menus filtered for order validations.
      * Returns only active category menus with products that have price list lines.
      * This method does NOT use eager loading to keep the query simple for validations.
-     *
-     * @param Menu $menu
-     * @param User $user
-     * @return Collection
      */
     public function getCategoryMenusForValidation(Menu $menu, User $user): Collection
     {
@@ -197,16 +189,16 @@ class CategoryMenuRepository
                         });
                 })
                 // Case 2: show_all_products = false → Check pivot products
-                ->orWhere(function ($subQuery) use ($user) {
-                    $subQuery->where('show_all_products', false)
-                        ->whereHas('products', function ($pivotQuery) use ($user) {
-                            $pivotQuery->where('active', true)
-                                ->whereHas('priceListLines', function ($priceListQuery) use ($user) {
-                                    $priceListQuery->where('active', true)
-                                        ->where('price_list_id', $user->company->price_list_id);
-                                });
-                        });
-                });
+                    ->orWhere(function ($subQuery) use ($user) {
+                        $subQuery->where('show_all_products', false)
+                            ->whereHas('products', function ($pivotQuery) use ($user) {
+                                $pivotQuery->where('active', true)
+                                    ->whereHas('priceListLines', function ($priceListQuery) use ($user) {
+                                        $priceListQuery->where('active', true)
+                                            ->where('price_list_id', $user->company->price_list_id);
+                                    });
+                            });
+                    });
             })
             ->orderedByDisplayOrder()
             ->get();
@@ -219,7 +211,7 @@ class CategoryMenuRepository
      * It returns the IDs of all active products that belong to the specified category,
      * which should be attached to the category_menu_product pivot table.
      *
-     * @param int $categoryId The category ID to get products for
+     * @param  int  $categoryId  The category ID to get products for
      * @return array Array of product IDs
      */
     public function getActiveProductIdsForCategory(int $categoryId): array
@@ -231,13 +223,23 @@ class CategoryMenuRepository
     }
 
     /**
+     * Get non-dynamic category menus for a given menu, with products and category.
+     */
+    public function getNonDynamicWithProductsForMenu(int $menuId): Collection
+    {
+        return CategoryMenu::where('menu_id', $menuId)
+            ->whereHas('category', fn ($q) => $q->where('is_dynamic', false))
+            ->with(['products', 'category'])
+            ->get();
+    }
+
+    /**
      * Create or update a CategoryMenu and sync its products.
      *
-     * @param int $menuId The menu ID
-     * @param int $categoryId The category ID
-     * @param array $productIds Array of product IDs to sync (ordered by display position)
-     * @param array $attributes Additional attributes for the CategoryMenu
-     * @return CategoryMenu
+     * @param  int  $menuId  The menu ID
+     * @param  int  $categoryId  The category ID
+     * @param  array  $productIds  Array of product IDs to sync (ordered by display position)
+     * @param  array  $attributes  Additional attributes for the CategoryMenu
      */
     public function createOrUpdateWithProducts(
         int $menuId,

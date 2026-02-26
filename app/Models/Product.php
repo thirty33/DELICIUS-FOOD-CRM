@@ -3,12 +3,12 @@
 namespace App\Models;
 
 use App\Repositories\WarehouseRepository;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Product extends Model
 {
@@ -31,6 +31,7 @@ class Product extends Model
         'signed_url_expiration',
         'is_null_product',
         'billing_code',
+        'display_order',
     ];
 
     protected $casts = [
@@ -47,7 +48,7 @@ class Product extends Model
         parent::boot();
 
         static::created(function ($product) {
-            $warehouseRepository = new WarehouseRepository();
+            $warehouseRepository = new WarehouseRepository;
             $warehouseRepository->associateProductToDefaultWarehouse(
                 $product,
                 0, // Initial stock = 0
@@ -69,11 +70,11 @@ class Product extends Model
     public function titleProduct(): Attribute
     {
         return Attribute::make(
-            get: fn (mixed $value, array $attributes) => $attributes['code'] . ' - ' . $attributes['name']
+            get: fn (mixed $value, array $attributes) => $attributes['code'].' - '.$attributes['name']
         );
     }
 
-    public function priceListLines(): HasMany 
+    public function priceListLines(): HasMany
     {
         return $this->hasMany(PriceListLine::class, 'product_id', 'id');
     }
@@ -99,6 +100,7 @@ class Product extends Model
     public function getStockInWarehouse(int $warehouseId): int
     {
         $warehouse = $this->warehouses()->where('warehouse_id', $warehouseId)->first();
+
         return $warehouse ? $warehouse->pivot->stock : 0;
     }
 
@@ -108,6 +110,7 @@ class Product extends Model
     public function getDefaultWarehouseStock(): int
     {
         $defaultWarehouse = Warehouse::where('is_default', true)->first();
+
         return $defaultWarehouse ? $this->getStockInWarehouse($defaultWarehouse->id) : 0;
     }
 
@@ -139,5 +142,4 @@ class Product extends Model
     {
         return $this->hasOne(PlatedDish::class);
     }
-
 }
