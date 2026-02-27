@@ -3,8 +3,8 @@
 namespace App\Filters\Category;
 
 use App\Filters\Filter;
-use App\Models\Product;
 use App\Models\PriceListLine;
+use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 
 final class PriceListFilter extends Filter
@@ -13,7 +13,7 @@ final class PriceListFilter extends Filter
     {
         $filterData = $this->filter->getValue();
 
-        if (!$filterData || !is_array($filterData) || !isset($filterData['user'])) {
+        if (! $filterData || ! is_array($filterData) || ! isset($filterData['user'])) {
             return $next($items);
         }
 
@@ -44,26 +44,31 @@ final class PriceListFilter extends Filter
         //   - Example: Menu 188 with specific products selected
         //
         $items->where(function ($query) use ($user) {
-            // Case 1: show_all_products = true → Check category products
+            // Case 1: show_all_products = true → Check category has ACTIVE products with prices
             $query->where(function ($subQuery) use ($user) {
                 $subQuery->where('show_all_products', true)
-                    ->whereHas('category.products.priceListLines', function ($priceQuery) use ($user) {
-                        $priceQuery->where('active', true)
-                            ->whereHas('priceList', function ($priceListQuery) use ($user) {
-                                $priceListQuery->where('id', $user->company->price_list_id);
-                            });
+                    ->whereHas('category', function ($categoryQuery) use ($user) {
+                        $categoryQuery->whereHas('products', function ($productQuery) use ($user) {
+                            $productQuery->where('active', true)
+                                ->whereHas('priceListLines', function ($priceQuery) use ($user) {
+                                    $priceQuery->where('active', true)
+                                        ->whereHas('priceList', function ($priceListQuery) use ($user) {
+                                            $priceListQuery->where('id', $user->company->price_list_id);
+                                        });
+                                });
+                        });
                     });
             })
             // Case 2: show_all_products = false → Check pivot products
-            ->orWhere(function ($subQuery) use ($user) {
-                $subQuery->where('show_all_products', false)
-                    ->whereHas('products', function ($pivotQuery) use ($user) {
-                        $pivotQuery->whereHas('priceListLines', function ($priceListQuery) use ($user) {
-                            $priceListQuery->where('active', true)
-                                ->where('price_list_id', $user->company->price_list_id);
+                ->orWhere(function ($subQuery) use ($user) {
+                    $subQuery->where('show_all_products', false)
+                        ->whereHas('products', function ($pivotQuery) use ($user) {
+                            $pivotQuery->whereHas('priceListLines', function ($priceListQuery) use ($user) {
+                                $priceListQuery->where('active', true)
+                                    ->where('price_list_id', $user->company->price_list_id);
+                            });
                         });
-                    });
-            });
+                });
         });
 
         return $next($items);
