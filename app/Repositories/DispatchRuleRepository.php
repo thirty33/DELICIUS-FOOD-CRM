@@ -8,6 +8,16 @@ use App\Models\Order;
 class DispatchRuleRepository
 {
     /**
+     * Find a dispatch rule by its name.
+     */
+    public function findByName(string $name): ?DispatchRule
+    {
+        return DispatchRule::query()
+            ->where('name', $name)
+            ->first();
+    }
+
+    /**
      * Calculate dispatch cost for an order based on dispatch rules
      */
     public function calculateDispatchCost(Order $order): int
@@ -39,7 +49,7 @@ class DispatchRuleRepository
      */
     public function getDispatchRuleForUser(\App\Models\User $user): ?DispatchRule
     {
-        if (!$user->company_id || !$user->branch_id) {
+        if (! $user->company_id || ! $user->branch_id) {
             return null;
         }
 

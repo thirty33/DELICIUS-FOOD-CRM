@@ -2,49 +2,30 @@
 
 namespace App\Exports;
 
+use App\Imports\Concerns\BranchColumnDefinition;
 use App\Models\Branch;
 use App\Models\ExportProcess;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\BeforeExport;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Events\BeforeExport;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Maatwebsite\Excel\Concerns\FromQuery;
 
-class CompanyBranchesDataExport implements
-    FromQuery,
-    WithHeadings,
-    WithMapping,
-    ShouldAutoSize,
-    WithStyles,
-    WithEvents,
-    ShouldQueue,
-    WithChunkReading
+class CompanyBranchesDataExport implements FromQuery, ShouldAutoSize, ShouldQueue, WithChunkReading, WithEvents, WithHeadings, WithMapping, WithStyles
 {
     use Exportable;
 
-    private $headers = [
-        'numero_de_registro_de_compania' => 'Número de Registro de Compañía',
-        'codigo' => 'Código',
-        'nombre_de_fantasia' => 'Nombre de Fantasía',
-        'direccion' => 'Dirección',
-        'direccion_de_despacho' => 'Dirección de Despacho',
-        'nombre_de_contacto' => 'Nombre de Contacto',
-        'apellido_de_contacto' => 'Apellido de Contacto',
-        'telefono_de_contacto' => 'Teléfono de Contacto',
-        'precio_pedido_minimo' => 'Precio Pedido Mínimo'
-    ];
-
     private $exportProcessId;
-    private $branches;
+
     private $companyIds;
 
     public function __construct(Collection $companyIds, int $exportProcessId)
@@ -57,7 +38,7 @@ class CompanyBranchesDataExport implements
     public function query()
     {
         return Branch::whereIn('company_id', $this->companyIds)
-            ->with('company');
+            ->with(['company', 'dispatchRules']);
     }
 
     public function chunkSize(): int
@@ -77,13 +58,14 @@ class CompanyBranchesDataExport implements
                 'nombre_de_contacto' => $branch->contact_name,
                 'apellido_de_contacto' => $branch->contact_last_name,
                 'telefono_de_contacto' => $branch->contact_phone_number,
-                'precio_pedido_minimo' => $this->formatPrice($branch->min_price_order)
+                'precio_pedido_minimo' => $this->formatPrice($branch->min_price_order),
+                'regla_de_transporte' => $branch->dispatchRules->first()?->name,
             ];
         } catch (\Exception $e) {
             Log::error('Error mapeando sucursal para exportación', [
                 'export_process_id' => $this->exportProcessId,
                 'branch_id' => $branch->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;
@@ -92,7 +74,7 @@ class CompanyBranchesDataExport implements
 
     public function headings(): array
     {
-        return array_values($this->headers);
+        return BranchColumnDefinition::headers();
     }
 
     public function styles(Worksheet $sheet)
@@ -102,8 +84,8 @@ class CompanyBranchesDataExport implements
                 'font' => ['bold' => true],
                 'fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'E2EFDA']
-                ]
+                    'startColor' => ['rgb' => 'E2EFDA'],
+                ],
             ],
         ];
     }
@@ -124,13 +106,11 @@ class CompanyBranchesDataExport implements
 
     /**
      * Format price to match the import format
-     * 
-     * @param int $price
-     * @return string
      */
     private function formatPrice(int $price): string
     {
         $price = $price / 100; // Convert from cents to dollars
-        return '$' . number_format($price, 2, '.', ',');
+
+        return '$'.number_format($price, 2, '.', ',');
     }
 }

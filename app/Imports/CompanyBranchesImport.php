@@ -4,34 +4,26 @@ namespace App\Imports;
 
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\DispatchRule;
 use App\Models\ImportProcess;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Maatwebsite\Excel\Concerns\ToCollection;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\BeforeImport;
-use Maatwebsite\Excel\Events\AfterImport;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Validator;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Maatwebsite\Excel\Concerns\WithValidation;
+use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Maatwebsite\Excel\Concerns\SkipsOnError;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
+use Maatwebsite\Excel\Concerns\ToCollection;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\WithValidation;
+use Maatwebsite\Excel\Events\AfterImport;
+use Maatwebsite\Excel\Events\BeforeImport;
 use Maatwebsite\Excel\Validators\Failure;
 use Throwable;
 
-class CompanyBranchesImport implements
-    ToCollection,
-    WithHeadingRow,
-    WithValidation,
-    SkipsOnError,
-    SkipsOnFailure,
-    SkipsEmptyRows,
-    WithEvents,
-    ShouldQueue,
-    WithChunkReading
+class CompanyBranchesImport implements ShouldQueue, SkipsEmptyRows, SkipsOnError, SkipsOnFailure, ToCollection, WithChunkReading, WithEvents, WithHeadingRow, WithValidation
 {
     private $importProcessId;
 
@@ -49,32 +41,20 @@ class CompanyBranchesImport implements
 
             foreach ($rows as $index => $row) {
                 try {
-                    // Buscar la compañía por número de registro
                     $company = Company::where('registration_number', $row['numero_de_registro_de_compania'])->first();
 
-                    if (!$company) {
+                    if (! $company) {
                         throw new \Exception("No se encontró la empresa con número de registro: {$row['numero_de_registro_de_compania']}");
                     }
 
-                    // Preparar datos de la sucursal
-                    $branchData = [
-                        'company_id' => $company->id,
-                        'branch_code' => $row['codigo'],
-                        'fantasy_name' => $row['nombre_de_fantasia'],
-                        'address' => !empty($row['direccion']) ? $row['direccion'] : null,
-                        'shipping_address' => $row['direccion_de_despacho'] ?? null,
-                        'contact_name' => $row['nombre_de_contacto'] ?? null,
-                        'contact_last_name' => $row['apellido_de_contacto'] ?? null,
-                        'contact_phone_number' => $row['telefono_de_contacto'] ?? null,
-                        'min_price_order' => $row['precio_pedido_minimo'],
-                    ];
-
                     $branchData = $this->prepareBranchData($row, $company);
 
-                    Branch::updateOrCreate(
+                    $branch = Branch::updateOrCreate(
                         ['branch_code' => $row['codigo']],
                         $branchData
                     );
+
+                    $this->syncDispatchRule($branch, $row);
                 } catch (\Exception $e) {
                     $this->handleRowError($e, $index, $row);
                 }
@@ -107,11 +87,11 @@ class CompanyBranchesImport implements
                     if (is_numeric($value)) {
                         return;
                     }
-                    
-                    if (is_string($value) && !preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
+
+                    if (is_string($value) && ! preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
                         $fail('El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)');
                     }
-                }
+                },
             ],
         ];
     }
@@ -134,7 +114,7 @@ class CompanyBranchesImport implements
             BeforeImport::class => function (BeforeImport $event) {
                 ImportProcess::where('id', $this->importProcessId)
                     ->update([
-                        'status' => ImportProcess::STATUS_PROCESSING
+                        'status' => ImportProcess::STATUS_PROCESSING,
                     ]);
             },
             AfterImport::class => function (AfterImport $event) {
@@ -156,7 +136,7 @@ class CompanyBranchesImport implements
         $error = [
             'row' => $index + 2,
             'data' => $row,
-            'error' => $e->getMessage()
+            'error' => $e->getMessage(),
         ];
 
         $this->updateImportProcessError($error);
@@ -167,7 +147,7 @@ class CompanyBranchesImport implements
     {
         $error = [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
         ];
 
         $this->updateImportProcessError($error);
@@ -182,7 +162,7 @@ class CompanyBranchesImport implements
 
         $importProcess->update([
             'error_log' => $existingErrors,
-            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS
+            'status' => ImportProcess::STATUS_PROCESSED_WITH_ERRORS,
         ]);
     }
 
@@ -205,7 +185,7 @@ class CompanyBranchesImport implements
     {
         $error = [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
         ];
 
         $this->updateImportProcessError($error);
@@ -213,7 +193,7 @@ class CompanyBranchesImport implements
     }
 
     /**
-     * @param \Illuminate\Validation\Validator $validator
+     * @param  \Illuminate\Validation\Validator  $validator
      */
     public function withValidator($validator)
     {
@@ -265,21 +245,17 @@ class CompanyBranchesImport implements
                     if (is_numeric($value)) {
                         return;
                     }
-                    
-                    if (is_string($value) && !preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
+
+                    if (is_string($value) && ! preg_match('/^\$?[0-9]{1,3}(?:,?[0-9]{3})*(?:\.[0-9]{2})?$/', $value)) {
                         $fail('El precio debe tener un formato válido (ejemplo: $1,568.33 o 1568.33)');
                     }
-                }
+                },
             ],
         ];
     }
 
     /**
      * Prepare branch data from a row
-     * 
-     * @param Collection $row
-     * @param Company $company
-     * @return array
      */
     private function prepareBranchData(Collection $row, Company $company): array
     {
@@ -287,7 +263,7 @@ class CompanyBranchesImport implements
             'company_id' => $company->id,
             'branch_code' => $row['codigo'],
             'fantasy_name' => $row['nombre_de_fantasia'],
-            'address' => !empty($row['direccion']) ? $row['direccion'] : null,
+            'address' => ! empty($row['direccion']) ? $row['direccion'] : null,
             'shipping_address' => $row['direccion_de_despacho'] ?? null,
             'contact_name' => $row['nombre_de_contacto'] ?? null,
             'contact_last_name' => $row['apellido_de_contacto'] ?? null,
@@ -301,6 +277,39 @@ class CompanyBranchesImport implements
      * Acepta tanto string como número
      * Ejemplo: "$1,568.33" -> 156833, 1568.33 -> 156833
      */
+    /**
+     * Sync dispatch rule for a branch based on Excel column value.
+     *
+     * Cases:
+     * 1. Rule name provided + exists → sync (associate or replace)
+     * 2. Rule name empty → detach all rules
+     * 3. Rule name provided + not found → silent fail (log warning, no error)
+     */
+    private function syncDispatchRule(Branch $branch, Collection $row): void
+    {
+        $ruleName = $row['regla_de_transporte'] ?? null;
+
+        if (empty($ruleName)) {
+            $branch->dispatchRules()->detach();
+
+            return;
+        }
+
+        $rule = DispatchRule::query()->where('name', $ruleName)->first();
+
+        if (! $rule) {
+            Log::warning('Dispatch rule not found during branch import', [
+                'branch_code' => $branch->branch_code,
+                'rule_name' => $ruleName,
+            ]);
+
+            return;
+        }
+
+        $branch->dispatchRules()->sync([$rule->id]);
+        $rule->companies()->syncWithoutDetaching([$branch->company_id]);
+    }
+
     private function transformPrice($price): int
     {
         if (empty($price)) {
@@ -309,7 +318,7 @@ class CompanyBranchesImport implements
 
         // Si es numérico, convertir directamente
         if (is_numeric($price)) {
-            return (int)($price * 100);
+            return (int) ($price * 100);
         }
 
         // Si es string, procesar formato
@@ -321,9 +330,9 @@ class CompanyBranchesImport implements
 
         // Si hay punto decimal, multiplicar por 100 para convertir a centavos
         if (strpos($price, '.') !== false) {
-            return (int)(floatval($price) * 100);
+            return (int) (floatval($price) * 100);
         }
 
-        return (int)$price;
+        return (int) $price;
     }
 }
